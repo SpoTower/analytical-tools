@@ -16,7 +16,6 @@ phases:
   post_build:
     commands:
       - echo Build completed on `date`
-      - npm run mikro:migrate  
 
 artifacts:
   files:
