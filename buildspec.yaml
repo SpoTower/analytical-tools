@@ -1,0 +1,23 @@
+version: 0.2
+
+phases:
+  install:
+    runtime-versions:
+      nodejs: '18'
+  build:
+    commands:
+      - echo Installing source NPM dependencies.
+      - export DB_PASSWORD=$(aws secretsmanager get-secret-value --secret-id ${DB_PASSWORD_KEY} --query SecretString --output text | jq -r '.password')
+      - node --version # print the version for logging
+      - npm --version # print the version for logging
+      - npm ci
+      - npm run build
+      - echo Running build...
+  post_build:
+    commands:
+      - echo Build completed on `date`
+      - npm run mikro:migrate  
+
+artifacts:
+  files:
+    - '**/*'
