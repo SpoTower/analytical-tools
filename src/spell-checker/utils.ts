@@ -1,7 +1,10 @@
 import axios from 'axios';
 import { AnyObject } from './consts';
-
-export async function queryGoogleAds(domain: any, companies: AnyObject[], tokens:any, logger?: any) {
+import { logToCloudWatch } from 'src/logger';
+import { log } from 'console';
+import { BadRequestException, InternalServerErrorException } from '@nestjs/common';
+export async function fetchGoogleAds(domain: any, companies: AnyObject[], tokens:any, logger?: any) {
+    logToCloudWatch(`Entering fetchGoogleAds, fetching google ads for domain ${domain.id}`);
     try {
         const changeEventResult = await axios.post(
             `https://googleads.googleapis.com/v16/customers/${domain.googleAdsId}/googleAds:searchStream`,
@@ -35,17 +38,13 @@ export async function queryGoogleAds(domain: any, companies: AnyObject[], tokens
         );
         return changeEventResult?.data[0]?.results || [];
     } catch (error) {
-        console.log(domain.id);
-        const msg = extractInfoFromGoogleAdsError(error);
-        if (msg.includes(`The customer account can't be accessed because it is not yet enabled or has been deactivated)`)) {
-            logger.error(`no domain.googleadsid for domain ${domain.id}  `);
-        } else if (msg.includes(`Request contains an invalid argument., Invalid customer ID ''.`)) {
-            logger.error(`Invalid customer ID ''. for domain ${domain.id}  `);
-        } else if (msg.includes(`The caller does not have permission, The customer account can't be accessed because it is not yet enabled or has been deactivated`)) {
-            logger.error(`The caller does not have permission, The customer account for domain ${domain.id} can't be accessed because it is not yet enabled or has been deactivated`);
-        } else {
-        }
-        logger.error(domain.id + '  --  ' + msg);
+         const msg = extractInfoFromGoogleAdsError(error);
+         logToCloudWatch(`Error fetching google ads for domain ${domain.id}: ${msg}`);
+        if (msg.includes(`The customer account can't be accessed because it is not yet enabled or has been deactivated)`) ||
+            msg.includes(`Request contains an invalid argument., Invalid customer ID ''.`) ||
+            msg.includes(`The caller does not have permission, The customer account can't be accessed because it is not yet enabled or has been deactivated`)
+        )  throw new BadRequestException(msg)
+        else throw new InternalServerErrorException(msg);
     }
 }
 
@@ -55,4 +54,18 @@ export function filterOutTextlessAds(result: AnyObject[]) {
 
 export function extractInfoFromGoogleAdsError(error: any) {
     return `${error.message}, ${error.response.data[0].error.message}, ${error.response.data[0].error.details[0].errors[0].message}  `;
+}
+
+
+export function prepareAdsForGpt(textfullAds: Record<string, any>[]) {
+    logToCloudWatch(`Entering prepareAdsForGpt, found ${textfullAds?.length} ads`);
+    return textfullAds.map((t) => ({
+        id: parseInt(t.changeEvent.changeResourceName.split('/').pop(), 10), // Extract Ad ID from resource name
+        resourceName: t.changeEvent.changeResourceName, // Use correct resource name
+        headlines: t.changeEvent.newResource?.ad?.responsiveSearchAd?.headlines || [], // Get new headlines if available, fallback to old
+        descriptions: t.changeEvent.newResource?.ad?.responsiveSearchAd?.descriptions || [], // Get new descriptions if available, fallback to old
+        changeDateTime: t.changeEvent.changeDateTime, // When the change happened
+        resourceChangeOperation: t.changeEvent.resourceChangeOperation, // Type of change (CREATE, UPDATE, REMOVE)
+        changedFields: t.changeEvent.changedFields.split(','), // List of changed fields
+    }));
 }

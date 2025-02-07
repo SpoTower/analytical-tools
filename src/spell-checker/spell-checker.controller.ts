@@ -2,7 +2,8 @@ import { Controller, Get, Post, Body, Patch, Param, Delete, Query, DefaultValueP
 import { SpellCheckerService } from './spell-checker.service';
 import { CreateSpellCheckerDto } from './dto/create-spell-checker.dto';
 import { UpdateSpellCheckerDto } from './dto/update-spell-checker.dto';
- 
+import { BadRequestException, InternalServerErrorException } from '@nestjs/common';
+
 
 
 @Controller('spell-checker')
@@ -16,7 +17,13 @@ export class SpellCheckerController {
 
   @Get('/findGoogleAdsGrammaticalErrors')
   async findGoogleAdsGrammaticalErrors(@Query('domainId', new DefaultValuePipe(0), ParseIntPipe) domainId: number) {
-    return await this.spellCheckerService.findAndFixGoogleAdsGrammaticalErrors(domainId);
+    try {
+       return await this.spellCheckerService.findAndFixGoogleAdsGrammaticalErrors(domainId);
+    } catch (error) {
+      if (error instanceof BadRequestException || error instanceof InternalServerErrorException) {
+        throw error;
+      }
+    }
   }
 
   @Get(':id')

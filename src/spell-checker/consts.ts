@@ -22,7 +22,7 @@ export function fixingGrammErrorsPrompt(spellcheckIgnoreList: string[]) {
   example b) if you see  "10 Best Home Warranties {CUSTOMIZER.Year:2025}" you should ignore this row and dont return any errors for it, because CUSTOMIZER word is present in spellcheckIgnoreList
    `;
 }
-export function fixingGrammErrorsPrompt2(spellcheckIgnoreList: string[]) {
+export function fixingGrammErrorsPrompt2( ) {
     return `You are gramatical and syntatctical errors tool detector.
     1) you are going to recieve 2 arrays of sentences (array of strings) (headlines and descriptions), and you are gonna recieve the id of the object that the sentences are related to
     2) you need iterate over each string in thes 2 arrays
