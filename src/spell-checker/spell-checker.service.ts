@@ -6,11 +6,10 @@ import axios from 'axios';
 import {fetchGoogleAds,filterOutTextlessAds,prepareAdsForGpt} from './utils';
 import {fixingGrammErrorsPrompt2 } from './consts';
 import { KnexService } from 'src/knex/knex.service';
- import { GlobalStateService } from 'src/globalState/global-state.service';
-const logger = new Logger('analytical-tools.spellchecker');
+import { GlobalStateService } from 'src/globalState/global-state.service';
+ const logger = new Logger('analytical-tools.spellchecker');
  import { GptService } from 'src/gpt/gpt.service';
-import { logToCloudWatch } from 'src/logger';
- 
+ import { logToCloudWatch } from 'src/logger'; 
 @Injectable()
 export class SpellCheckerService {
 
