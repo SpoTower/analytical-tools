@@ -6,6 +6,9 @@ phases:
       nodejs: '18'
   build:
     commands:
+      - echo "$GIT_SSH_KEY" > /root/.ssh/id_rsa
+      - chmod 600 /root/.ssh/id_rsa
+      - ssh-keyscan github.com >> /root/.ssh/known_hosts
       - echo Installing source NPM dependencies.
       - export DB_PASSWORD=$(aws secretsmanager get-secret-value --secret-id ${DB_PASSWORD_KEY} --query SecretString --output text | jq -r '.password')
       - node --version # print the version for logging
