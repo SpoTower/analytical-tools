@@ -10,7 +10,7 @@ phases:
       - export DB_PASSWORD=$(aws secretsmanager get-secret-value --secret-id ${DB_PASSWORD_KEY} --query SecretString --output text | jq -r '.password')
       - node --version # print the version for logging
       - npm --version # print the version for logging
-      - npm ci
+      - if [ ! -d "node_modules" ]; then npm install; fi  # ✅ Install only if node_modules doesn't exist
       - npm run build
       - echo Running build...
   post_build:
