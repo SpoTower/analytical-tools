@@ -1,8 +1,7 @@
 import { Injectable,Logger } from '@nestjs/common';
 import { CreateSpellCheckerDto } from './dto/create-spell-checker.dto';
 import { UpdateSpellCheckerDto } from './dto/update-spell-checker.dto';
-import OpenAI from 'openai';
-import axios from 'axios';
+ import axios from 'axios';
 import {fetchGoogleAds,filterOutTextlessAds,prepareAdsForGpt} from './utils';
 import {fixingGrammErrorsPrompt2 } from './consts';
 import { KnexService } from 'src/knex/knex.service';
