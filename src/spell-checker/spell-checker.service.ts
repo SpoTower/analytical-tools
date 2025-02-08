@@ -7,8 +7,7 @@ import { GlobalStateService } from 'src/globalState/global-state.service';
  const logger = new Logger('analytical-tools.spellchecker');
  import { GptService } from 'src/gpt/gpt.service';
  import { logToCloudWatch } from 'src/logger'; 
- const SpoTowerFunctions = require('@your-scope/my-utils');
-
+ 
 @Injectable()
 export class SpellCheckerService {
 
@@ -20,8 +19,7 @@ export class SpellCheckerService {
 
   async findAndFixGoogleAdsGrammaticalErrors(domainId?: number) {
 
-    console.log(SpoTowerFunctions);
-    const state = this.globalState.getAllState();
+     const state = this.globalState.getAllState();
      for (const domain of state.domains) {
       logToCloudWatch((`processing domain ${domain.id}`))
       if (!domain.googleAdsId) continue;
