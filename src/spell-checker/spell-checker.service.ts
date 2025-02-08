@@ -10,7 +10,7 @@ import { KnexService } from 'src/knex/knex.service';
 const logger = new Logger('analytical-tools.spellchecker');
  import { GptService } from 'src/gpt/gpt.service';
 import { logToCloudWatch } from 'src/logger';
-import { jsonToObject } from 'spoTowerFunctions';
+import { jsonToObject } from '@your-scope/my-utils';
 
 @Injectable()
 export class SpellCheckerService {
@@ -23,8 +23,8 @@ export class SpellCheckerService {
 
   async findAndFixGoogleAdsGrammaticalErrors(domainId?: number) {
 
-    let a = jsonToObject('{"a":"you are awesome"}');
-
+   let a = jsonToObject('{"a":"you are awesome"}');
+return a
    const state = this.globalState.getAllState();
      for (const domain of state.domains) {
       logToCloudWatch((`processing domain ${domain.id}`))
