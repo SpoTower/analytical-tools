@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { CreateGptDto } from './dto/create-gpt.dto';
 import { UpdateGptDto } from './dto/update-gpt.dto';
-import OpenAI from 'openai';
+const OpenAI = require('openai').OpenAI;
 import {fixingGrammErrorsPrompt2} from '../spell-checker/consts';
 import { logToCloudWatch } from 'src/logger';
 
