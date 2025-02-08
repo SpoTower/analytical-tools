@@ -1,14 +1,14 @@
 import { Injectable,Logger } from '@nestjs/common';
 import { CreateSpellCheckerDto } from './dto/create-spell-checker.dto';
 import { UpdateSpellCheckerDto } from './dto/update-spell-checker.dto';
- import axios from 'axios';
-import {fetchGoogleAds,filterOutTextlessAds,prepareAdsForGpt} from './utils';
-import {fixingGrammErrorsPrompt2 } from './consts';
-import { KnexService } from 'src/knex/knex.service';
+ import {fetchGoogleAds,filterOutTextlessAds,prepareAdsForGpt} from './utils';
+ import { KnexService } from 'src/knex/knex.service';
 import { GlobalStateService } from 'src/globalState/global-state.service';
  const logger = new Logger('analytical-tools.spellchecker');
  import { GptService } from 'src/gpt/gpt.service';
  import { logToCloudWatch } from 'src/logger'; 
+ const SpoTowerFunctions = require('@your-scope/my-utils');
+
 @Injectable()
 export class SpellCheckerService {
 
@@ -20,8 +20,8 @@ export class SpellCheckerService {
 
   async findAndFixGoogleAdsGrammaticalErrors(domainId?: number) {
 
- 
-   const state = this.globalState.getAllState();
+    console.log(SpoTowerFunctions);
+    const state = this.globalState.getAllState();
      for (const domain of state.domains) {
       logToCloudWatch((`processing domain ${domain.id}`))
       if (!domain.googleAdsId) continue;
