@@ -2,7 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { CreateGptDto } from './dto/create-gpt.dto';
 import { UpdateGptDto } from './dto/update-gpt.dto';
 const OpenAI = require('openai').OpenAI;
-import {fixingGrammErrorsPrompt2} from '../spell-checker/consts';
+import {fixingGrammErrorsPrompt2,locatingWebSitesErrors} from '../spell-checker/consts';
 import { logToCloudWatch } from 'src/logger';
 
 @Injectable()
@@ -22,12 +22,28 @@ export class GptService {
    return await openai.chat.completions.create({
         model: 'gpt-3.5-turbo',
         messages: [
-            { role: 'system', content: fixingGrammErrorsPrompt2() },
+            { role: 'system', content: locatingWebSitesErrors() },
             {
                 role: 'user',
                 content: `objectId: ${extractedAds[0].id},
             headlines: ${JSON.stringify(extractedAds[0].headlines.map((t) => t.text))}
               descriptions: ${JSON.stringify(extractedAds[0].descriptions.map((t) => t.text))}`,
+            },
+        ],
+        max_tokens: 4000,
+        temperature: 0.7,
+    });
+  }
+  async askGpt2(gptKey:string, extractedAds: Record<string, any>[]) {
+      const openai = new OpenAI({apiKey: gptKey,  });
+
+   return await openai. chat.completions.create({
+        model: 'gpt-3.5-turbo',
+        messages: [
+            { role: 'system', content: locatingWebSitesErrors() },
+            {
+                role: 'user',
+                content: JSON.stringify(extractedAds),
             },
         ],
         max_tokens: 4000,

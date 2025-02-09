@@ -7,8 +7,7 @@ import { GlobalStateService } from 'src/globalState/global-state.service';
  const logger = new Logger('analytical-tools.spellchecker');
  import { GptService } from 'src/gpt/gpt.service';
  import { logToCloudWatch } from 'src/logger'; 
- const SpoTowerFunctions = require('@your-scope/my-utils');
-
+ const { chromium } = require('playwright');
 @Injectable()
 export class SpellCheckerService {
 
@@ -20,8 +19,7 @@ export class SpellCheckerService {
 
   async findAndFixGoogleAdsGrammaticalErrors(domainId?: number) {
 
-    console.log(SpoTowerFunctions);
-    const state = this.globalState.getAllState();
+     const state = this.globalState.getAllState();
      for (const domain of state.domains) {
       logToCloudWatch((`processing domain ${domain.id}`))
       if (!domain.googleAdsId) continue;
@@ -37,8 +35,50 @@ export class SpellCheckerService {
  
   }
 
+  async findAndFixWebsitesGrammaticalErrors(domainId?: number) {
+    try {
+         const state = this.globalState.getAllState();
+         state.domains.forEach(domain => {domain.paths = state.paths.filter(p => p.domain_id === domain.id)   .map(p => p.path); });
+ 
+      let websiteInnerHtml = [];
+      const websitesInnerHtml: any[][] = [];
+      const gptErrorDetectionResult: any[] = [];
+      const gptErrorDetectionResults: any[] = [];
 
+    for (const domain of state.domains) {
+      if ( domain?.id > 3) continue
+      if (!domain?.hostname) continue
+      const browser = await chromium.launch({ headless: false }); // set headless: false for debugging
 
+      for (const path of domain.paths.slice(0,2)) {
+        const page = await browser.newPage();
+        const url = `https://${domain.hostname}${path}`;
+
+            await page.goto(url, { waitUntil: 'load' });
+            const pageText = await page.evaluate(() => document.body.innerText);
+            await page.close()
+
+            websiteInnerHtml.push({domain: domain.id, fullPath:`https://${domain.hostname}${path}`, innerHtml: pageText});
+
+    }
+    websitesInnerHtml.push(websiteInnerHtml)
+    websiteInnerHtml = []
+    await browser.close(); // Close browser after processing all paths for a domain
+}
+  for (const domain of websitesInnerHtml) {
+     for (const pathText of domain) {
+        const gptResponse = await this.gptService.askGpt2(state.gptKey, pathText)
+        gptErrorDetectionResult.push({domain:pathText.domain, path: pathText.fullPath, errors: gptResponse.choices[0].message.content})
+     }
+     gptErrorDetectionResults.push(gptErrorDetectionResult)
+  }
+ console.log(gptErrorDetectionResults)
+    } catch (error) {
+      logger.error(error)
+    }
+ 
+
+  }
 
 
 

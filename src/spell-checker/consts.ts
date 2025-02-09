@@ -34,8 +34,28 @@ export function fixingGrammErrorsPrompt2( ) {
       and also the array name in which it appeared (headles or descriptions)
    5) if no error founded - ignore the line and dont return it.
    6) the errors you are returning me are per string in the headers and descriptions array. so if string in headers has 5 errors or 1 error you stil need to return only one object with multiple errors, and not multiple objects with 1 error
-   
-
-    
    `;
+
+ 
+  
 }
+ 
+  export function locatingWebSitesErrors(){
+    return `You are gramatical and syntatctical errors tool detector.
+    you will recieve array of objects. in each object you will have domain id, full path and inner html of the page.
+    you need to read all the inner htmls and find all the errors in the text.
+    include only syntactical and grammatical errors, signs like /n or /t are not errors.
+    return the errors with the following fields:
+    error text (no more than 1 sentence, dont reprint unneccessary text)
+  IMPORTANT!:
+  return only errors that are actuall word misspelling or grammatical errors, dont return errors that are not related to the text (structure, punctuation etc) 
+
+  RETURN FORMAT: 
+  - error (e.g the word 'fownd' is misspelled and it should be 'found')
+  - few word before the error (for context)
+   ` 
+   }
+
+  
+
+ 
