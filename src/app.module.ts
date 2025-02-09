@@ -6,8 +6,8 @@ import { KnexService } from './knex/knex.service';
 import { GlobalStateService } from './globalState/global-state.service';
  import { ConfigModule } from '@nestjs/config';
 import { GptModule } from './gpt/gpt.module';
+import { KnexModule } from './knex/knex.module';
 
- 
 @Module({
   imports: [
     ConfigModule.forRoot({
@@ -15,8 +15,13 @@ import { GptModule } from './gpt/gpt.module';
   }),
   SpellCheckerModule,
   GptModule,
+  KnexModule,
     ],
   controllers: [AppController],
-  providers: [AppService,KnexService,GlobalStateService],
+  providers: [
+    AppService,
+    GlobalStateService,
+    KnexService,
+  ],
 })
 export class AppModule {}

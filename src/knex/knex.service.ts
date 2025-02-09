@@ -1,20 +1,19 @@
-import { Injectable, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
-import knex, { Knex } from 'knex';
-import knexConfig from '../../knexfile';
+import { Inject, Injectable, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
+import { Knex } from 'knex';
+import { ANALYTICS_CONNECTION, KIDON_CONNECTION } from './knex.module';
 
 @Injectable()
-export class KnexService implements OnModuleInit, OnModuleDestroy {
-  private knexInstance: Knex;
-
-  onModuleInit() {
-    this.knexInstance = knex(knexConfig);
-  }
-
-  getClient(): Knex {
-    return this.knexInstance;
-  }
+export class KnexService implements OnModuleDestroy {
+  constructor(
+    @Inject(ANALYTICS_CONNECTION) private readonly analyticsClient: Knex,
+    @Inject(KIDON_CONNECTION) private readonly kidonClient: Knex,
+  ) {}
 
   async onModuleDestroy() {
-    await this.knexInstance.destroy();
+    await Promise.all([
+      this.analyticsClient.destroy(),
+      this.kidonClient.destroy(),
+    ]);
+    console.log('Knex connections destroyed successfully');
   }
 }
