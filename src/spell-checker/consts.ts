@@ -51,7 +51,7 @@ export function fixingGrammErrorsPrompt2( ) {
   return only errors that are actuall word misspelling or grammatical errors, dont return errors that are not related to the text (structure, punctuation etc) 
 
   RETURN FORMAT: 
-  - error (e.g the word 'fownd' is misspelled and it should be 'found')
+  - error  (the misspelled word + the correct form of the misspelled ford)
   - few word before the error (for context)
    ` 
    }

@@ -1,8 +1,11 @@
 import axios from 'axios';
 import { AnyObject } from './consts';
 import { logToCloudWatch } from 'src/logger';
-import { log } from 'console';
+const { chromium } = require('playwright');
 import { BadRequestException, InternalServerErrorException } from '@nestjs/common';
+import { GptService } from 'src/gpt/gpt.service';
+import {websiteText} from './interfaces';
+
 export async function fetchGoogleAds(domain: any, companies: AnyObject[], tokens:any, logger?: any) {
     logToCloudWatch(`Entering fetchGoogleAds, fetching google ads for domain ${domain.id}`);
     try {
@@ -69,3 +72,66 @@ export function prepareAdsForGpt(textfullAds: Record<string, any>[]) {
         changedFields: t.changeEvent.changedFields.split(','), // List of changed fields
     }));
 }
+
+
+export async function   processInBatches(tasks: (() => Promise<any>)[], batchSize: number) {
+    const results: any[] = [];
+    for (let i = 0; i < tasks.length; i += batchSize) {
+        const batch = tasks.slice(i, i + batchSize);
+        const batchResults = await Promise.all(batch.map(task => task())); // Run batch in parallel
+        results.push(...batchResults);
+    }
+    return results;
+  }
+  export async function fetchWebsitesInnerHtml(state: any, batchSize: number): Promise<any[]> {
+    const websitesInnerHtml: any[] = [];
+    const browser = await chromium.launch({ headless: false }); // Launch browser once
+  
+    const domainTasks = state.domains
+        .filter(domain => domain.id <= 3 && domain.hostname) // Filter valid domains
+        .map(domain => async () => { // Wrap each task in an async function
+            const page = await browser.newPage();
+            for (const path of domain.paths.slice(0, 2)) {
+                const url = `https://${domain.hostname}${path}`;
+  
+                try {
+                    console.log(`Visiting: ${url}`);
+                    await page.goto(url, { waitUntil: 'load' });
+                    const pageText = await page.evaluate(() => document.body.innerText);
+                    websitesInnerHtml.push({ domain: domain.id, fullPath: url, innerHtml: pageText });
+                } catch (error) {
+                    console.error(`Failed to load ${url}: ${error.message}`);
+                }
+            }
+            await page.close();
+        });
+  
+    // Process website fetch tasks in batches
+    await  processInBatches(domainTasks, batchSize);
+    await browser.close(); // Close browser after all tasks are done
+  
+    return websitesInnerHtml;
+  }
+  
+  /**
+  * **2️⃣ Process GPT Errors in Parallel**
+  */
+  export async function detectErrorsWithGpt(state: any, websitesInnerHtml: any[],gptService: GptService,  batchSize: number): Promise<any[]> {
+    const gptErrorDetectionResults: any[] = [];
+  
+    const gptTasks = websitesInnerHtml.map(pageData => async () => {
+        try {
+            const gptResponse = await  gptService.askGpt2(state.gptKey, pageData);
+            return {domain: pageData.domain,path: pageData.fullPath,errors: gptResponse.choices[0]?.message?.content || "No response" };
+        } catch (error) {
+            console.error(`GPT request failed for ${pageData.fullPath}: ${error.message}`);
+            return { domain: pageData.domain, path: pageData.fullPath, errors: "GPT Error" };
+        }
+    });
+  
+    // Process GPT tasks in batches
+    const gptResponses = await  processInBatches(gptTasks, batchSize);
+    gptErrorDetectionResults.push(...gptResponses);
+  
+    return gptErrorDetectionResults;
+  }

@@ -34,7 +34,7 @@ export class GptService {
         temperature: 0.7,
     });
   }
-  async askGpt2(gptKey:string, extractedAds: Record<string, any>[]) {
+  async askGpt2(gptKey:string, extractedAds: any ) {
       const openai = new OpenAI({apiKey: gptKey,  });
 
    return await openai. chat.completions.create({
