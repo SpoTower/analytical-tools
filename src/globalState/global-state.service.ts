@@ -32,9 +32,10 @@ export class GlobalStateService implements OnModuleInit {
 
   async loadInitialData() {
     try {
-      const [domains, companies, gptKey, allTokens] = await Promise.all([
+      const [domains, companies,paths, gptKey, allTokens] = await Promise.all([
         this.kidonClient('domain').select('*'),
         this.kidonClient('companies').select('*'),
+        this.kidonClient('paths').select('*'),
         axios.get(`${process.env.KIDON_SERVER}/secrets?secretName=kidonSecrets`, {
             headers: { Authorization: `Bearer ${process.env.KIDON_TOKEN}` },
         }),
@@ -44,6 +45,8 @@ export class GlobalStateService implements OnModuleInit {
     ]);
         this.setState('domains', domains);
         this.setState('companies', companies);
+        this.setState('paths', paths);
+        this.setState('gptKey', gptKey.data.GP)
          this.setState('gptKey', gptKey.data.GPT_API_KEY);
          this.setState('allTokens', allTokens);
 

@@ -5,7 +5,7 @@
   "author": "",
   "private": true,
   "license": "UNLICENSED",
-   "scripts": {
+  "scripts": {
     "build": "nest build",
     "format": "prettier --write \"src/**/*.ts\" \"test/**/*.ts\"",
     "start": "node dist/src/main",
@@ -29,14 +29,16 @@
     "axios": "^1.7.9",
     "dayjs": "^1.11.13",
     "dotenv": "^16.4.7",
+    "json5": "^2.2.3",
     "knex": "^3.1.0",
     "mysql2": "^3.12.0",
-    "p-limit": "^6.2.0",
     "openai": "^4.83.0",
+    "p-limit": "^6.2.0",
     "pg": "^8.13.1",
     "playwright": "^1.50.1",
     "reflect-metadata": "^0.2.0",
-    "rxjs": "^7.8.1"
+    "rxjs": "^7.8.1",
+    "@spoTower/spoTowerFunctions": "1.0.0-staging"
   },
   "devDependencies": {
     "@nestjs/cli": "^10.0.0",

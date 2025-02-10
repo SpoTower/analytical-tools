@@ -50,12 +50,27 @@ export function fixingGrammErrorsPrompt2( ) {
   IMPORTANT!:
   return only errors that are actuall word misspelling or grammatical errors, dont return errors that are not related to the text (structure, punctuation etc) 
 
-  RETURN FORMAT: 
-  - error  (the misspelled word + the correct form of the misspelled ford)
-  - few word before the error (for context)
+  RETURN FORMAT (must be valid JSON): 
+  - errorWord: the word or words that you find error in
+  - correction: the fix for this error
+  - fewWordsBefore: few word before the error (for context)
+ 
+
+  errorWord and correction cannot be the same!!! if error word equal to correction dont include this error
    ` 
    }
 
+
+    
+  export function locatingWebSitesErrors2(){
+    return `
+      find all the errors in the text. include only syntactical and grammatical errors, pretend that you are a teacher in english class and you need to correct the text.
+      your answer should be
+      - short
+      - in jsin format
+      - include the word with error, and the correction
+    `
+   }
   
 
  

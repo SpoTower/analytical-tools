@@ -2,7 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { CreateGptDto } from './dto/create-gpt.dto';
 import { UpdateGptDto } from './dto/update-gpt.dto';
 const OpenAI = require('openai').OpenAI;
-import {fixingGrammErrorsPrompt2,locatingWebSitesErrors} from '../spell-checker/consts';
+import {fixingGrammErrorsPrompt2,locatingWebSitesErrors,locatingWebSitesErrors2} from '../spell-checker/consts';
 import { logToCloudWatch } from 'src/logger';
 
 @Injectable()
@@ -31,7 +31,7 @@ export class GptService {
             },
         ],
         max_tokens: 4000,
-        temperature: 0.7,
+        temperature: 0,
     });
   }
   async askGpt2(gptKey:string, extractedAds: any ) {
@@ -47,7 +47,7 @@ export class GptService {
             },
         ],
         max_tokens: 4000,
-        temperature: 0.7,
+        temperature: 0,
     });
   }
   
