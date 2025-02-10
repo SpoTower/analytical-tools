@@ -1,7 +1,7 @@
 // database.module.ts
 import { Global, Module } from '@nestjs/common';
 import knex, { Knex } from 'knex';
-import { analyticsDbConfig, kidonDbConfig } from './knexConfig';
+import  {analyticsDbConfig, kidonDbConfig } from './knexfile';
 
 export const ANALYTICS_CONNECTION = 'ANALYTICS_CONNECTION';
 export const KIDON_CONNECTION = 'KIDON_CONNECTION';
