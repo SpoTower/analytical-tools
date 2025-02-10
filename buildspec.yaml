@@ -8,6 +8,7 @@ phases:
     commands:
       - echo Installing source NPM dependencies.
       - export DB_PASSWORD=$(aws secretsmanager get-secret-value --secret-id ${DB_PASSWORD_KEY} --query SecretString --output text | jq -r '.password')
+      - export GITHUB_PAT=$(aws secretsmanager get-secret-value --secret-id GITHUB_PAT_TOKEN --query SecretString --output text | jq -r '.GITHUB_PAT')
       - node --version # print the version for logging
       - npm --version # print the version for logging
       - npm ci

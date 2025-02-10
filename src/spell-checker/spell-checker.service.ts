@@ -1,13 +1,19 @@
 import { Injectable,Logger } from '@nestjs/common';
 import { CreateSpellCheckerDto } from './dto/create-spell-checker.dto';
 import { UpdateSpellCheckerDto } from './dto/update-spell-checker.dto';
- import {fetchGoogleAds,filterOutTextlessAds,prepareAdsForGpt} from './utils';
+ import {fetchGoogleAds,filterOutTextlessAds,prepareAdsForGpt,fetchWebsitesInnerHtml, detectErrorsWithGpt} from './utils';
  import { KnexService } from 'src/knex/knex.service';
 import { GlobalStateService } from 'src/globalState/global-state.service';
  const logger = new Logger('analytical-tools.spellchecker');
  import { GptService } from 'src/gpt/gpt.service';
  import { logToCloudWatch } from 'src/logger'; 
- 
+import axios from 'axios';
+ import {websiteText,gptProposal} from './interfaces';
+ import { Domain,Paths } from 'src/kidonInterfaces/shared';
+ import { State } from 'src/globalState/interfaces';
+ import { filterOutIrrelevantErrors } from './utils';
+ import {processInBatches} from './utils';
+ const { chromium } = require('playwright');
 @Injectable()
 export class SpellCheckerService {
 
@@ -20,27 +26,53 @@ export class SpellCheckerService {
   async findAndFixGoogleAdsGrammaticalErrors(domainId?: number) {
 
      const state = this.globalState.getAllState();
-     for (const domain of state.domains) {
-      logToCloudWatch((`processing domain ${domain.id}`))
-      if (!domain.googleAdsId) continue;
-      const adds = await fetchGoogleAds(domain, state.companies, state.allTokens );
-      if ((adds && adds.length == 0) || !adds) continue;
-      const textfullAds = filterOutTextlessAds(adds);
-      if ((textfullAds && textfullAds.length == 0) || !textfullAds) continue;
-      const preparedAds =  prepareAdsForGpt(adds)
-      const response = await this.gptService.askGpt(state.gptKey, preparedAds);
+
+
+      let domainsToProcess = state.domains.filter(domain => domain.googleAdsId); // Only domains with googleAdsId
+      domainsToProcess = domainsToProcess.slice(0, 4); // Limit to 2 domains for testing
+     // ✅ Step 1: Batch Fetch Google Ads for Domains
+     const fetchTasks = domainsToProcess.map((domain) => async () => {
+         try {
+             logToCloudWatch(`Fetching Google Ads for domain ${domain.id}`);
+             return {domain, ads: await fetchGoogleAds(domain, state.companies, state.allTokens)};
+         } catch (error) {
+             logToCloudWatch(`❌ Error fetching Google Ads for domain ${domain.id}: ${error.message}`, "ERROR");
+             return { domain, ads: [] }; // Return empty ads to prevent failures
+         }
+     });
+ 
+     const batchSize = 2; // Adjust batch size based on system performance
+     const fetchedAdsResults = await processInBatches(fetchTasks, batchSize);
+     const fetchedAdsFiltered = fetchedAdsResults.filter((f)=> f.ads.length > 0)
+     const textfullAds = filterOutTextlessAds(fetchedAdsFiltered)
+     const response = await this.gptService.askGpt(state.gptKey, textfullAds);
       return response.choices[0].message.content || 'no errors found';
-  }
+
+
+
  
  
   }
+  async findAndFixWebsitesGrammaticalErrors(domainId?: number, batchSize?: number) {
+
+    try {
+        const state = this.globalState.getAllState();
+        const chosenDomains = domainId ? state.domains.filter((d: Domain) => d.id === domainId) : state.domains;
+        chosenDomains.forEach((domain: Domain) => {domain.paths = state.paths.filter((p: Paths) => p.domain_id === domain.id).map((p: Paths) => p.path); });   
+        const websitesInnerHtml: websiteText[] = await fetchWebsitesInnerHtml((state as State), batchSize);
+        let gptErrorDetectionResults: gptProposal[] = await detectErrorsWithGpt((state as State),websitesInnerHtml, this.gptService, batchSize);
+       // gptErrorDetectionResults =   filterOutIrrelevantErrors(gptErrorDetectionResults)
+        await axios.get(`${process.env.KIDON_SERVER}/etl/sendEmail`, {headers: { Authorization: `Bearer ${process.env.KIDON_TOKEN}` }, params: { gptResponses: gptErrorDetectionResults.sort((a, b) => a.domain - b.domain) }});
+    } catch (error) {
+        logToCloudWatch(error?.message || 'Error in findAndFixWebsitesGrammaticalErrors', 'ERROR');
+    }
+}
 
 
 
 
-
-
-
+ 
+ 
   create(createSpellCheckerDto: CreateSpellCheckerDto) {
     return 'This action adds a new spellChecker';
   }
@@ -59,3 +91,6 @@ export class SpellCheckerService {
     return `This action removes a #${id} spellChecker`;
   }
 }
+
+
+//      const pLimit = (await import('p-limit')).default;
