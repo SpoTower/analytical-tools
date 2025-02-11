@@ -11,10 +11,11 @@ import axios from 'axios';
  import {websiteText,gptProposal} from './interfaces';
  import { Domain,Paths } from 'src/kidonInterfaces/shared';
  import { State } from 'src/globalState/interfaces';
- import { filterOutIrrelevantErrors } from './utils';
- import {processInBatches} from './utils';
+  import {processInBatches} from './utils';
  const { chromium } = require('playwright');
-@Injectable()
+ import { jsonToObject } from '@spotower/spotowerfunctions';
+
+ @Injectable()
 export class SpellCheckerService {
 
   constructor(
@@ -24,12 +25,18 @@ export class SpellCheckerService {
     ) {}
 
   async findAndFixGoogleAdsGrammaticalErrors(domainId?: number) {
-
+    const gptResponse = [] 
+    try {
+ 
+        let a =  jsonToObject('{"success":1}')
+        logToCloudWatch(a)
+    } catch (error) {
+      logToCloudWatch(error,'ERROR')
+    }
+ 
      const state = this.globalState.getAllState();
-
-
-      let domainsToProcess = state.domains.filter(domain => domain.googleAdsId); // Only domains with googleAdsId
-      domainsToProcess = domainsToProcess.slice(0, 4); // Limit to 2 domains for testing
+        let domainsToProcess = state.domains.filter(domain => domain.googleAdsId); // Only domains with googleAdsId
+      domainsToProcess = domainsToProcess.slice(0, 10); // Limit to 2 domains for testing
      // ✅ Step 1: Batch Fetch Google Ads for Domains
      const fetchTasks = domainsToProcess.map((domain) => async () => {
          try {
@@ -41,15 +48,22 @@ export class SpellCheckerService {
          }
      });
  
-     const batchSize = 2; // Adjust batch size based on system performance
+     const batchSize = 10; // Adjust batch size based on system performance
      const fetchedAdsResults = await processInBatches(fetchTasks, batchSize);
      const fetchedAdsFiltered = fetchedAdsResults.filter((f)=> f.ads.length > 0)
      const textfullAds = filterOutTextlessAds(fetchedAdsFiltered)
-     const response = await this.gptService.askGpt(state.gptKey, textfullAds);
-      return response.choices[0].message.content || 'no errors found';
+     const preparedAds = prepareAdsForGpt(textfullAds);  // row per domain+path
+
+     for (const ad of preparedAds) {
+      const response = await this.gptService.askGpt(state.gptKey, ad);
+      gptResponse.push(response.choices[0].message.content || 'no errors found');
+     }
 
 
 
+   await axios.get(`${process.env.KIDON_SERVER}/etl/sendEmail`, {headers: { Authorization: `Bearer ${process.env.KIDON_TOKEN}` }, params: { gptResponses:  gptResponse }});
+
+    return gptResponse
  
  
   }

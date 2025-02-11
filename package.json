@@ -38,8 +38,8 @@
     "playwright": "^1.50.1",
     "reflect-metadata": "^0.2.0",
     "rxjs": "^7.8.1",
-    "@spotower/spotowerfunctions": "1.0.0-staging"
-    },
+    "@spotower/spotowerfunctions": "github:spotower/spotowerfunctions#staging"
+  },
   "devDependencies": {
     "@nestjs/cli": "^10.0.0",
     "@nestjs/schematics": "^10.0.0",

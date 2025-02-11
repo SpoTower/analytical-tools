@@ -12,11 +12,11 @@ export class GptService {
   }
 
   findAll() {
-    return `This action returns all gpt`;
+    return `This action returns allw gpt`;
   }
 
-  async askGpt(gptKey:string, extractedAds: Record<string, any>[]) {
-    logToCloudWatch(`Entering askGpt. asking gpt for ads ${extractedAds[0].id}`)
+  async askGpt(gptKey:string, extractedAds: Record<string, any> ) {
+    logToCloudWatch(`Entering askGpt. asking gpt for ads ${extractedAds.id}`)
      const openai = new OpenAI({apiKey: gptKey,  });
 
    return await openai.chat.completions.create({
@@ -25,9 +25,9 @@ export class GptService {
             { role: 'system', content: locatingWebSitesErrors() },
             {
                 role: 'user',
-                content: `objectId: ${extractedAds[0].id},
-            headlines: ${JSON.stringify(extractedAds[0].headlines.map((t) => t.text))}
-              descriptions: ${JSON.stringify(extractedAds[0].descriptions.map((t) => t.text))}`,
+                content: `objectId: ${extractedAds.id},
+            headlines: ${JSON.stringify(extractedAds.headlines.map((t) => t.text))}
+              descriptions: ${JSON.stringify(extractedAds.descriptions.map((t) => t.text))}`,
             },
         ],
         max_tokens: 4000,
