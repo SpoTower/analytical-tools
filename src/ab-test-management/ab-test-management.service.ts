@@ -4,7 +4,7 @@ import { ANALYTICS_CONNECTION, KIDON_CONNECTION } from 'src/knex/knex.module';
 import { AB_TEST_MANAGEMENT, KIDON_TRACKER_EVENTS } from 'src/knex/tableNames';
 import dayjs from 'dayjs';
 import utc from 'dayjs/plugin/utc';
-import { QUERY_DATE_FORMAT } from 'src/utils.ts/consts';
+import { QUERY_DATE_FORMAT } from 'src/utils/consts';
 import { AbTestManagement } from './entities/ab-test-management.entity';
 import { UpdateAbTestManagementDto } from './dto/update-ab-test-management.dto';
 dayjs.extend(utc);

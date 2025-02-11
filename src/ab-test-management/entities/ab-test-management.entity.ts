@@ -1,5 +1,5 @@
 import dayjs from "dayjs";
-import { QUERY_DATE_FORMAT } from "src/utils.ts/consts";
+import { QUERY_DATE_FORMAT } from "src/utils/consts";
 
 export class AbTestManagement {
         

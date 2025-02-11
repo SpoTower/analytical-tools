@@ -7,7 +7,7 @@
 
         {
             "name": "analytical_tools",
-            "program": "${workspaceFolder}/dist/main.js",
+            "program": "${workspaceFolder}/dist/src/main.js",
             "request": "launch",
             "skipFiles": [
                 "<node_internals>/**"

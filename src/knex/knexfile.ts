@@ -8,7 +8,7 @@ export const analyticsDbConfig: Knex.Config = {
     port: 3306,
     user: process.env.DB_USERNAME,
     password: process.env.DB_PASSWORD ,
-    database: 'analytics',
+    database: 'analyticaldb',
   },
   ...knexSnakeCaseMappers(), // Convert snake_case to camelCase and vice versa
 };
