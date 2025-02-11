@@ -4,7 +4,7 @@ import { knexSnakeCaseMappers } from 'objection';
 export const analyticsDbConfig: Knex.Config = {
   client: 'mysql2', 
   connection: {
-    host: process.env.DB_HOSTNAME,
+    host: process.env.RDS_HOSTNAME,
     port: 3306,
     user: process.env.DB_USERNAME,
     password: process.env.DB_PASSWORD ,
@@ -16,7 +16,7 @@ export const analyticsDbConfig: Knex.Config = {
 export const kidonDbConfig: Knex.Config = {
   client: 'mysql2',
   connection: {
-    host: process.env.KIDON_DB_HOSTNAME,
+    host: process.env.KIDON_RDS_HOSTNAME,
     port: 3306,
     user: process.env.KIDON_DB_USERNAME,
     password: process.env.KIDON_DB_PASSWORD,
