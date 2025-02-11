@@ -10,7 +10,8 @@ import { Domain } from 'src/kidonInterfaces/shared';
 import { Company } from 'src/kidonInterfaces/shared';
 import { gptProposal } from './interfaces';
  import JSON5 from 'json5';
- import {getDateRange} from '../utils';
+import { getDateRange } from 'src/utils';
+ 
 
 export async function fetchGoogleAds(domain: Domain, companies: Company[], tokens:any ) {
     logToCloudWatch(`Entering fetchGoogleAds, fetching google ads for domain ${domain.id}`);

@@ -1,38 +1,28 @@
 import { Knex } from 'knex';
+import { knexSnakeCaseMappers } from 'objection';
 
 export const analyticsDbConfig: Knex.Config = {
   client: 'mysql2', 
   connection: {
-    host: process.env.DB_HOSTNAME,
+    host: process.env.RDS_HOSTNAME,
     port: 3306,
     user: process.env.DB_USERNAME,
-    password: process.env.DB_PASSWORD,
-    database: 'analytics',
+    password: process.env.DB_PASSWORD ,
+    database: 'analyticaldb',
   },
+  ...knexSnakeCaseMappers(), // Convert snake_case to camelCase and vice versa
 };
 
 export const kidonDbConfig: Knex.Config = {
   client: 'mysql2',
   connection: {
-    host: process.env.DB_HOSTNAME,
+    host: process.env.KIDON_RDS_HOSTNAME,
     port: 3306,
-    user: process.env.DB_USERNAME,
-    password: process.env.DB_PASSWORD,
+    user: process.env.KIDON_DB_USERNAME,
+    password: process.env.KIDON_DB_PASSWORD,
     database: 'ebdb',
   },
-  // ✅ Convert MySQL snake_case to camelCase in query results
-  postProcessResponse: (result) => {
-    if (Array.isArray(result)) {
-      return result.map(row => convertKeysToCamelCase(row));
-    } else if (typeof result === 'object' && result !== null) {
-      return convertKeysToCamelCase(result);
-    }
-    return result;
-  },
-  // ✅ Convert camelCase to snake_case when inserting/updating in MySQL
-  wrapIdentifier: (value, origImpl) => {
-    return origImpl(snakeToCamel(value));
-  },
+  ...knexSnakeCaseMappers(), // Convert snake_case to camelCase and vice versa
 };
 
 /**
