@@ -1,4 +1,5 @@
 import { Knex } from 'knex';
+import { knexSnakeCaseMappers } from 'objection';
 
 export const analyticsDbConfig: Knex.Config = {
   client: 'mysql2', 
@@ -6,9 +7,10 @@ export const analyticsDbConfig: Knex.Config = {
     host: process.env.DB_HOSTNAME,
     port: 3306,
     user: process.env.DB_USERNAME,
-    password: process.env.DB_PASSWORD,
+    password: process.env.DB_PASSWORD ,
     database: 'analytics',
   },
+  ...knexSnakeCaseMappers(), // Convert snake_case to camelCase and vice versa
 };
 
 export const kidonDbConfig: Knex.Config = {
@@ -20,19 +22,7 @@ export const kidonDbConfig: Knex.Config = {
     password: process.env.DB_PASSWORD,
     database: 'ebdb',
   },
-  // ✅ Convert MySQL snake_case to camelCase in query results
-  postProcessResponse: (result) => {
-    if (Array.isArray(result)) {
-      return result.map(row => convertKeysToCamelCase(row));
-    } else if (typeof result === 'object' && result !== null) {
-      return convertKeysToCamelCase(result);
-    }
-    return result;
-  },
-  // ✅ Convert camelCase to snake_case when inserting/updating in MySQL
-  wrapIdentifier: (value, origImpl) => {
-    return origImpl(snakeToCamel(value));
-  },
+  ...knexSnakeCaseMappers(), // Convert snake_case to camelCase and vice versa
 };
 
 /**

@@ -1,6 +1,5 @@
 import { Inject, Injectable, OnModuleInit } from '@nestjs/common';
 import axios from 'axios';
-import dayjs from 'dayjs';
 import { Knex } from 'knex';
 import { ANALYTICS_CONNECTION, KIDON_CONNECTION } from 'src/knex/knex.module';
 
