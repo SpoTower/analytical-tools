@@ -43,3 +43,19 @@ export async function loadDBCredentials() {
         process.env.DB_USERNAME = credentials.username;
     }
 }
+
+export async function loadKidonDBCredentials() {
+    if (!process.env.KIDON_PASSWORD_KEY) {
+        logger.error('KIDON_PASSWORD_KEY environment variable is not set');
+        return;
+    }
+
+    let secretData = await getSecretFromSecretManager(process.env.KIDON_PASSWORD_KEY);
+    secretData = JSON.parse(secretData).SecretString;
+
+    if (secretData) {
+        const credentials = JSON.parse(secretData);
+        process.env.KIDON_DB_PASSWORD = credentials.password;
+        process.env.KIDON_DB_USERNAME = credentials.username;
+    }
+}
