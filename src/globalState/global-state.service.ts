@@ -2,6 +2,7 @@ import { Inject, Injectable, OnModuleInit } from '@nestjs/common';
 import axios from 'axios';
 import { Knex } from 'knex';
 import { ANALYTICS_CONNECTION, KIDON_CONNECTION } from 'src/knex/knex.module';
+import { logToCloudWatch } from 'src/logger';
 
 @Injectable()
 export class GlobalStateService implements OnModuleInit {
@@ -13,7 +14,7 @@ export class GlobalStateService implements OnModuleInit {
   private state: Record<string, any> = {}; // Object to store global data
 
   async onModuleInit() {
-    console.log('🔄 Fetching initial data on startup...');
+    logToCloudWatch('🔄 Fetching initial data on startup...', 'INFO', 'GlobalStateService');
     await this.loadInitialData(); // Auto-fetch data on startup
   }
 
@@ -49,9 +50,9 @@ export class GlobalStateService implements OnModuleInit {
          this.setState('gptKey', gptKey.data.GPT_API_KEY);
          this.setState('allTokens', allTokens);
 
-      console.log('✅ Global state initialized with data');
+      logToCloudWatch('✅ Global state initialized with data', 'INFO', 'GlobalStateService');
     } catch (error) {
-      console.error('❌ Error fetching initial data:', error);
+      logToCloudWatch(`❌ Error fetching initial data: ${error}`, 'ERROR', 'GlobalStateService');
     }
   }
 

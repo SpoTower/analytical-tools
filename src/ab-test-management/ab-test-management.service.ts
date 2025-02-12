@@ -1,4 +1,4 @@
-import { Inject, Injectable } from '@nestjs/common';
+import { HttpException, Inject, Injectable } from '@nestjs/common';
 import { Knex } from 'knex';
 import { ANALYTICS_CONNECTION, KIDON_CONNECTION } from 'src/knex/knex.module';
 import { AB_TEST_MANAGEMENT, KIDON_TRACKER_EVENTS } from 'src/knex/tableNames';
@@ -7,6 +7,7 @@ import utc from 'dayjs/plugin/utc';
 import { QUERY_DATE_FORMAT } from 'src/utils/consts';
 import { AbTestManagement } from './entities/ab-test-management.entity';
 import { UpdateAbTestManagementDto } from './dto/update-ab-test-management.dto';
+import { logToCloudWatch } from 'src/logger';
 dayjs.extend(utc);
 
 @Injectable()
@@ -37,17 +38,27 @@ export class AbTestManagementService {
     }
 
     async processAbTestEvents() {
-        const events = await this._fetchEventsFromKidon();
-
-        for (const event of events) {
-            const abTest = this._trackerEventToAbTest(event);
-            const activeAbTest = await this._findActiveAbTest(abTest.title, abTest.type, abTest.description, abTest.parentPath);
-
-            if (activeAbTest) {
-                await this.update(activeAbTest.id, new UpdateAbTestManagementDto(abTest));
-            } else {
-                await this.create(abTest);
-            }
+        try {
+            logToCloudWatch('Beginning processing AB Test events','INFO','abTest' );
+            const events = await this._fetchEventsFromKidon();
+            logToCloudWatch(`Found ${events.length} AB Test events to process`,'INFO','abTest' );
+    
+            const promises = events.map((event) => ( async ()=> {
+                const abTest = this._trackerEventToAbTest(event);
+                const activeAbTest = await this._findActiveAbTest(abTest.title, abTest.type, abTest.description, abTest.parentPath);
+        
+                if (activeAbTest) {
+                    await this.update(activeAbTest.id, new UpdateAbTestManagementDto(abTest));
+                } else {
+                    await this.create(abTest);
+                }
+            }));
+    
+            await Promise.all(promises.map(p => p()));
+            logToCloudWatch('Finished processing AB Test events','INFO','abTest' );
+        } catch (error) {
+            logToCloudWatch(`Error processing AB Test events: ${error?.message || error?.sqlMessage}`,'ERROR','abTest' );
+            throw new HttpException('Error processing AB Test events', error?.status || 500);
         }
     }
 
@@ -67,19 +78,29 @@ export class AbTestManagementService {
     }
 
     async _findActiveAbTest(title: string, type: string, description: string, parentPath: string) {
-        const now = dayjs.utc().format(QUERY_DATE_FORMAT);
-        const oneDayAgo = dayjs(now).subtract(24, 'hours').format(QUERY_DATE_FORMAT);
-        return await this.analyticsDb(AB_TEST_MANAGEMENT)
-            .where({ title, type, description, parentPath })
-            .andWhereBetween('updated_at', [oneDayAgo, now]).first();
+        try {
+            const now = dayjs.utc().format(QUERY_DATE_FORMAT);
+            const oneDayAgo = dayjs(now).subtract(24, 'hours').format(QUERY_DATE_FORMAT);
+            return await this.analyticsDb(AB_TEST_MANAGEMENT)
+                .where({ title, type, description, parentPath })
+                .andWhereBetween('updated_at', [oneDayAgo, now]).first();
+        } catch (error) {
+            logToCloudWatch(`Error finding active AB Test: ${error?.message || error?.sqlMessage}`,'ERROR','abTest' );
+            throw error;
+        }
     }
 
     async _fetchEventsFromKidon() {
-        const nowUtc = dayjs().utc().format(QUERY_DATE_FORMAT);
-        const oneHourAgo = dayjs(nowUtc).subtract(5, 'days').format(QUERY_DATE_FORMAT);
-        return await this.kidonDb(KIDON_TRACKER_EVENTS).select('tracker_events.*', 'paths.path' ).from('tracker_events')
-            .leftJoin('paths', 'paths.id', 'tracker_events.path_id')
-            .where({ event: 'AB_TEST' })
-            .andWhereBetween('tracker_events.created_at', [oneHourAgo, nowUtc]);
+        try {
+            const nowUtc = dayjs().utc().format(QUERY_DATE_FORMAT);
+            const oneHourAgo = dayjs(nowUtc).subtract(5, 'days').format(QUERY_DATE_FORMAT);
+            return await this.kidonDb(KIDON_TRACKER_EVENTS).select('tracker_events.*', 'paths.path' ).from('tracker_events')
+                .leftJoin('paths', 'paths.id', 'tracker_events.path_id')
+                .where({ event: 'AB_TEST' })
+                .andWhereBetween('tracker_events.created_at', [oneHourAgo, nowUtc]);
+        } catch (error) {
+            logToCloudWatch(`Error fetching AB Test events from Kidon: ${error?.message || error?.sqlMessage}`,'ERROR','abTest' );
+            throw error;
+        }
     }
 }

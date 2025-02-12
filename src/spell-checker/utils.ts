@@ -11,6 +11,7 @@ import { Company } from 'src/kidonInterfaces/shared';
 import { gptProposal } from './interfaces';
  import JSON5 from 'json5';
 import { getDateRange } from 'src/utils';
+
  
 
 export async function fetchGoogleAds(domain: Domain, companies: Company[], tokens:any ) {
@@ -111,12 +112,12 @@ export async function   processInBatches(tasks: (() => Promise<any>)[], batchSiz
                 const url = `https://${domain.hostname}${path}`;
   
                 try {
-                    console.log(`Visiting: ${url}`);
+                    logToCloudWatch(`Visiting: ${url}`, 'INFO', 'utils');
                     await page.goto(url, { waitUntil: 'load' });
                     const pageText = await page.evaluate(() => document.body.innerText);
                     websitesInnerHtml.push({ domain: domain.id, fullPath: url, innerHtml: pageText });
                 } catch (error) {
-                    console.error(`Failed to load ${url}: ${error.message}`);
+                    logToCloudWatch(`Failed to load ${url}: ${error.message}`, 'ERROR', 'utils');
                 }
             }
             await page.close();
@@ -162,7 +163,7 @@ export   function filterOutIrrelevantErrors(gptErrorDetectionResults: gptProposa
     }))  
     
 
-   console.log(gptErrorDetectionResults);
+   logToCloudWatch(JSON.stringify(gptErrorDetectionResults), 'INFO', 'utils');
     return [];
 
 }
