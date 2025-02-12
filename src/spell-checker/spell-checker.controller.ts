@@ -26,6 +26,23 @@ export class SpellCheckerController {
     }
   }
 
+   
+   
+  @Get('/findWebsitesGrammaticalErrors')
+  async findWebsitesGrammaticalErrors(
+    @Query('domainId' ) domainId?: number,
+    @Query('batchSize', new DefaultValuePipe(10), ParseIntPipe) batchSize?: number  
+    ) {
+    try {
+       return await this.spellCheckerService.findAndFixWebsitesGrammaticalErrors(+domainId,batchSize);
+    } catch (error) {
+      if (error instanceof BadRequestException || error instanceof InternalServerErrorException) {
+        throw error;
+      }
+    }
+  }
+
+
   @Get(':id')
   findOne(@Param('id') id: string) {
     return this.spellCheckerService.findOne(+id);
