@@ -13,6 +13,8 @@ export class AbTestManagement {
     
     variantGroup?: string; // Extracted from tracker_events.event_value.group = 'Variant' -> lineup
 
+    lastVisited?: string; // From tracker_events.last_visited
+
     createdAt?: string; // From tracker_events.created_at
     
     updatedAt?: string; // Same as createdAt, updated on update
@@ -35,6 +37,7 @@ export class AbTestManagement {
     type,
     parentPath,
     hostname,
+    lastVisited,
   }: {
     title: string;
     description?: string;
@@ -44,6 +47,7 @@ export class AbTestManagement {
     type: string;
     parentPath: string;
     hostname?: string;
+    lastVisited: string;
   }) {
     this.title = title;
     this.description = description;
@@ -53,6 +57,7 @@ export class AbTestManagement {
     this.type = type;
     this.parentPath = parentPath;
     this.hostname = hostname;
+    this.lastVisited = lastVisited;
     this.createdAt = dayjs.utc().format(QUERY_DATE_FORMAT);
     this.updatedAt =  dayjs.utc().format(QUERY_DATE_FORMAT);
   }

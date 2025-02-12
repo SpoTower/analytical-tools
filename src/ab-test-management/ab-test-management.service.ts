@@ -37,10 +37,10 @@ export class AbTestManagementService {
         return this.analyticsDb(AB_TEST_MANAGEMENT).where({ id }).del();
     }
 
-    async processAbTestEvents() {
+    async processAbTestEvents(hoursBack: number) {
         try {
             logToCloudWatch('Beginning processing AB Test events','INFO','abTest' );
-            const events = await this._fetchEventsFromKidon();
+            const events = await this._fetchEventsFromKidon(hoursBack);
             logToCloudWatch(`Found ${events.length} AB Test events to process`,'INFO','abTest' );
     
             for (const event of events) {
@@ -73,6 +73,7 @@ export class AbTestManagementService {
             variantGroup: values.group === 'variant' ? groupValue : null,
             parentPath: event.eventName === 'page' ? values.userSawPath : event.path,
             hostname: event.domainName,
+            lastVisited: event.createdAt,
         });
     }
 
@@ -89,10 +90,10 @@ export class AbTestManagementService {
         }
     }
 
-    async _fetchEventsFromKidon() {
+    async _fetchEventsFromKidon(hoursBack: number) {
         try {
             const nowUtc = dayjs().utc().format(QUERY_DATE_FORMAT);
-            const oneHourAgo = dayjs(nowUtc).subtract(5, 'days').format(QUERY_DATE_FORMAT);
+            const oneHourAgo = dayjs(nowUtc).subtract(hoursBack, 'hours').format(QUERY_DATE_FORMAT);
             return await this.kidonDb(KIDON_TRACKER_EVENTS).select('tracker_events.*', 'paths.path' ).from('tracker_events')
                 .leftJoin('paths', 'paths.id', 'tracker_events.path_id')
                 .where({ event: 'AB_TEST' })

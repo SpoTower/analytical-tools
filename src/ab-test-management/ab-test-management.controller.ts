@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Body, Patch, Param, Delete } from '@nestjs/common';
+import { Controller, Get, Post, Body, Patch, Param, Delete, Query, DefaultValuePipe, ParseIntPipe } from '@nestjs/common';
 import { AbTestManagementService } from './ab-test-management.service';
 import { CreateAbTestManagementDto } from './dto/create-ab-test-management.dto';
 import { UpdateAbTestManagementDto } from './dto/update-ab-test-management.dto';
@@ -33,7 +33,9 @@ export class AbTestManagementController {
   }
 
   @Post('ab-tests')
-  getABTestsFromKidon(){
-    return this.abTestManagementService.processAbTestEvents();
+  getABTestsFromKidon(
+    @Query('hoursBack', new DefaultValuePipe(1), ParseIntPipe ) hoursBack: number,
+  ){
+    return this.abTestManagementService.processAbTestEvents(hoursBack);
   }
 }
