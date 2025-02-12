@@ -35,7 +35,7 @@ export interface Domain {
     companyId?: number; // Instead of `@ManyToOne`
 }
 
-export interface Company {
+export interface Company {k
     id: number;
     name: string;
     googleDeveloperToken?: string;
