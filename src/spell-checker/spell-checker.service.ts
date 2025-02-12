@@ -13,8 +13,7 @@ import axios from 'axios';
  import { State } from 'src/globalState/interfaces';
   import {processInBatches} from './utils';
  const { chromium } = require('playwright');
- import { jsonToObject } from '@spotower/spotowerfunctions';
-
+ 
  @Injectable()
 export class SpellCheckerService {
 
@@ -26,13 +25,7 @@ export class SpellCheckerService {
 
   async findAndFixGoogleAdsGrammaticalErrors(domainId?: number) {
     const gptResponse = [] 
-    try {
  
-        let a =  jsonToObject('{"success":1}')
-        logToCloudWatch(a)
-    } catch (error) {
-      logToCloudWatch(error,'ERROR')
-    }
  
      const state = this.globalState.getAllState();
         let domainsToProcess = state.domains.filter(domain => domain.googleAdsId); // Only domains with googleAdsId
