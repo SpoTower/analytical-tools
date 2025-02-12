@@ -43,7 +43,7 @@ export class AbTestManagementService {
             const events = await this._fetchEventsFromKidon();
             logToCloudWatch(`Found ${events.length} AB Test events to process`,'INFO','abTest' );
     
-            const promises = events.map((event) => ( async ()=> {
+            for (const event of events) {
                 const abTest = this._trackerEventToAbTest(event);
                 const activeAbTest = await this._findActiveAbTest(abTest.title, abTest.type, abTest.description, abTest.parentPath);
         
@@ -52,9 +52,8 @@ export class AbTestManagementService {
                 } else {
                     await this.create(abTest);
                 }
-            }));
-    
-            await Promise.all(promises.map(p => p()));
+            }
+            
             logToCloudWatch('Finished processing AB Test events','INFO','abTest' );
         } catch (error) {
             logToCloudWatch(`Error processing AB Test events: ${error?.message || error?.sqlMessage}`,'ERROR','abTest' );
