@@ -1,25 +1,28 @@
 import { Knex } from 'knex';
 import { knexSnakeCaseMappers } from 'objection';
 
+
 export const analyticsDbConfig: Knex.Config = {
   client: 'mysql2', 
   connection: {
-    host: process.env.RDS_HOSTNAME,
+    host: 'localhost',
     port: 3306,
-    user: process.env.DB_USERNAME,
-    password: process.env.DB_PASSWORD ,
+    user:'root',
+    password: 'esselA11' ,
     database: 'analyticaldb',
   },
   ...knexSnakeCaseMappers(), // Convert snake_case to camelCase and vice versa
 };
 
+
+
 export const kidonDbConfig: Knex.Config = {
   client: 'mysql2',
   connection: {
-    host: process.env.KIDON_RDS_HOSTNAME,
+    host: 'localhost',
     port: 3306,
-    user: process.env.KIDON_DB_USERNAME,
-    password: process.env.KIDON_DB_PASSWORD,
+    user: 'root',
+    password: 'esselA11',
     database: 'ebdb',
   },
   ...knexSnakeCaseMappers(), // Convert snake_case to camelCase and vice versa

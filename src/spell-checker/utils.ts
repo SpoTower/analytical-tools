@@ -15,7 +15,7 @@ import { getDateRange } from 'src/utils';
 
 export async function fetchGoogleAds(domain: Domain, companies: Company[], tokens:any ) {
     logToCloudWatch(`Entering fetchGoogleAds, fetching google ads for domain ${domain.id}`);
-    const date = getDateRange(25, 'YYYY-MM-DD');
+    const date = getDateRange(7, 'YYYY-MM-DD');
     try {
         const changeEventResult = await axios.post(
             `https://googleads.googleapis.com/v16/customers/${domain.googleAdsId}/googleAds:searchStream`,
@@ -35,7 +35,7 @@ export async function fetchGoogleAds(domain: Domain, companies: Company[], token
             AND
                 change_event.resource_change_operation IN (CREATE, UPDATE)
             AND
-                 change_event.change_resource_type IN ('AD', 'AD_GROUP_AD')
+                 change_event.change_resource_type IN ('AD' )
              LIMIT 10000
                 `,
             },
@@ -60,7 +60,11 @@ export async function fetchGoogleAds(domain: Domain, companies: Company[], token
 }
 
 export function filterOutTextlessAds(result: AnyObject[]) {
-    return result?.filter((r: AnyObject) => r.changeEvent.newResource?.ad?.responsiveSearchAd);
+    return result?.map((r: AnyObject) => ({...r,ads: r.ads?.filter(ad => ad.changeEvent?.newResource?.ad?.responsiveSearchAd) || []}))
+    
+        
+        
+    
 }
 
 export function extractInfoFromGoogleAdsError(error: any) {
@@ -70,15 +74,18 @@ export function extractInfoFromGoogleAdsError(error: any) {
 
 export function prepareAdsForGpt(textfullAds: Record<string, any>[]) {
     logToCloudWatch(`Entering prepareAdsForGpt, found ${textfullAds?.length} ads`);
-    return textfullAds.map((t) => ({
-        id: parseInt(t.changeEvent.changeResourceName.split('/').pop(), 10), // Extract Ad ID from resource name
-        resourceName: t.changeEvent.changeResourceName, // Use correct resource name
-        headlines: t.changeEvent.newResource?.ad?.responsiveSearchAd?.headlines || [], // Get new headlines if available, fallback to old
-        descriptions: t.changeEvent.newResource?.ad?.responsiveSearchAd?.descriptions || [], // Get new descriptions if available, fallback to old
-        changeDateTime: t.changeEvent.changeDateTime, // When the change happened
-        resourceChangeOperation: t.changeEvent.resourceChangeOperation, // Type of change (CREATE, UPDATE, REMOVE)
-        changedFields: t.changeEvent.changedFields.split(','), // List of changed fields
-    }));
+
+    return textfullAds.flatMap((t) => 
+    t.ads.map((ad : Record<string, any>) => ({
+        id: parseInt(ad.changeEvent.changeResourceName.split('/').pop(), 10), // Extract Ad ID
+        resourceName: ad.changeEvent.changeResourceName, // Use correct resource name
+        headlines: ad.changeEvent.newResource?.ad?.responsiveSearchAd?.headlines || [], // New headlines
+        descriptions: ad.changeEvent.newResource?.ad?.responsiveSearchAd?.descriptions || [], // New descriptions
+        changeDateTime: ad.changeEvent.changeDateTime, // Change timestamp
+        resourceChangeOperation: ad.changeEvent.resourceChangeOperation, // Type of change (CREATE, UPDATE, REMOVE)
+        changedFields: ad.changeEvent.changedFields.split(','), // List of changed fields
+    }))
+);
 }
 
 
