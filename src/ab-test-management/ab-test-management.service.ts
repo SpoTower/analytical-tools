@@ -48,6 +48,8 @@ export class AbTestManagementService {
                 const activeAbTest = await this._findActiveAbTest(abTest.title, abTest.type, abTest.description, abTest.parentPath);
         
                 if (activeAbTest) {
+                    if(dayjs(abTest.lastVisited).isBefore(dayjs(activeAbTest.lastVisited))) 
+                        delete abTest.lastVisited;
                     await this.update(activeAbTest.id, new UpdateAbTestManagementDto(abTest));
                 } else {
                     await this.create(abTest);
@@ -83,7 +85,7 @@ export class AbTestManagementService {
             const oneDayAgo = dayjs(now).subtract(24, 'hours').format(QUERY_DATE_FORMAT);
             return await this.analyticsDb(AB_TEST_MANAGEMENT)
                 .where({ title, type, description, parentPath })
-                .andWhereBetween('updated_at', [oneDayAgo, now]).first();
+                .andWhereBetween('last_visited', [oneDayAgo, now]).first();
         } catch (error) {
             logToCloudWatch(`Error finding active AB Test: ${error?.message || error?.sqlMessage}`,'ERROR','abTest' );
             throw error;
