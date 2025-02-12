@@ -13,6 +13,7 @@ phases:
       - export GITHUB_PAT=$(aws secretsmanager get-secret-value --secret-id GITHUB_PAT_TOKEN --query SecretString --output text | jq -r '.GITHUB_PAT')
       - node --version # print the version for logging
       - npm --version # print the version for logging
+      - echo "//registry.npmjs.org/:_authToken=${NPM_TOKEN}" > ~/.npmrc
       - npm ci
       - npm run build
       - echo Running build...
