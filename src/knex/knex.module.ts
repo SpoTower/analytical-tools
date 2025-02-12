@@ -11,14 +11,14 @@ export const KIDON_CONNECTION = 'KIDON_CONNECTION';
   providers: [
     {
       provide: ANALYTICS_CONNECTION,
-      useFactory: (): Knex => {
-        return knex(analyticsDbConfig);
+      useFactory: async (): Promise<Knex> => {
+        return knex(await analyticsDbConfig());
       },
     },
     {
       provide: KIDON_CONNECTION,
-      useFactory: (): Knex => {
-        return knex(kidonDbConfig);
+      useFactory: async (): Promise<Knex> => {
+        return knex(await kidonDbConfig());
       },
     },
   ],

@@ -1,6 +1,8 @@
 import { Inject, Injectable, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import { Knex } from 'knex';
 import { ANALYTICS_CONNECTION, KIDON_CONNECTION } from './knex.module';
+import { logToCloudWatch } from 'src/logger';
+
 
 @Injectable()
 export class KnexService implements OnModuleDestroy {
@@ -14,6 +16,6 @@ export class KnexService implements OnModuleDestroy {
       this.analyticsClient.destroy(),
       this.kidonClient.destroy(),
     ]);
-    console.log('Knex connections destroyed successfully');
+    logToCloudWatch('Knex connections destroyed successfully');
   }
 }

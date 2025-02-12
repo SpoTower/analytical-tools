@@ -6,6 +6,8 @@ import { SecretsManager } from 'aws-sdk';
 const logger = new Logger('AWS-SecretsManager');
 
 export const getSecretFromSecretManager = async (secretName: string): Promise<string> => {
+    if (!secretName) return '{}';
+
     const client = new SecretsManager({
         region: 'us-east-1',
     });
@@ -27,35 +29,3 @@ export const getSecretFromSecretManager = async (secretName: string): Promise<st
         });
     });
 };
-
-export async function loadDBCredentials() {
-    if (!process.env.DB_PASSWORD_KEY) {
-        logger.error('DB_PASSWORD_KEY environment variable is not set');
-        return;
-    }
-
-    let secretData = await getSecretFromSecretManager(process.env.DB_PASSWORD_KEY);
-    secretData = JSON.parse(secretData).SecretString;
-
-    if (secretData) {
-        const credentials = JSON.parse(secretData);
-        process.env.DB_PASSWORD = credentials.password;
-        process.env.DB_USERNAME = credentials.username;
-    }
-}
-
-export async function loadKidonDBCredentials() {
-    if (!process.env.KIDON_PASSWORD_KEY) {
-        logger.error('KIDON_PASSWORD_KEY environment variable is not set');
-        return;
-    }
-
-    let secretData = await getSecretFromSecretManager(process.env.KIDON_PASSWORD_KEY);
-    secretData = JSON.parse(secretData).SecretString;
-
-    if (secretData) {
-        const credentials = JSON.parse(secretData);
-        process.env.KIDON_DB_PASSWORD = credentials.password;
-        process.env.KIDON_DB_USERNAME = credentials.username;
-    }
-}
