@@ -2,6 +2,9 @@ export type AnyObject = {
     [key: string]: any; // Allows any key with any value type
 };
 
+ 
+
+
 
 export function fixingGrammErrorsPrompt(spellcheckIgnoreList: string[]) {
     return `You are gramatical and syntatctical errors tool detector.
@@ -42,8 +45,8 @@ export function fixingGrammErrorsPrompt2( ) {
  
   export function locatingWebSitesErrors(){
     return `You are gramatical and syntatctical errors tool detector.
-    you will recieve array of objects. in each object you will have domain id, full path and inner html of the page.
-    you need to read all the inner htmls and find all the errors in the text.
+    you will recieve array of objects. in each object you will have domain id, full path and text of inner html of the page.
+    you need to read all the text and find all the errors in the text.
     include only syntactical and grammatical errors, signs like /n or /t are not errors.
     return the errors with the following fields:
     error text (no more than 1 sentence, dont reprint unneccessary text)
@@ -54,6 +57,7 @@ export function fixingGrammErrorsPrompt2( ) {
   - errorWord: the word or words that you find error in
   - correction: the fix for this error
   - fewWordsBefore: few word before the error (for context)
+  - location : headlines or descriptions
  
 
   errorWord and correction cannot be the same!!! if error word equal to correction dont include this error

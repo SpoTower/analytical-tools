@@ -13,7 +13,7 @@ import axios from 'axios';
  import { State } from 'src/globalState/interfaces';
   import {processInBatches} from './utils';
  const { chromium } = require('playwright');
- import { jsonToObject } from '@spotower/my-utils';
+import {adsForGpt } from './interfaces';
 
  @Injectable()
 export class SpellCheckerService {
@@ -24,42 +24,42 @@ export class SpellCheckerService {
     private readonly gptService: GptService
     ) {}
 
-  async findAndFixGoogleAdsGrammaticalErrors(domainId?: number) {
+  async findAndFixGoogleAdsGrammaticalErrors( batchSize: number, domainId?: number, sliceSize?: number  ) {
 
-    return jsonToObject('{"a":1,"b":2,"c":3}');
-    const gptResponse = [] 
- 
+     const gptResponse = [] 
+     const requestMetadata = {source: process.env.SOURCE, recipient: process.env.SERVICE_GMAIL};
  
      const state = this.globalState.getAllState();
-        let domainsToProcess = state.domains.filter(domain => domain.googleAdsId); // Only domains with googleAdsId
-      domainsToProcess = domainsToProcess.slice(0, 10); // Limit to 2 domains for testing
+        let domainsToProcess = state.domains.filter((domain : Domain) => domain.googleAdsId).filter((domain: Domain) => !domainId || domain.id === domainId);; // Only domains with googleAdsId
+      domainsToProcess = domainsToProcess.slice(0, sliceSize || domainsToProcess.length);  
      // ✅ Step 1: Batch Fetch Google Ads for Domains
-     const fetchTasks = domainsToProcess.map((domain) => async () => {
+     const fetchTasks = domainsToProcess.map((domain: Domain) => async () => {
          try {
              logToCloudWatch(`Fetching Google Ads for domain ${domain.id}`);
              return {domain, ads: await fetchGoogleAds(domain, state.companies, state.allTokens)};
          } catch (error) {
              logToCloudWatch(`❌ Error fetching Google Ads for domain ${domain.id}: ${error.message}`, "ERROR");
-             return { domain, ads: [] }; // Return empty ads to prevent failures
+             return { domain, ads: [] };  
          }
      });
  
-     const batchSize = 10; // Adjust batch size based on system performance
+   
      const fetchedAdsResults = await processInBatches(fetchTasks, batchSize);
      const fetchedAdsFiltered = fetchedAdsResults.filter((f)=> f.ads.length > 0)
      const textfullAds = filterOutTextlessAds(fetchedAdsFiltered)
+     if(!textfullAds || textfullAds.length === 0) return 'No textfull ads found'
      const preparedAds = prepareAdsForGpt(textfullAds);  // row per domain+path
 
      for (const ad of preparedAds) {
       const response = await this.gptService.askGpt(state.gptKey, ad);
-      gptResponse.push(response.choices[0].message.content || 'no errors found');
+      gptResponse.push(`error: ${response.choices[0].message.content}, resource: ${ad.resourceName}`);
      }
 
 
+     
+   await axios.get(`${process.env.KIDON_SERVER}/etl/sendEmail`, {headers: { Authorization: `Bearer ${process.env.KIDON_TOKEN}` }, params: { gptResponses:  gptResponse, requestMetadata }});
 
-   await axios.get(`${process.env.KIDON_SERVER}/etl/sendEmail`, {headers: { Authorization: `Bearer ${process.env.KIDON_TOKEN}` }, params: { gptResponses:  gptResponse }});
-
-    return gptResponse
+    return `${gptResponse?.length} ads were processed by gpt and sent to kidon to be sended by mail to service gmail`;
  
  
   }

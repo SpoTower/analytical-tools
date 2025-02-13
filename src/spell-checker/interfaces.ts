@@ -10,3 +10,14 @@ export interface gptProposal{
     errors:string
     jsonErrors?:any
 }
+
+
+export type adsForGpt = {
+    id: number;
+    changeDateTime: string;
+    changedFields: string[];
+    descriptions: Record<string, any>[]; // the actual ads text
+    headlines: Record<string, any>[]; // the actual ads headers text
+    resourceChangeOperation : string;
+    resourceName : string;
+}
