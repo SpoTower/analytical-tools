@@ -4,7 +4,7 @@ import { UpdateGptDto } from './dto/update-gpt.dto';
 const OpenAI = require('openai').OpenAI;
 import {fixingGrammErrorsPrompt2,locatingWebSitesErrors,locatingWebSitesErrors2} from '../spell-checker/consts';
 import { logToCloudWatch } from 'src/logger';
-
+import { adsForGpt } from 'src/spell-checker/interfaces';
 @Injectable()
 export class GptService {
   create(createGptDto: CreateGptDto) {
@@ -15,7 +15,7 @@ export class GptService {
     return `This action returns allw gpt`;
   }
 
-  async askGpt(gptKey:string, extractedAds: Record<string, any> ) {
+  async askGpt(gptKey:string, extractedAds: adsForGpt ) {
     logToCloudWatch(`Entering askGpt. asking gpt for ads ${extractedAds.id}`)
      const openai = new OpenAI({apiKey: gptKey,  });
 

@@ -49,6 +49,7 @@ export class GlobalStateService implements OnModuleInit {
         this.setState('gptKey', gptKey.data.GP)
          this.setState('gptKey', gptKey.data.GPT_API_KEY);
          this.setState('allTokens', allTokens);
+         this.setState('requestMetadata'  , {source: 'analytical' });
 
       logToCloudWatch('✅ Global state initialized with data', 'INFO', 'GlobalStateService');
     } catch (error) {

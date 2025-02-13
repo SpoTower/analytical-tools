@@ -16,10 +16,10 @@ import { getDateRange } from 'src/utils';
 
 export async function fetchGoogleAds(domain: Domain, companies: Company[], tokens:any ) {
     logToCloudWatch(`Entering fetchGoogleAds, fetching google ads for domain ${domain.id}`);
-    const date = getDateRange(7, 'YYYY-MM-DD');
+    const date = getDateRange(28, 'YYYY-MM-DD');
     try {
         const changeEventResult = await axios.post(
-            `https://googleads.googleapis.com/v16/customers/${domain.googleAdsId}/googleAds:searchStream`,
+            `https://googleads.googleapis.com/v17/customers/${domain.googleAdsId}/googleAds:searchStream`,
             {
                 query: `
                 SELECT
