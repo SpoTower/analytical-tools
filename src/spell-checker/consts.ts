@@ -2,6 +2,11 @@ export type AnyObject = {
     [key: string]: any; // Allows any key with any value type
 };
 
+
+export enum emailSubjects {
+    GOOGLE_ADS_GRAMMATICAL_ERRORS = 'Google Ads Grammatical Errors',
+    WEBSITES_GRAMMATICAL_ERRORS = 'Websites Grammatical Errors',
+}
  
 
 
@@ -53,11 +58,8 @@ export function fixingGrammErrorsPrompt2( ) {
   IMPORTANT!:
   return only errors that are actuall word misspelling or grammatical errors, dont return errors that are not related to the text (structure, punctuation etc) 
 
-  RETURN FORMAT (must be valid JSON): 
-  - errorWord: the word or words that you find error in
-  - correction: the fix for this error
-  - fewWordsBefore: few word before the error (for context)
-  - location : headlines or descriptions
+  RETURN FORMAT (must be STRING): 
+    errorWord:correction,errorWord:correction,errorWord:correction,errorWord:correction ... etc
  
 
   errorWord and correction cannot be the same!!! if error word equal to correction dont include this error

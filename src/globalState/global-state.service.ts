@@ -3,6 +3,7 @@ import axios from 'axios';
 import { Knex } from 'knex';
 import { ANALYTICS_CONNECTION, KIDON_CONNECTION } from 'src/knex/knex.module';
 import { logToCloudWatch } from 'src/logger';
+import * as KF from '@spotower/my-utils';
 
 @Injectable()
 export class GlobalStateService implements OnModuleInit {
@@ -32,28 +33,31 @@ export class GlobalStateService implements OnModuleInit {
 
   async loadInitialData() {
     try {
-      const [domains, companies,paths, gptKey, allTokens] = await Promise.all([
+      const [domains, companies,paths, secrets, allTokens] = await Promise.all([
         this.kidonClient('domain').select('*'),
         this.kidonClient('companies').select('*'),
         this.kidonClient('paths').select('*'),
-        axios.get(`${process.env.KIDON_SERVER}/secrets?secretName=kidonSecrets`, {
-            headers: { Authorization: `Bearer ${process.env.KIDON_TOKEN}` },
-        }),
-        axios.get(`${process.env.KIDON_SERVER}/company/googleTokens`, {
-            headers: { Authorization: `Bearer ${process.env.KIDON_TOKEN}` },
-        }),
+        
+       KF.getSecretFromSecretManager('kidonSecrets'),
+
+      axios.get(`${process.env.KIDON_SERVER}/company/googleTokens`, {
+          headers: { Authorization: `Bearer ${process.env.KIDON_TOKEN}` },
+      }),
     ]);
         this.setState('domains', domains);
         this.setState('companies', companies);
         this.setState('paths', paths);
-        this.setState('gptKey', gptKey.data.GP)
-         this.setState('gptKey', gptKey.data.GPT_API_KEY);
+        this.setState('gptKey', KF.jsonToObject(secrets).GPT_API_KEY);
+        this.setState('emailClientPassword', KF.jsonToObject(secrets).EMAIL_PASSWORD);
+
+         this.setState('allTokens', allTokens.data);
          this.setState('allTokens', allTokens);
          this.setState('requestMetadata'  , {source: 'analytical' });
 
       logToCloudWatch('✅ Global state initialized with data', 'INFO', 'GlobalStateService');
     } catch (error) {
       logToCloudWatch(`❌ Error fetching initial data: ${error}`, 'ERROR', 'GlobalStateService');
+      
     }
   }
 
