@@ -140,7 +140,7 @@ export async function   processInBatches(tasks: (() => Promise<any>)[], batchSiz
   
  
 
-  export async function detectErrorsWithGpt(gptKey: string, websitesInnerHtml: any[],gptService: GptService,  batchSize: number): Promise<string> {
+  export async function detectErrorsWithGpt(gptKey: string, websitesInnerHtml: any,gptService: GptService,  batchSize: number): Promise<string> {
     logToCloudWatch('Entering detectErrorsWithGpt');
     let gptErrorDetectionResults = '';
     
@@ -159,13 +159,16 @@ export async function   processInBatches(tasks: (() => Promise<any>)[], batchSiz
 
     gptErrorDetectionResults = gptErrorDetectionResults.concat( gptResponses.map(res => JSON.stringify(res) ) .join('\n')  ); 
        
-          
-         
-    
-
-  
     return gptErrorDetectionResults;
   }
+
+  export async function detectErrorsWithGpt2(gptKey: string, websitesInnerHtml: any,gptService: GptService,  batchSize: number): Promise<string> {
+    const gptResponse = await  gptService.askGpt2(gptKey, websitesInnerHtml);
+    return gptResponse.choices[0]?.message?.content || "No response";
+
+  }
+
+
 
 export   function filterOutIrrelevantErrors(gptErrorDetectionResults: gptProposal[]): gptProposal[] {
     if(!gptErrorDetectionResults || gptErrorDetectionResults?.length == 0 ) return [];

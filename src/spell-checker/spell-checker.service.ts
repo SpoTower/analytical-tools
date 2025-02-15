@@ -1,7 +1,7 @@
 import { Injectable,Logger } from '@nestjs/common';
 import { CreateSpellCheckerDto } from './dto/create-spell-checker.dto';
 import { UpdateSpellCheckerDto } from './dto/update-spell-checker.dto';
- import {fetchGoogleAds,filterOutTextlessAds,prepareAdsForGpt,fetchWebsitesInnerHtml, detectErrorsWithGpt} from './utils';
+ import {fetchGoogleAds,filterOutTextlessAds,prepareAdsForGpt,fetchWebsitesInnerHtml, detectErrorsWithGpt, detectErrorsWithGpt2} from './utils';
  import { KnexService } from 'src/knex/knex.service';
 import { GlobalStateService } from 'src/globalState/global-state.service';
  const logger = new Logger('analytical-tools.spellchecker');
@@ -62,10 +62,11 @@ export class SpellCheckerService {
  
          let text = `${ad.descriptions.map((a) => a.text).join(' ,')} ${ad.headlines.map((a) => a.text).join(' ,')}`.split(" ");
          const misspelledWords = text.filter(word => spellchecker.isMisspelled(word));
-        let a = await detectErrorsWithGpt( state.gptKey  ,misspelledWords, this.gptService, batchSize);
-        let b = await detectErrorsWithGpt( state.gptKey  ,text, this.gptService, batchSize);
-
+      
          if (misspelledWords.length > 0) {
+          let a = await detectErrorsWithGpt2( state.gptKey  ,misspelledWords, this.gptService, batchSize);
+          let b = await detectErrorsWithGpt2( state.gptKey  ,text, this.gptService, batchSize);
+  
           logToCloudWatch(`  ad id: ${ad?.id},\n misspelledWords: ${misspelledWords.map((m)=>m).join(' ,')}, \n raw text descriptions: ${ad.descriptions.map((a) => a.text).join(' ,')},\n raw text headlines: ${ad.headlines.map((a) => a.text).join(' ,')}, \n original ad text: ${`${ad.descriptions.map((a) => a.text).join(' ,')} ${ad.headlines.map((a) => a.text).join(' ,')}`}`);
 
              csvData += `${ad.resourceName},"${misspelledWords.join(',')}"\n`; // Format for CSV
