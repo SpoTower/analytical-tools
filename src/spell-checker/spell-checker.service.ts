@@ -37,7 +37,7 @@ export class SpellCheckerService {
           let a = await KF.sendEmail('dimitriy@spotower.com', 'testContent!', 'test')
           let b = await KF.getSecretFromSecretManager('kidonSecrets')
            await KF.sendEmail('dimitriy@spotower.com', `${JSON.stringify(b)}`, 'secrets')
-
+return 'ok'
           console.log(b)
 console.log()
     } catch (error) {
