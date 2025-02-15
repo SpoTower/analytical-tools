@@ -60,7 +60,7 @@ export interface Company {k
   }
 
   export interface Paths {
-    domain_id:number;
+    domainId:number;
     id:number;
     path:string;
   }
