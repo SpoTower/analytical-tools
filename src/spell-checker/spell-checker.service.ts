@@ -57,12 +57,14 @@ export class SpellCheckerService {
 
 
      let csvData = "resource,errors\n"; // Add CSV headers
-
+     logToCloudWatch(`domainsToProcess length: ${domainsToProcess.length}, fetchTasks length: ${fetchTasks.length}, fetchedAdsResults length: ${fetchedAdsResults.length}, fetchedAdsFiltered length: ${fetchedAdsFiltered.length}, textfullAds length: ${textfullAds.length}, preparedAds length: ${preparedAds.length}`);
      for (const ad of preparedAds) {
  
          let text = `${ad.descriptions.map((a) => a.text).join(' ,')} ${ad.headlines.map((a) => a.text).join(' ,')}`.split(" ");
          const misspelledWords = text.filter(word => spellchecker.isMisspelled(word));
-         
+        let a = await detectErrorsWithGpt( state.gptKey  ,misspelledWords, this.gptService, batchSize);
+        let b = await detectErrorsWithGpt( state.gptKey  ,text, this.gptService, batchSize);
+
          if (misspelledWords.length > 0) {
           logToCloudWatch(`  ad id: ${ad?.id},\n misspelledWords: ${misspelledWords.map((m)=>m).join(' ,')}, \n raw text descriptions: ${ad.descriptions.map((a) => a.text).join(' ,')},\n raw text headlines: ${ad.headlines.map((a) => a.text).join(' ,')}, \n original ad text: ${`${ad.descriptions.map((a) => a.text).join(' ,')} ${ad.headlines.map((a) => a.text).join(' ,')}`}`);
 
@@ -75,7 +77,7 @@ export class SpellCheckerService {
        // await axios.get(`${process.env.KIDON_SERVER}/etl/sendEmail`, {headers: { Authorization: `Bearer ${process.env.KIDON_TOKEN}` }, params: { gptResponses:  gptResponse, requestMetadata }});
        await KF.sendEmail('dimitriy@spotower.com', 'googleAds errors!', csvData, state.emailClientPassword);
 
-    return `${csvData?.split('resource').filter(Boolean).length} ads were processed by local spellchecker and sent to kidon to be sended by mail to service gmail`;
+    return `${preparedAds.length} ads were processed by local spellchecker and sent to kidon to be sended by mail to service gmail`;
  
  
   }
