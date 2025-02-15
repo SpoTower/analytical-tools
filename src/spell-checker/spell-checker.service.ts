@@ -33,19 +33,11 @@ export class SpellCheckerService {
 
   async findAndFixGoogleAdsGrammaticalErrors( batchSize: number, domainId?: number, sliceSize?: number  ) {
     logToCloudWatch('entering findAndFixGoogleAdsGrammaticalErrors');
-    try {
-          let a = await KF.sendEmail('dimitriy@spotower.com', 'testContent!', 'test')
-          let b = await KF.getSecretFromSecretManager('kidonSecrets')
-           await KF.sendEmail('dimitriy@spotower.com', `${JSON.stringify(b)}`, 'secrets')
-return 'ok'
-          console.log(b)
-console.log()
-    } catch (error) {
-      console.log()
-    }
- 
 
-console.log(KF)
+ 
+  
+
+ 
      let gptResponse = '' 
      const requestMetadata = {source: process.env.SOURCE, emailRecipient: process.env.SERVICE_GMAIL, emailSubject: emailSubjects.GOOGLE_ADS_GRAMMATICAL_ERRORS };
  
@@ -82,9 +74,11 @@ console.log(KF)
       gptResponse = gptResponse.concat(`resource: ${ad.resourceName}, erroreous words: ${misspelledWords}  \n`);
      }
 
+    
 
    (gptResponse && gptResponse.length > 0) &&
-        await axios.get(`${process.env.KIDON_SERVER}/etl/sendEmail`, {headers: { Authorization: `Bearer ${process.env.KIDON_TOKEN}` }, params: { gptResponses:  gptResponse, requestMetadata }});
+       // await axios.get(`${process.env.KIDON_SERVER}/etl/sendEmail`, {headers: { Authorization: `Bearer ${process.env.KIDON_TOKEN}` }, params: { gptResponses:  gptResponse, requestMetadata }});
+       await KF.sendEmail('dimitriy@spotower.com', 'googleAds errors!', gptResponse, state.emailClientPassword);
 
     return `${gptResponse?.split('resource').filter(Boolean).length} ads were processed by local spellchecker and sent to kidon to be sended by mail to service gmail`;
  
