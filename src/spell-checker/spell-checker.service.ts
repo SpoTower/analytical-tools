@@ -1,7 +1,7 @@
 import { Injectable,Logger } from '@nestjs/common';
 import { CreateSpellCheckerDto } from './dto/create-spell-checker.dto';
 import { UpdateSpellCheckerDto } from './dto/update-spell-checker.dto';
- import {fetchGoogleAds,filterOutTextlessAds,prepareAdsForGpt,fetchWebsitesInnerHtml, detectErrorsWithGpt} from './utils';
+ import {fetchGoogleAds,filterOutTextlessAds,prepareAdsForGpt,fetchWebsitesInnerHtml, detectErrorsWithGpt, detectErrorsWithGpt2 } from './utils';
  import { KnexService } from 'src/knex/knex.service';
 import { GlobalStateService } from 'src/globalState/global-state.service';
  const logger = new Logger('analytical-tools.spellchecker');
@@ -57,16 +57,25 @@ export class SpellCheckerService {
 
 
      let csvData = "resource,errors\n"; // Add CSV headers
-
+     logToCloudWatch(`domainsToProcess length: ${domainsToProcess.length}, fetchTasks length: ${fetchTasks.length}, fetchedAdsResults length: ${fetchedAdsResults.length}, fetchedAdsFiltered length: ${fetchedAdsFiltered.length}, textfullAds length: ${textfullAds.length}, preparedAds length: ${preparedAds.length}`);
      for (const ad of preparedAds) {
  
-         let text = `${ad.descriptions.map((a) => a.text).join(' ,')} ${ad.headlines.map((a) => a.text).join(' ,')}`.split(" ");
+      let text = Array.from(
+        new Set(
+            `${ad.descriptions.map((a) => a.text).join(' ,')} ${ad.headlines.map((a) => a.text).join(' ,')}`
+            .split(" ")
+            .filter(word => /^[A-Za-z]+$/.test(word))
+            .filter(word => !word.includes("CUSTOMIZER"))
+        )
+    );
+    
          const misspelledWords = text.filter(word => spellchecker.isMisspelled(word));
-         
-         if (misspelledWords.length > 0) {
+         if (misspelledWords.length > 0) {  
           logToCloudWatch(`  ad id: ${ad?.id},\n misspelledWords: ${misspelledWords.map((m)=>m).join(' ,')}, \n raw text descriptions: ${ad.descriptions.map((a) => a.text).join(' ,')},\n raw text headlines: ${ad.headlines.map((a) => a.text).join(' ,')}, \n original ad text: ${`${ad.descriptions.map((a) => a.text).join(' ,')} ${ad.headlines.map((a) => a.text).join(' ,')}`}`);
-
-             csvData += `${ad.resourceName},"${misspelledWords.join(',')}"\n`; // Format for CSV
+           let isEnglish = await this.gptService.askGptString(state.gptKey, text.map((t)=> t).join(','))
+            if(isEnglish.choices[0].message.content == 'yes'){
+               csvData += `${ad.resourceName},"${misspelledWords.join(',')}"\n`; // Format for CSV
+            }
          }
      }
     logToCloudWatch(`csvData length (expected number of rows in excel): ${csvData.split('\n').length}`);
@@ -75,7 +84,7 @@ export class SpellCheckerService {
        // await axios.get(`${process.env.KIDON_SERVER}/etl/sendEmail`, {headers: { Authorization: `Bearer ${process.env.KIDON_TOKEN}` }, params: { gptResponses:  gptResponse, requestMetadata }});
        await KF.sendEmail('dimitriy@spotower.com', 'googleAds errors!', csvData, state.emailClientPassword);
 
-    return `${csvData?.split('resource').filter(Boolean).length} ads were processed by local spellchecker and sent to kidon to be sended by mail to service gmail`;
+    return `  ads were processed by local spellchecker and sent to kidon to be sended by mail to service gmail`;
  
  
   }
