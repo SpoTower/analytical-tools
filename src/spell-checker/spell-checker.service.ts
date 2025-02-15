@@ -40,7 +40,6 @@ export class SpellCheckerService {
      // ✅ Step 1: Batch Fetch Google Ads for Domains
      const fetchTasks = domainsToProcess.map((domain: Domain) => async () => {
          try {
-             logToCloudWatch(`Fetching Google Ads for domain ${domain.id}`);
              return {domain, ads: await fetchGoogleAds(domain, state.companies, state.allTokens)};
          } catch (error) {
              logToCloudWatch(`❌ Error fetching Google Ads for domain ${domain.id}: ${error.message}`, "ERROR");
@@ -54,19 +53,23 @@ export class SpellCheckerService {
      const textfullAds = filterOutTextlessAds(fetchedAdsFiltered)
      if(!textfullAds || textfullAds.length === 0) return 'No textfull ads found'
      let preparedAds = prepareAdsForGpt(textfullAds);  // row per domain+path
+     logToCloudWatch(`preparedAds length: ${preparedAds.length}`);
 
 
      let csvData = "resource,errors\n"; // Add CSV headers
 
      for (const ad of preparedAds) {
+ 
          let text = `${ad.descriptions.map((a) => a.text).join(' ,')} ${ad.headlines.map((a) => a.text).join(' ,')}`.split(" ");
          const misspelledWords = text.filter(word => spellchecker.isMisspelled(word));
          
          if (misspelledWords.length > 0) {
+          logToCloudWatch(`  ad id: ${ad?.id},\n misspelledWords: ${misspelledWords.map((m)=>m).join(' ,')}, \n raw text descriptions: ${ad.descriptions.map((a) => a.text).join(' ,')},\n raw text headlines: ${ad.headlines.map((a) => a.text).join(' ,')}, \n original ad text: ${`${ad.descriptions.map((a) => a.text).join(' ,')} ${ad.headlines.map((a) => a.text).join(' ,')}`}`);
+
              csvData += `${ad.resourceName},"${misspelledWords.join(',')}"\n`; // Format for CSV
          }
      }
-    
+    logToCloudWatch(`csvData length (expected number of rows in excel): ${csvData.split('\n').length}`);
 
    (csvData && csvData.length > 0) &&
        // await axios.get(`${process.env.KIDON_SERVER}/etl/sendEmail`, {headers: { Authorization: `Bearer ${process.env.KIDON_TOKEN}` }, params: { gptResponses:  gptResponse, requestMetadata }});
