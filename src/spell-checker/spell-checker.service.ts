@@ -13,13 +13,12 @@ import axios from 'axios';
  import { State } from 'src/globalState/interfaces';
   import {processInBatches} from './utils';
  const { chromium } = require('playwright');
-import {adsForGpt } from './interfaces';
+import {googleAds } from './interfaces';
 import spellchecker from 'spellchecker';
 import { emailSubjects } from './consts';
 export {emailSubjects} from './consts';
 import * as KF from '@spotower/my-utils';
-import nodemailer from 'nodemailer';
-
+ 
 
 
  @Injectable()
@@ -34,13 +33,6 @@ export class SpellCheckerService {
   async findAndFixGoogleAdsGrammaticalErrors( batchSize: number, domainId?: number, sliceSize?: number  ) {
     logToCloudWatch('entering findAndFixGoogleAdsGrammaticalErrors');
 
- 
-  
-
- 
-     let gptResponse = '' 
-     const requestMetadata = {source: process.env.SOURCE, emailRecipient: process.env.SERVICE_GMAIL, emailSubject: emailSubjects.GOOGLE_ADS_GRAMMATICAL_ERRORS };
- 
      const state = this.globalState.getAllState();
      if(!state) return 'No state found';
         let domainsToProcess = state.domains.filter((domain : Domain) => domain.googleAdsId).filter((domain: Domain) => !domainId || domain.id === domainId);; // Only domains with googleAdsId
@@ -57,30 +49,30 @@ export class SpellCheckerService {
      });
  
    
-     const fetchedAdsResults = await processInBatches(fetchTasks, batchSize);
+     const fetchedAdsResults : googleAds[] = await processInBatches(fetchTasks, batchSize);
      const fetchedAdsFiltered = fetchedAdsResults.filter((f)=> f.ads.length > 0)
      const textfullAds = filterOutTextlessAds(fetchedAdsFiltered)
      if(!textfullAds || textfullAds.length === 0) return 'No textfull ads found'
      let preparedAds = prepareAdsForGpt(textfullAds);  // row per domain+path
 
-     preparedAds[1] =  preparedAds[0]
-     preparedAds[0].headlines[5].text = '  Most Affordabdle Plans u know vat  '
-     preparedAds[1].headlines[5].text = '  Mostff Affordabdle Plans i know what rijht'
+
+     let csvData = "resource,errors\n"; // Add CSV headers
 
      for (const ad of preparedAds) {
-      let text = `${ad.descriptions.map((a)=> a.text).join(' ,')} ${ad.headlines.map((a)=> a.text).join(' ,')}`.split(" ");
-      const misspelledWords =   text.filter(word => spellchecker.isMisspelled(word));
-      if(misspelledWords && misspelledWords.length > 0)
-      gptResponse = gptResponse.concat(`resource: ${ad.resourceName}, erroreous words: ${misspelledWords}  \n`);
+         let text = `${ad.descriptions.map((a) => a.text).join(' ,')} ${ad.headlines.map((a) => a.text).join(' ,')}`.split(" ");
+         const misspelledWords = text.filter(word => spellchecker.isMisspelled(word));
+         
+         if (misspelledWords.length > 0) {
+             csvData += `${ad.resourceName},"${misspelledWords.join(',')}"\n`; // Format for CSV
+         }
      }
-
     
 
-   (gptResponse && gptResponse.length > 0) &&
+   (csvData && csvData.length > 0) &&
        // await axios.get(`${process.env.KIDON_SERVER}/etl/sendEmail`, {headers: { Authorization: `Bearer ${process.env.KIDON_TOKEN}` }, params: { gptResponses:  gptResponse, requestMetadata }});
-       await KF.sendEmail('dimitriy@spotower.com', 'googleAds errors!', gptResponse, state.emailClientPassword);
+       await KF.sendEmail('dimitriy@spotower.com', 'googleAds errors!', csvData, state.emailClientPassword);
 
-    return `${gptResponse?.split('resource').filter(Boolean).length} ads were processed by local spellchecker and sent to kidon to be sended by mail to service gmail`;
+    return `${csvData?.split('resource').filter(Boolean).length} ads were processed by local spellchecker and sent to kidon to be sended by mail to service gmail`;
  
  
   }
