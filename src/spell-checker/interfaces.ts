@@ -1,3 +1,6 @@
+import { Domain  } from 'src/kidonInterfaces/shared';
+
+
 export interface websiteText{
     domain:number,
     fullPath:string,
@@ -21,3 +24,9 @@ export type adsForGpt = {
     resourceChangeOperation : string;
     resourceName : string;
 }
+export interface googleAds {
+    domain: Domain;
+    ads: any[];
+   }
+  
+  
