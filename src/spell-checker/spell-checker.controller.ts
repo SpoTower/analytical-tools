@@ -16,9 +16,13 @@ export class SpellCheckerController {
   }
 
   @Get('/findGoogleAdsGrammaticalErrors')
-  async findGoogleAdsGrammaticalErrors(@Query('domainId', new DefaultValuePipe(0), ParseIntPipe) domainId: number) {
+  async findGoogleAdsGrammaticalErrors(
+    @Query('batchSize', new DefaultValuePipe(10), ParseIntPipe) batchSize: number,
+    @Query('domainId' ) domainId?: number,
+     @Query('sliceSize' ) sliceSize?: number
+    ) {
     try {
-       return await this.spellCheckerService.findAndFixGoogleAdsGrammaticalErrors(domainId);
+       return await this.spellCheckerService.findAndFixGoogleAdsGrammaticalErrors(batchSize,+domainId, +sliceSize);
     } catch (error) {
       if (error instanceof BadRequestException || error instanceof InternalServerErrorException) {
         throw error;

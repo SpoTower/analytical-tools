@@ -19,7 +19,7 @@ export const analyticsDbConfig = async (): Promise<Knex.Config> => {
     ...knexSnakeCaseMappers(), // Convert snake_case to camelCase and vice versa
   }
 };
-
+ 
 export const kidonDbConfig = async (): Promise<Knex.Config> => {
   const res = await getSecretFromSecretManager(process.env.KIDON_PASSWORD_KEY);
   const secretData = JSON.parse(res);

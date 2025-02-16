@@ -16,10 +16,10 @@ import { getDateRange } from 'src/utils';
 
 export async function fetchGoogleAds(domain: Domain, companies: Company[], tokens:any ) {
     logToCloudWatch(`Entering fetchGoogleAds, fetching google ads for domain ${domain.id}`);
-    const date = getDateRange(7, 'YYYY-MM-DD');
+    const date = getDateRange(28, 'YYYY-MM-DD');
     try {
         const changeEventResult = await axios.post(
-            `https://googleads.googleapis.com/v16/customers/${domain.googleAdsId}/googleAds:searchStream`,
+            `https://googleads.googleapis.com/v17/customers/${domain.googleAdsId}/googleAds:searchStream`,
             {
                 query: `
                 SELECT
@@ -94,6 +94,7 @@ export async function   processInBatches(tasks: (() => Promise<any>)[], batchSiz
     logToCloudWatch('Entering processInBatches');
     try {
             const results: any[] = [];
+    if(!tasks || tasks.length === 0) return [];
     for (let i = 0; i < tasks.length; i += batchSize) {
         const batch = tasks.slice(i, i + batchSize);
         const batchResults = await Promise.all(batch.map(task => task())); // Run batch in parallel
@@ -106,16 +107,14 @@ export async function   processInBatches(tasks: (() => Promise<any>)[], batchSiz
     }
 
   }
-  export async function fetchWebsitesInnerHtml(state: State, batchSize: number): Promise<any[]> {
+  export async function fetchWebsitesInnerHtml(domains: Domain[], batchSize: number): Promise<any[]> {
     logToCloudWatch('Entering fetchWebsitesInnerHtml');
     const websitesInnerHtml: websiteText[] = [];
     const browser = await chromium.launch({ headless: false }); // Launch browser once
   
-    const domainTasks = state.domains.filter((domain:Domain) => domain.id <= 2 && domain.hostname)
-         
-        .map(domain => async () => {  
+    const domainTasks =  domains.map(domain => async () => {  
             const page = await browser.newPage();
-            for (const path of domain.paths.slice(0, 2)) {
+            for (const path of domain.paths.slice(0, 3)) {
                 const url = `https://${domain.hostname}${path}`;
   
                 try {
@@ -129,6 +128,8 @@ export async function   processInBatches(tasks: (() => Promise<any>)[], batchSiz
             }
             await page.close();
         });
+         
+        
   
     // Process website fetch tasks in batches
     await  processInBatches(domainTasks, batchSize);
@@ -137,16 +138,15 @@ export async function   processInBatches(tasks: (() => Promise<any>)[], batchSiz
     return websitesInnerHtml;
   }
   
-  /**
-  * **2️⃣ Process GPT Errors in Parallel**
-  */
-  export async function detectErrorsWithGpt(state: State, websitesInnerHtml: any[],gptService: GptService,  batchSize: number): Promise<any[]> {
+ 
+
+  export async function detectErrorsWithGpt(gptKey: string, websitesInnerHtml: any,gptService: GptService,  batchSize: number): Promise<string> {
     logToCloudWatch('Entering detectErrorsWithGpt');
-    const gptErrorDetectionResults: any[] = [];
-  
+    let gptErrorDetectionResults = '';
+    
     const gptTasks = websitesInnerHtml.map(pageData => async () => {
         try {
-            const gptResponse = await  gptService.askGpt2(state.gptKey, pageData);
+            const gptResponse = await  gptService.askGpt2(gptKey, pageData);
             return {domain: pageData.domain,path: pageData.fullPath,errors: gptResponse.choices[0]?.message?.content || "No response" };
         } catch (error) {
             logToCloudWatch(`GPT request failed for ${pageData.fullPath}: ${error.message}`, 'ERROR');
@@ -156,10 +156,19 @@ export async function   processInBatches(tasks: (() => Promise<any>)[], batchSiz
   
     // Process GPT tasks in batches
     const gptResponses = await  processInBatches(gptTasks, batchSize);
-    gptErrorDetectionResults.push(...gptResponses);
-  
+
+    gptErrorDetectionResults = gptErrorDetectionResults.concat( gptResponses.map(res => JSON.stringify(res) ) .join('\n')  ); 
+       
     return gptErrorDetectionResults;
   }
+
+  export async function detectErrorsWithGpt2(gptKey: string, websitesInnerHtml: any,gptService: GptService,  batchSize: number): Promise<string> {
+    const gptResponse = await  gptService.askGpt2(gptKey, websitesInnerHtml);
+    return gptResponse.choices[0]?.message?.content || "No response";
+
+  }
+
+
 
 export   function filterOutIrrelevantErrors(gptErrorDetectionResults: gptProposal[]): gptProposal[] {
     if(!gptErrorDetectionResults || gptErrorDetectionResults?.length == 0 ) return [];

@@ -1,6 +1,16 @@
+import { Domain } from "domain";
 export type AnyObject = {
     [key: string]: any; // Allows any key with any value type
 };
+
+
+export enum emailSubjects {
+    GOOGLE_ADS_GRAMMATICAL_ERRORS = 'Google Ads Grammatical Errors',
+    WEBSITES_GRAMMATICAL_ERRORS = 'Websites Grammatical Errors',
+}
+ 
+
+ 
 
 
 export function fixingGrammErrorsPrompt(spellcheckIgnoreList: string[]) {
@@ -42,18 +52,16 @@ export function fixingGrammErrorsPrompt2( ) {
  
   export function locatingWebSitesErrors(){
     return `You are gramatical and syntatctical errors tool detector.
-    you will recieve array of objects. in each object you will have domain id, full path and inner html of the page.
-    you need to read all the inner htmls and find all the errors in the text.
+    you will recieve array of objects. in each object you will have domain id, full path and text of inner html of the page.
+    you need to read all the text and find all the errors in the text.
     include only syntactical and grammatical errors, signs like /n or /t are not errors.
     return the errors with the following fields:
     error text (no more than 1 sentence, dont reprint unneccessary text)
   IMPORTANT!:
   return only errors that are actuall word misspelling or grammatical errors, dont return errors that are not related to the text (structure, punctuation etc) 
 
-  RETURN FORMAT (must be valid JSON): 
-  - errorWord: the word or words that you find error in
-  - correction: the fix for this error
-  - fewWordsBefore: few word before the error (for context)
+  RETURN FORMAT (must be STRING): 
+    errorWord:correction,errorWord:correction,errorWord:correction,errorWord:correction ... etc
  
 
   errorWord and correction cannot be the same!!! if error word equal to correction dont include this error

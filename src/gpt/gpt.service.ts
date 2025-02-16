@@ -4,7 +4,7 @@ import { UpdateGptDto } from './dto/update-gpt.dto';
 const OpenAI = require('openai').OpenAI;
 import {fixingGrammErrorsPrompt2,locatingWebSitesErrors,locatingWebSitesErrors2} from '../spell-checker/consts';
 import { logToCloudWatch } from 'src/logger';
-
+import { adsForGpt } from 'src/spell-checker/interfaces';
 @Injectable()
 export class GptService {
   create(createGptDto: CreateGptDto) {
@@ -15,7 +15,7 @@ export class GptService {
     return `This action returns allw gpt`;
   }
 
-  async askGpt(gptKey:string, extractedAds: Record<string, any> ) {
+  async askGpt(gptKey:string, extractedAds: adsForGpt ) {
     logToCloudWatch(`Entering askGpt. asking gpt for ads ${extractedAds.id}`)
      const openai = new OpenAI({apiKey: gptKey,  });
 
@@ -50,7 +50,22 @@ export class GptService {
         temperature: 0,
     });
   }
-  
+  async askGptString(gptKey:string, extractedAds: any ) {
+    const openai = new OpenAI({apiKey: gptKey,  });
+
+ return await openai. chat.completions.create({
+      model: 'gpt-3.5-turbo',
+      messages: [
+          { role: 'system', content: 'if most of the words in english - say yes, if most the word in other language - say no. your answer is only 1 word, yes or no' },
+          {
+              role: 'user',
+              content: extractedAds,
+          },
+      ],
+      max_tokens: 4000,
+      temperature: 0,
+  });
+}
 
   findOne(id: number) {
     return `This action returns a #${id} gpt`;

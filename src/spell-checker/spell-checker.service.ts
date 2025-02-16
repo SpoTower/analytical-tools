@@ -1,7 +1,7 @@
 import { Injectable,Logger } from '@nestjs/common';
 import { CreateSpellCheckerDto } from './dto/create-spell-checker.dto';
 import { UpdateSpellCheckerDto } from './dto/update-spell-checker.dto';
- import {fetchGoogleAds,filterOutTextlessAds,prepareAdsForGpt,fetchWebsitesInnerHtml, detectErrorsWithGpt} from './utils';
+ import {fetchGoogleAds,filterOutTextlessAds,prepareAdsForGpt,fetchWebsitesInnerHtml, detectErrorsWithGpt, detectErrorsWithGpt2 } from './utils';
  import { KnexService } from 'src/knex/knex.service';
 import { GlobalStateService } from 'src/globalState/global-state.service';
  const logger = new Logger('analytical-tools.spellchecker');
@@ -13,70 +13,105 @@ import axios from 'axios';
  import { State } from 'src/globalState/interfaces';
   import {processInBatches} from './utils';
  const { chromium } = require('playwright');
+import {googleAds } from './interfaces';
+import spellchecker from 'spellchecker';
+import { emailSubjects } from './consts';
+export {emailSubjects} from './consts';
+import * as KF from '@spotower/my-utils';
  
+
+
  @Injectable()
 export class SpellCheckerService {
 
   constructor(
-    private readonly knexService: KnexService,
+    private readonly knexService: KnexService, 
     private readonly globalState: GlobalStateService,
     private readonly gptService: GptService
     ) {}
 
-  async findAndFixGoogleAdsGrammaticalErrors(domainId?: number) {
-    const gptResponse = [] 
- 
- 
+  async findAndFixGoogleAdsGrammaticalErrors( batchSize: number, domainId?: number, sliceSize?: number  ) {
+    logToCloudWatch('entering findAndFixGoogleAdsGrammaticalErrors');
+
      const state = this.globalState.getAllState();
-        let domainsToProcess = state.domains.filter(domain => domain.googleAdsId); // Only domains with googleAdsId
-      domainsToProcess = domainsToProcess.slice(0, 10); // Limit to 2 domains for testing
+     if(!state) return 'No state found';
+        let domainsToProcess = state.domains.filter((domain : Domain) => domain.googleAdsId).filter((domain: Domain) => !domainId || domain.id === domainId);; // Only domains with googleAdsId
+      domainsToProcess = domainsToProcess.slice(0, sliceSize || domainsToProcess.length);  
      // ✅ Step 1: Batch Fetch Google Ads for Domains
-     const fetchTasks = domainsToProcess.map((domain) => async () => {
+     const fetchTasks = domainsToProcess.map((domain: Domain) => async () => {
          try {
-             logToCloudWatch(`Fetching Google Ads for domain ${domain.id}`);
              return {domain, ads: await fetchGoogleAds(domain, state.companies, state.allTokens)};
          } catch (error) {
              logToCloudWatch(`❌ Error fetching Google Ads for domain ${domain.id}: ${error.message}`, "ERROR");
-             return { domain, ads: [] }; // Return empty ads to prevent failures
+             return { domain, ads: [] };  
          }
      });
  
-     const batchSize = 10; // Adjust batch size based on system performance
-     const fetchedAdsResults = await processInBatches(fetchTasks, batchSize);
+   
+     const fetchedAdsResults : googleAds[] = await processInBatches(fetchTasks, batchSize);
      const fetchedAdsFiltered = fetchedAdsResults.filter((f)=> f.ads.length > 0)
      const textfullAds = filterOutTextlessAds(fetchedAdsFiltered)
-     const preparedAds = prepareAdsForGpt(textfullAds);  // row per domain+path
+     if(!textfullAds || textfullAds.length === 0) return 'No textfull ads found'
+     let preparedAds = prepareAdsForGpt(textfullAds);  // row per domain+path
+     logToCloudWatch(`preparedAds length: ${preparedAds.length}`);
 
+
+     let csvData = "resource,errors\n"; // Add CSV headers
+     logToCloudWatch(`domainsToProcess length: ${domainsToProcess.length}, fetchTasks length: ${fetchTasks.length}, fetchedAdsResults length: ${fetchedAdsResults.length}, fetchedAdsFiltered length: ${fetchedAdsFiltered.length}, textfullAds length: ${textfullAds.length}, preparedAds length: ${preparedAds.length}`);
      for (const ad of preparedAds) {
-      const response = await this.gptService.askGpt(state.gptKey, ad);
-      gptResponse.push(response.choices[0].message.content || 'no errors found');
+ 
+      let text = Array.from(
+        new Set(
+            `${ad.descriptions.map((a) => a.text).join(' ,')} ${ad.headlines.map((a) => a.text).join(' ,')}`
+            .split(" ")
+            .filter(word => /^[A-Za-z]+$/.test(word))
+            .filter(word => !word.includes("CUSTOMIZER"))
+        )
+    );
+    
+         const misspelledWords = text.filter(word => spellchecker.isMisspelled(word));
+         if (misspelledWords.length > 0) {  
+          logToCloudWatch(`  ad id: ${ad?.id},\n misspelledWords: ${misspelledWords.map((m)=>m).join(' ,')}, \n raw text descriptions: ${ad.descriptions.map((a) => a.text).join(' ,')},\n raw text headlines: ${ad.headlines.map((a) => a.text).join(' ,')}, \n original ad text: ${`${ad.descriptions.map((a) => a.text).join(' ,')} ${ad.headlines.map((a) => a.text).join(' ,')}`}`);
+           let isEnglish = await this.gptService.askGptString(state.gptKey, text.map((t)=> t).join(','))
+            if(isEnglish.choices[0].message.content == 'yes'){
+               csvData += `${ad.resourceName},"${misspelledWords.join(',')}"\n`; // Format for CSV
+            }
+         }
      }
+    logToCloudWatch(`csvData length (expected number of rows in excel): ${csvData.split('\n').length}`);
 
+   (csvData && csvData.length > 0) &&
+       // await axios.get(`${process.env.KIDON_SERVER}/etl/sendEmail`, {headers: { Authorization: `Bearer ${process.env.KIDON_TOKEN}` }, params: { gptResponses:  gptResponse, requestMetadata }});
+       await KF.sendEmail('dimitriy@spotower.com', 'googleAds errors!', csvData, state.emailClientPassword);
 
-
-   await axios.get(`${process.env.KIDON_SERVER}/etl/sendEmail`, {headers: { Authorization: `Bearer ${process.env.KIDON_TOKEN}` }, params: { gptResponses:  gptResponse }});
-
-    return gptResponse
+    return `  ads were processed by local spellchecker and sent to kidon to be sended by mail to service gmail`;
  
  
   }
   async findAndFixWebsitesGrammaticalErrors(domainId?: number, batchSize?: number) {
 
-    try {
+    const requestMetadata = {source: process.env.SOURCE, emailRecipient: process.env.SERVICE_GMAIL, emailSubject: emailSubjects.WEBSITES_GRAMMATICAL_ERRORS };
+    await axios.get(`${process.env.KIDON_SERVER}/etl/sendEmail`, {headers: { Authorization: `Bearer ${process.env.KIDON_TOKEN}` }, params: { gptResponses: 'gptErrorDetectionResults' , requestMetadata }});
+
         const state = this.globalState.getAllState();
+        if(!state) return 'No state found';
+
         const chosenDomains = domainId ? state.domains.filter((d: Domain) => d.id === domainId) : state.domains;
-        chosenDomains.forEach((domain: Domain) => {domain.paths = state.paths.filter((p: Paths) => p.domain_id === domain.id).map((p: Paths) => p.path); });   
-        const websitesInnerHtml: websiteText[] = await fetchWebsitesInnerHtml((state as State), batchSize);
-        let gptErrorDetectionResults: gptProposal[] = await detectErrorsWithGpt((state as State),websitesInnerHtml, this.gptService, batchSize);
-       // gptErrorDetectionResults =   filterOutIrrelevantErrors(gptErrorDetectionResults)
-        await axios.get(`${process.env.KIDON_SERVER}/etl/sendEmail`, {headers: { Authorization: `Bearer ${process.env.KIDON_TOKEN}` }, params: { gptResponses: gptErrorDetectionResults.sort((a, b) => a.domain - b.domain) }});
-    } catch (error) {
-        logToCloudWatch(error?.message || 'Error in findAndFixWebsitesGrammaticalErrors', 'ERROR');
-    }
+        chosenDomains.forEach((domain: Domain) => {domain.paths = state.paths.filter((p: Paths) => p.domainId === domain.id).map((p: Paths) => p.path); });   
+        const websitesInnerHtml: websiteText[] = await fetchWebsitesInnerHtml(chosenDomains, batchSize);
+        let gptErrorDetectionResults: string = await detectErrorsWithGpt( state.gptKey  ,websitesInnerHtml, this.gptService, batchSize);
+ try {
+          (gptErrorDetectionResults && gptErrorDetectionResults.length > 0) &&
+               await axios.get(`${process.env.KIDON_SERVER}/etl/sendEmail`, {headers: { Authorization: `Bearer ${process.env.KIDON_TOKEN}` }, params: { gptResponses: gptErrorDetectionResults , requestMetadata }});
+
+ } catch (error) {
+  console.log('error in sending email', error)
+ }
+
+        return `${gptErrorDetectionResults?.split('domain').filter(Boolean).length} websites pages (paths) were processed by gpt and sent to kidon to be sended by mail to service gmail`;
+
 }
-
-
-
+ 
 
  
  
