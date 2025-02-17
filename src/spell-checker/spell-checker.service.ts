@@ -15,10 +15,10 @@ import axios from 'axios';
  const { chromium } = require('playwright');
 import {googleAds } from './interfaces';
 import spellchecker from 'spellchecker';
-import { emailSubjects } from './consts';
+import { emailSubjects, isWordsInEnglish } from './consts';
 export {emailSubjects} from './consts';
 import * as KF from '@spotower/my-utils';
- 
+  
 
 
  @Injectable()
@@ -30,7 +30,7 @@ export class SpellCheckerService {
     private readonly gptService: GptService
     ) {}
 
-  async findAndFixGoogleAdsGrammaticalErrors( batchSize: number, domainId?: number, sliceSize?: number  ) {
+  async findAndFixGoogleAdsGrammaticalErrors( batchSize: number, domainId?: number, sliceSize?: number,   ) {
     logToCloudWatch('entering findAndFixGoogleAdsGrammaticalErrors');
 
      const state = this.globalState.getAllState();
@@ -53,41 +53,29 @@ export class SpellCheckerService {
      const textfullAds = filterOutTextlessAds(fetchedAdsFiltered)
      if(!textfullAds || textfullAds.length === 0) return 'No textfull ads found'
      let preparedAds = prepareAdsForGpt(textfullAds);  // row per domain+path
-     logToCloudWatch(`preparedAds length: ${preparedAds.length}`);
+     let csvData = "resource,errors,domain,googleAdsId,wholeSentence,location\n"; // Add CSV headers
 
-
-     let csvData = "resource,errors\n"; // Add CSV headers
-     logToCloudWatch(`domainsToProcess length: ${domainsToProcess.length}, fetchTasks length: ${fetchTasks.length}, fetchedAdsResults length: ${fetchedAdsResults.length}, fetchedAdsFiltered length: ${fetchedAdsFiltered.length}, textfullAds length: ${textfullAds.length}, preparedAds length: ${preparedAds.length}`);
      for (const ad of preparedAds) {
- 
-      let text = Array.from(
-        new Set(
-            `${ad.descriptions.map((a) => a.text).join(' ,')} ${ad.headlines.map((a) => a.text).join(' ,')}`
-            .split(" ")
-            .filter(word => /^[A-Za-z]+$/.test(word))
-            .filter(word => !word.includes("CUSTOMIZER"))
-        )
-    );
-    
-         const misspelledWords = text.filter(word => spellchecker.isMisspelled(word));
-         if (misspelledWords.length > 0) {  
-          logToCloudWatch(`  ad id: ${ad?.id},\n misspelledWords: ${misspelledWords.map((m)=>m).join(' ,')}, \n raw text descriptions: ${ad.descriptions.map((a) => a.text).join(' ,')},\n raw text headlines: ${ad.headlines.map((a) => a.text).join(' ,')}, \n original ad text: ${`${ad.descriptions.map((a) => a.text).join(' ,')} ${ad.headlines.map((a) => a.text).join(' ,')}`}`);
-           let isEnglish = await this.gptService.askGptString(state.gptKey, text.map((t)=> t).join(','))
-            if(isEnglish.choices[0].message.content == 'yes'){
-               csvData += `${ad.resourceName},"${misspelledWords.join(',')}"\n`; // Format for CSV
+         for (const description of ad.descriptions) {
+
+            const misspelledWords = description.text.split(" ").filter(word => spellchecker.isMisspelled(word));
+            if (misspelledWords.length > 0) {
+              csvData += `"${ad.resourceName}","${misspelledWords.join(',')}","${ad.domain}","${ad.googleAdsId}","${description.text}","descriptions"\n`;
             }
-         }
+        }
+        for (const headline of ad.headlines) {
+            const misspelledWords = headline.text.split(" ").filter(word => spellchecker.isMisspelled(word));
+            if (misspelledWords.length > 0) {
+              csvData += `"${ad.resourceName}","${misspelledWords.join(',')}","${ad.domain}","${ad.googleAdsId}","${headline.text}","headline"\n`;
+            }
+        }
+ 
      }
     logToCloudWatch(`csvData length (expected number of rows in excel): ${csvData.split('\n').length}`);
-
-   (csvData && csvData.length > 0) &&
-       // await axios.get(`${process.env.KIDON_SERVER}/etl/sendEmail`, {headers: { Authorization: `Bearer ${process.env.KIDON_TOKEN}` }, params: { gptResponses:  gptResponse, requestMetadata }});
-       await KF.sendEmail('dimitriy@spotower.com', 'googleAds errors!', csvData, state.emailClientPassword);
-
-    return `  ads were processed by local spellchecker and sent to kidon to be sended by mail to service gmail`;
- 
- 
+     await KF.sendEmail(process.env.SERVICE_GMAIL, 'googleAds errors!', csvData, state.emailClientPassword);
+    return `ads were processed by local spellchecker and sent to kidon to be sended by mail to service gmail`;
   }
+
   async findAndFixWebsitesGrammaticalErrors(domainId?: number, batchSize?: number) {
 
     const requestMetadata = {source: process.env.SOURCE, emailRecipient: process.env.SERVICE_GMAIL, emailSubject: emailSubjects.WEBSITES_GRAMMATICAL_ERRORS };

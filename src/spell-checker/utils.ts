@@ -72,22 +72,31 @@ export function extractInfoFromGoogleAdsError(error: any) {
     return `${error.message}, ${error.response.data[0].error.message}, ${error.response.data[0].error.details[0].errors[0].message}  `;
 }
 
-
 export function prepareAdsForGpt(textfullAds: Record<string, any>[]) {
     logToCloudWatch(`Entering prepareAdsForGpt, found ${textfullAds?.length} ads`);
 
-    return textfullAds.flatMap((t) => 
-    t.ads.map((ad : Record<string, any>) => ({
-        id: parseInt(ad.changeEvent.changeResourceName.split('/').pop(), 10), // Extract Ad ID
-        resourceName: ad.changeEvent.changeResourceName, // Use correct resource name
-        headlines: ad.changeEvent.newResource?.ad?.responsiveSearchAd?.headlines || [], // New headlines
-        descriptions: ad.changeEvent.newResource?.ad?.responsiveSearchAd?.descriptions || [], // New descriptions
-        changeDateTime: ad.changeEvent.changeDateTime, // Change timestamp
-        resourceChangeOperation: ad.changeEvent.resourceChangeOperation, // Type of change (CREATE, UPDATE, REMOVE)
-        changedFields: ad.changeEvent.changedFields.split(','), // List of changed fields
-    }))
-);
+    const ads = textfullAds.flatMap((t) => {
+        const domainName = t.domain?.hostname;  
+        const googleAdsId = t.domain?.googleAdsId; //  
+
+        return t.ads.map((ad: Record<string, any>) => ({
+            id: parseInt(ad.changeEvent.changeResourceName.split('/').pop(), 10),  
+            resourceName: ad.changeEvent.changeResourceName,  
+            headlines: ad.changeEvent.newResource?.ad?.responsiveSearchAd?.headlines || [],  
+            descriptions: ad.changeEvent.newResource?.ad?.responsiveSearchAd?.descriptions || [],  
+            changeDateTime: ad.changeEvent.changeDateTime,  
+            resourceChangeOperation: ad.changeEvent.resourceChangeOperation, 
+            changedFields: ad.changeEvent.changedFields.split(','),  
+
+            domain: domainName, 
+            googleAdsId: googleAdsId
+        }));
+    });
+
+    return ads;
 }
+
+ 
 
 
 export async function   processInBatches(tasks: (() => Promise<any>)[], batchSize: number) {
