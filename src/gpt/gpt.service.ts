@@ -50,13 +50,13 @@ export class GptService {
         temperature: 0,
     });
   }
-  async askGptString(gptKey:string, extractedAds: any ) {
+  async askGptString(gptKey:string, extractedAds: any, prompt: string ) {
     const openai = new OpenAI({apiKey: gptKey,  });
 
  return await openai. chat.completions.create({
       model: 'gpt-3.5-turbo',
       messages: [
-          { role: 'system', content: 'if most of the words in english - say yes, if most the word in other language - say no. your answer is only 1 word, yes or no' },
+          { role: 'system', content:prompt   },
           {
               role: 'user',
               content: extractedAds,
