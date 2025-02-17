@@ -18,7 +18,7 @@ import spellchecker from 'spellchecker';
 import { emailSubjects, isWordsInEnglish } from './consts';
 export {emailSubjects} from './consts';
 import * as KF from '@spotower/my-utils';
-  
+  import {googleAdsIgnoreList} from './ignoreWords';
 
 
  @Injectable()
@@ -56,18 +56,17 @@ export class SpellCheckerService {
      let csvData = "resource,errors,domain,googleAdsId,wholeSentence,location\n"; // Add CSV headers
      let ignoreList = ['Online', '']
      for (const ad of preparedAds) {
-      let excludedWords = ['Online', 'CRM', 'KeyWord', ]
-         for (const description of ad.descriptions) {
+          for (const description of ad.descriptions) {
          
           const misspelledWords = description.text
           .split(" ")
-          .filter(word => /^[A-Za-z]+$/.test(word)).filter(word => !excludedWords.some(excluded => word.includes(excluded))).filter(word => spellchecker.isMisspelled(word));
+          .filter(word => /^[A-Za-z]+$/.test(word)).filter(word => !googleAdsIgnoreList.some(excluded => word.includes(excluded))).filter(word => spellchecker.isMisspelled(word));
             if (misspelledWords.length > 0) {
               csvData += `"${ad.resourceName}","${misspelledWords.join(',')}","${ad.domain}","${ad.googleAdsId}","${description.text}","descriptions"\n`;
             }
         }
         for (const headline of ad.headlines) {
-            const misspelledWords = headline.text.split(" ").filter(word => /^[A-Za-z]+$/.test(word)).filter(word => !excludedWords.some(excluded => word.includes(excluded))) .filter(word => spellchecker.isMisspelled(word));
+            const misspelledWords = headline.text.split(" ").filter(word => /^[A-Za-z]+$/.test(word)).filter(word => !googleAdsIgnoreList.some(excluded => word.includes(excluded))) .filter(word => spellchecker.isMisspelled(word));
             if (misspelledWords.length > 0) {
               csvData += `"${ad.resourceName}","${misspelledWords.join(',')}","${ad.domain}","${ad.googleAdsId}","${headline.text}","headline"\n`;
             }
