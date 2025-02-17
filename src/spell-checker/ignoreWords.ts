@@ -15,5 +15,5 @@ export const googleAdsIgnoreList = [
     "Sek", "Senast", "Unika", "Registreringserbjudanden", "Vilket",
     "Casinobonuserbjudanden", "Granskades", "Handplockades", "Experter",
     "Topp", "Recensioner", "Timme", "Bonuslista", "Licensierade", "Kasinospel",
-    "Signup", "Canda", "Gameplay", "CRM", "CRMs", "Onlinekasinosajter","Registrera", "Utbetalningar", "IGaming"
+    "Signup", "Canda", "Gameplay", "CRM", "CRMs", "Onlinekasinosajter","Registrera", "Utbetalningar", "IGaming", "Kostenlos", "Im","Vergleich", "Snurr", "Nya"
 ];
