@@ -4,13 +4,13 @@ import { logToCloudWatch } from 'src/logger';
 const { chromium } = require('playwright');
 import { BadRequestException, InternalServerErrorException } from '@nestjs/common';
 import { GptService } from 'src/gpt/gpt.service';
-import {State} from 'src/globalState/interfaces';
-import {websiteText} from './interfaces';
+ import {websiteText} from './interfaces';
 import { Domain } from 'src/kidonInterfaces/shared';
 import { Company } from 'src/kidonInterfaces/shared';
 import { gptProposal } from './interfaces';
  import JSON5 from 'json5';
 import { getDateRange } from 'src/utils';
+import spellchecker from 'spellchecker';
 
  
 
@@ -72,7 +72,7 @@ export function extractInfoFromGoogleAdsError(error: any) {
     return `${error.message}, ${error.response.data[0].error.message}, ${error.response.data[0].error.details[0].errors[0].message}  `;
 }
 
-export function prepareAdsForGpt(textfullAds: Record<string, any>[]) {
+export function prepareAdsForErrorChecking(textfullAds: Record<string, any>[]) {
     logToCloudWatch(`Entering prepareAdsForGpt, found ${textfullAds?.length} ads`);
 
     const ads = textfullAds.flatMap((t) => {
@@ -114,40 +114,54 @@ export async function   processInBatches(tasks: (() => Promise<any>)[], batchSiz
         logToCloudWatch(`❌ Error in processInBatches: ${error?.message} `, 'ERROR');
         
     }
-
+ 
   }
+
   export async function fetchWebsitesInnerHtml(domains: Domain[], batchSize: number): Promise<any[]> {
     logToCloudWatch('Entering fetchWebsitesInnerHtml');
     const websitesInnerHtml: websiteText[] = [];
     const browser = await chromium.launch({ headless: false }); // Launch browser once
-  
-    const domainTasks =  domains.map(domain => async () => {  
-            const page = await browser.newPage();
-            for (const path of domain.paths.slice(0, 3)) {
+
+    for (const domain of domains) {  
+        const pathBatches: string[][] = [];
+
+        // Create batches of paths, each batch with at most 'batchSize' paths
+        for (let i = 0; i < domain.paths.length; i += batchSize) { 
+            pathBatches.push(domain.paths.slice(i, i + batchSize));
+        }
+
+        for (const batch of pathBatches) {
+            await Promise.all(batch.map(async (path) => {
+                const page = await browser.newPage(); // ✅ Open a new page per request
                 const url = `https://${domain.hostname}${path}`;
-  
                 try {
                     logToCloudWatch(`Visiting: ${url}`, 'INFO', 'utils');
                     await page.goto(url, { waitUntil: 'load' });
-                    const pageText = await page.evaluate(() => document.body.innerText);
+
+                    // ✅ Retry logic: Check if the page is a security verification page
+                    let pageText = await page.evaluate(() => document.body.innerText);
+                    let retries = 5; // Max retries
+                    while (retries > 0 && pageText.includes("Vercel Security Checkpoint")) {
+                        logToCloudWatch(`Security checkpoint detected, retrying... (${5 - retries}/5)`, 'INFO', 'utils');
+                        await page.waitForTimeout(2000); // Wait for 2 seconds
+                        pageText = await page.evaluate(() => document.body.innerText);
+                        retries--;
+                    }
+
                     websitesInnerHtml.push({ domain: domain.id, fullPath: url, innerHtml: pageText });
                 } catch (error) {
                     logToCloudWatch(`Failed to load ${url}: ${error.message}`, 'ERROR', 'utils');
+                } finally {
+                    await page.close(); // ✅ Close the page after processing
                 }
-            }
-            await page.close();
-        });
-         
-        
-  
-    // Process website fetch tasks in batches
-    await  processInBatches(domainTasks, batchSize);
+            }));
+        }
+    }
+
     await browser.close(); // Close browser after all tasks are done
-  
     return websitesInnerHtml;
-  }
-  
- 
+}
+
 
   export async function detectErrorsWithGpt(gptKey: string, websitesInnerHtml: any,gptService: GptService,  batchSize: number): Promise<string> {
     logToCloudWatch('Entering detectErrorsWithGpt');
@@ -192,5 +206,15 @@ export   function filterOutIrrelevantErrors(gptErrorDetectionResults: gptProposa
     return [];
 
 }
+
+
+export function extractMisspelledWords(text: string, excludedWords: string[]): string[] {
+    return text
+        .split(" ")
+        .filter(word => /^[A-Za-z]+$/.test(word)) // Keep only words with letters
+        .filter(word => !excludedWords.some(excluded => word.includes(excluded))) // Remove ignored words
+        .filter(word => spellchecker.isMisspelled(word)); // Check for misspelled words
+}
+
  
  

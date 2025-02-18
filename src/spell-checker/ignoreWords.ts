@@ -17,3 +17,11 @@ export const googleAdsIgnoreList = [
     "Topp", "Recensioner", "Timme", "Bonuslista", "Licensierade", "Kasinospel",
     "Signup", "Canda", "Gameplay", "CRM", "CRMs", "Onlinekasinosajter","Registrera", "Utbetalningar", "IGaming", "Kostenlos", "Im","Vergleich", "Snurr", "Nya"
 ];
+
+export const webSitesIgnoreWords = [
+
+]
+
+export const ignoredLanguages = [
+    "spanish",
+]
