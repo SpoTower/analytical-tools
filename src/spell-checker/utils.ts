@@ -11,8 +11,10 @@ import { gptProposal } from './interfaces';
  import JSON5 from 'json5';
 import { getDateRange } from 'src/utils';
 import spellchecker from 'spellchecker';
+import fs from 'fs';
+import path from 'path';
+import { webSitesIgnoreWords,   } from './ignoreWords';
 
- 
 
 export async function fetchGoogleAds(domain: Domain, companies: Company[], tokens:any ) {
     logToCloudWatch(`Entering fetchGoogleAds, fetching google ads for domain ${domain.id}`);
@@ -48,6 +50,22 @@ export async function fetchGoogleAds(domain: Domain, companies: Company[], token
                 },
             }
         );
+        if (!changeEventResult?.data || !Array.isArray(changeEventResult.data)) {
+            logToCloudWatch(`⚠ Unexpected response for domain ${domain.id}: ${JSON.stringify(changeEventResult?.data, null, 2)}`);
+            return [];
+        }
+
+        if (changeEventResult.data.length === 0) {
+            logToCloudWatch(`⚠ No data returned for domain ${domain.id}`);
+            return [];
+        }
+
+        if (!changeEventResult.data[0]?.results) {
+            logToCloudWatch(`⚠ No results in first data object for domain ${domain.id}, Full Response: ${JSON.stringify(changeEventResult.data, null, 2)}`);
+            return [];
+        }
+
+
         return changeEventResult?.data[0]?.results || [];
     } catch (error) {
          const msg = extractInfoFromGoogleAdsError(error);
@@ -117,9 +135,10 @@ export async function   processInBatches(tasks: (() => Promise<any>)[], batchSiz
  
   }
 
-  export async function fetchWebsitesInnerHtml(domains: Domain[], batchSize: number): Promise<any[]> {
+  export async function fetchWebsitesInnerHtmlAndFindErrors(domains: Domain[], batchSize: number): Promise<any[]> {
     logToCloudWatch('Entering fetchWebsitesInnerHtml');
-    const websitesInnerHtml: websiteText[] = [];
+    let domainPagesInnerHtml: websiteText[] = [];
+    
     const browser = await chromium.launch({ headless: false }); // Launch browser once
 
     for (const domain of domains) {  
@@ -128,9 +147,8 @@ export async function   processInBatches(tasks: (() => Promise<any>)[], batchSiz
         // Create batches of paths, each batch with at most 'batchSize' paths
         for (let i = 0; i < domain.paths.length; i += batchSize) { 
             pathBatches.push(domain.paths.slice(i, i + batchSize));
-        }
-
-        for (const batch of pathBatches) {
+        }  
+         for (const batch of pathBatches) {
             await Promise.all(batch.map(async (path) => {
                 const page = await browser.newPage(); // ✅ Open a new page per request
                 const url = `https://${domain.hostname}${path}`;
@@ -148,7 +166,7 @@ export async function   processInBatches(tasks: (() => Promise<any>)[], batchSiz
                         retries--;
                     }
 
-                    websitesInnerHtml.push({ domain: domain.id, fullPath: url, innerHtml: pageText });
+                    domainPagesInnerHtml.push({ domain: domain.id, fullPath: url, innerHtml: pageText });
                 } catch (error) {
                     logToCloudWatch(`Failed to load ${url}: ${error.message}`, 'ERROR', 'utils');
                 } finally {
@@ -156,10 +174,16 @@ export async function   processInBatches(tasks: (() => Promise<any>)[], batchSiz
                 }
             }));
         }
+        domainPagesInnerHtml.forEach(webSiteText => { webSiteText.detectedErrors = extractMisspelledWords(webSiteText.innerHtml, webSitesIgnoreWords); }); // assign array of errors to each website     
+        domainPagesInnerHtml = domainPagesInnerHtml.filter((w) => w.detectedErrors.length > 0); // Remove websites with no errors
+
+  
+      saveResults(domainPagesInnerHtml.map(({ innerHtml, ...rest }) => rest)); // errors per path
+      domainPagesInnerHtml = []; // Clear array for next domain
     }
 
     await browser.close(); // Close browser after all tasks are done
-    return websitesInnerHtml;
+    return domainPagesInnerHtml;
 }
 
 
@@ -209,12 +233,34 @@ export   function filterOutIrrelevantErrors(gptErrorDetectionResults: gptProposa
 
 
 export function extractMisspelledWords(text: string, excludedWords: string[]): string[] {
-    return text
-        .split(" ")
-        .filter(word => /^[A-Za-z]+$/.test(word)) // Keep only words with letters
-        .filter(word => !excludedWords.some(excluded => word.includes(excluded))) // Remove ignored words
-        .filter(word => spellchecker.isMisspelled(word)); // Check for misspelled words
+    const lowerExcludedWords = excludedWords.map(word => word.toLowerCase()); // Convert excluded words to lowercase
+
+    return [...new Set(
+        text
+            .split(" ")
+            .filter(word => /^[A-Za-z]+$/.test(word)) // Keep only words with letters
+            .filter(word => !lowerExcludedWords.some(excluded => word.toLowerCase().includes(excluded))) // Case-insensitive comparison
+            .filter(word => spellchecker.isMisspelled(word)) // Check for misspelled words
+    )];
 }
 
  
- 
+export function saveResults(results: any[]) {
+    const filePath = path.join(__dirname, '../..', 'savedData.json');
+    
+    // Read existing file
+    let existingData: any[] = [];
+    if (fs.existsSync(filePath)) {
+        existingData = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
+    }
+
+    // Merge new results
+    const newData = [...existingData, ...results];
+
+    // Write back to file
+    fs.writeFileSync(filePath, JSON.stringify(newData, null, 2), 'utf-8');
+}
+
+export function fetchOnlyLiveDomains(domains: Domain[]) {
+
+}
