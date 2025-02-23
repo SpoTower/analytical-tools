@@ -145,7 +145,7 @@ export async function   processInBatches(tasks: (() => Promise<any>)[], batchSiz
         const pathBatches: string[][] = [];
 
         // Create batches of paths, each batch with at most 'batchSize' paths
-        for (let i = 0; i < 20; i += batchSize) { 
+        for (let i = 0; i < domain.paths.length; i += batchSize) { 
             pathBatches.push(domain.paths.slice(i, i + batchSize));
         }  
          for (const batch of pathBatches) {
