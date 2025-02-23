@@ -81,4 +81,4 @@ export function fixingGrammErrorsPrompt2( ) {
    }
   
 
- 
+ export const isWordsInEnglish = 'you recieve one sentence, the sentence can be in english or in other language. the sentence will have errors. ignore the errors and determine if the sentence is mostly in english language. answer ONLY yes or no'
