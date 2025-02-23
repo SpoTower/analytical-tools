@@ -77,8 +77,21 @@ export class SpellCheckerService {
              }
          });
      }
+// ✅ Step 4: Format data into a Slack-friendly table
+let slackMessage = "```" + 
+  "resource                               | errors   | domain                         | googleAdsId  | wholeSentence                                      | location \n" +
+  "---------------------------------------|---------|--------------------------------|--------------|--------------------------------------------------|-----------\n";
+
+jsonData.forEach((ad) => {
+    slackMessage += `${ad.resource.padEnd(38)}| ${ad.errors.join(",").padEnd(8)}| ${ad.domain.padEnd(30)}| ${ad.googleAdsId.toString().padEnd(12)}| ${ad.wholeSentence.padEnd(50)}| ${ad.location}\n`;
+});
+
+slackMessage += "```"; // ✅ Close the monospace block
+
+
+     
        await KF.sendSlackAlert('Google Ads Errors: ','C08EPQYR6AC', state.slackToken);
-       await KF.sendSlackAlert(JSON.stringify(jsonData, null, 2), 'C08EPQYR6AC', state.slackToken);
+       await KF.sendSlackAlert(slackMessage, 'C08EPQYR6AC', state.slackToken);
        return `ads were processed by local spellchecker and sent to kidon to be sended by slack to content errors channel`;
   }
 
@@ -102,8 +115,20 @@ export class SpellCheckerService {
      //   await KF.sendEmail(process.env.SERVICE_GMAIL, 'Websites errors!', 'csvData', state.emailClientPassword);
         
         const fileContent = fs.readFileSync(path.join(__dirname, '../..', 'savedData.json'), 'utf-8');
+              let slackWebsiteMessage = "```" + 
+        "Domain  | Full Path                                      | Detected Errors \n" +
+        "--------|-----------------------------------------------|-----------------\n";
+
+      // ✅ Add each row formatted properly
+      const websiteErrors = JSON.parse(fileContent); // Read saved JSON file
+
+      websiteErrors.forEach((error) => {
+          slackWebsiteMessage += `${error.domain.toString().padEnd(8)}| ${error.fullPath.padEnd(45)}| ${error.detectedErrors.join(", ")}\n`;
+      });
+
+      slackWebsiteMessage += "```"; // ✅ Close the monospace block
         await KF.sendSlackAlert('Web Sites Errors: ','C08EPQYR6AC', state.slackToken);
-        await KF.sendSlackAlert(fileContent,'C08EPQYR6AC', state.slackToken);
+        await KF.sendSlackAlert(slackWebsiteMessage,'C08EPQYR6AC', state.slackToken);
         return `websites were processed by local spellchecker and sent to kidon to be sended by slack to content errors channel`;
 }
  
