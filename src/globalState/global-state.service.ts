@@ -49,6 +49,9 @@ export class GlobalStateService implements OnModuleInit {
         this.setState('paths', paths);
         this.setState('gptKey', KF.jsonToObject(secrets).GPT_API_KEY);
         this.setState('emailClientPassword', KF.jsonToObject(secrets).EMAIL_PASSWORD);
+        this.setState('slackToken', KF.jsonToObject(secrets).SLACK_TOKEN);
+
+         
 
          this.setState('allTokens', allTokens.data);
          this.setState('allTokens', allTokens);
