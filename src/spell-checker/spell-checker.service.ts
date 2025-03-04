@@ -116,15 +116,18 @@ slackMessage += "```"; // ✅ Close the monospace block
         // ✅ Step 2: filter out non visited domains, attach paths to each domain
 
         const weekAgo = new Date(new Date().setDate(new Date().getDate() - 7)).toISOString().split('T')[0];
-        const recentlyVisitedDomains =  await this.kidonClient('tracker_visitors').select('domain_name').where('created_at', '>', weekAgo).whereIn('utm_source', ['GOOGLE', 'BING']).distinct();   
-        if(!recentlyVisitedDomains || recentlyVisitedDomains.length === 0) return('No recently visited domains found (you are probably not connected to production tracker visitors table)');
+        const recentlyVisitedDomains =  await this.kidonClient('tracker_visitors').select('domain_name').where('created_at', '>', weekAgo).whereIn('utm_source', ['GOOGLE', 'BING']).distinct(); 
+        const recentlyVisitedDomainsAll =  await this.kidonClient('tracker_visitors')  
+        logToCloudWatch( `recentlyVisitedDomainsAll:  ${recentlyVisitedDomainsAll.length}}`);
+        if(!recentlyVisitedDomains || recentlyVisitedDomains.length === 0)     logToCloudWatch('no tracker visitors Data!');
+
         const chosenDomains = domainId ? state.domains.filter((d: Domain) => d.id === domainId) : state.domains.filter(d => recentlyVisitedDomains.some(r => r.domainName === d.hostname));
         chosenDomains.forEach((domain: Domain) => {domain.paths = englishPats.filter((p: Paths) => p.domainId === domain.id).map((p: Paths) => p.path).filter((p)=> p); });  // asign paths per domain
- 
+        logToCloudWatch(`Domains to process: ${chosenDomains.map((d: Domain) => d.hostname).join(", ")}`);
         // ✅ Step 3: fetch all paths' text,   check each word for errors and send result to mail
          await fetchWebsitesInnerHtmlAndFindErrors(chosenDomains, batchSize, ignoreList[0]); //get inner html of websites
  
-     //   await KF.sendEmail(process.env.SERVICE_GMAIL, 'Websites errors!', 'csvData', state.emailClientPassword);
+        // await KF.sendEmail(process.env.SERVICE_GMAIL, 'Websites errors!', 'csvData', state.emailClientPassword);
         
         const fileContent = fs.readFileSync(path.join(__dirname, '../..', 'savedData.json'), 'utf-8');
               let slackWebsiteMessage = "```" + 
