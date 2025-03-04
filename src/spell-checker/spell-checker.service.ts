@@ -109,6 +109,10 @@ slackMessage += "```"; // ✅ Close the monospace block
 
   async findAndFixWebsitesGrammaticalErrors(domainId?: number, batchSize?: number) {
     const state = this.globalState.getAllState(); if(!state) return 'No state found';
+
+    let a = await this.kidonClient('configuration')
+
+    logToCloudWatch(`a is ${a[0].length}  ${a[1].length}  `);
     const ignoreList = await this.kidonClient.raw('SELECT * FROM configuration WHERE `key` = ?', ['ATwebsitesIgnore']);
          // ✅ Step 1: filter non english paths out and assign relevant paths to domains
         const englishPats =  state.paths.filter((p) => !ignoredLanguages.some(lang => p.path.includes(lang)));  //filter out non english paths
@@ -127,7 +131,7 @@ slackMessage += "```"; // ✅ Close the monospace block
         // ✅ Step 3: fetch all paths' text,   check each word for errors and send result to mail
          await fetchWebsitesInnerHtmlAndFindErrors(chosenDomains, batchSize, ignoreList[0]); //get inner html of websites
  
-        // await KF.sendEmail(process.env.SERVICE_GMAIL, 'Websites errors!', 'csvData', state.emailClientPassword);
+     //   await KF.sendEmail(process.env.SERVICE_GMAIL, 'Websites errors!', 'csvData', state.emailClientPassword);
         
         const fileContent = fs.readFileSync(path.join(__dirname, '../..', 'savedData.json'), 'utf-8');
               let slackWebsiteMessage = "```" + 
