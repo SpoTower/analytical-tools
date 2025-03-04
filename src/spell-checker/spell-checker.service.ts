@@ -33,6 +33,15 @@ export class SpellCheckerService {
     private readonly gptService: GptService
     ) {}
 
+
+    async test( ){
+     let c =  await this.kidonClient('configuration').select('*') 
+      logToCloudWatch('entering test');
+      logToCloudWatch(`c is ${JSON.stringify(c[0])}`);
+
+ return 'test success';
+    }
+
   async findAndFixGoogleAdsGrammaticalErrors( batchSize: number, domainId?: number, sliceSize?: number,   ) {
     logToCloudWatch('entering findAndFixGoogleAdsGrammaticalErrors');
 
