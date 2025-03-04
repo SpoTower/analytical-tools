@@ -35,7 +35,7 @@ export class SpellCheckerController {
   @Get('/findWebsitesGrammaticalErrors')
   async findWebsitesGrammaticalErrors(
     @Query('domainId' ) domainId?: number,
-    @Query('batchSize', new DefaultValuePipe(10), ParseIntPipe) batchSize?: number  
+    @Query('batchSize', new DefaultValuePipe(1), ParseIntPipe) batchSize?: number  
     ) {
     try {
        return await this.spellCheckerService.findAndFixWebsitesGrammaticalErrors(+domainId,batchSize);

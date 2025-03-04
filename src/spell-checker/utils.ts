@@ -45,7 +45,7 @@ export async function fetchGoogleAds(domain: Domain, companies: Company[], token
             {
                 headers: {
                     'developer-token': companies.find((c)=>c.id == domain.companyId ).googleDeveloperToken,
-                    Authorization: `Bearer ${tokens.data.find((t) => t.company ==  companies.find((c)=>c.id == domain.companyId ).name ).token}`,
+                    Authorization: `Bearer ${tokens.find((t) => t.company ==  companies.find((c)=>c.id == domain.companyId ).name ).token}`,
                     'login-customer-id': companies.find((c)=>c.id == domain.companyId ).googleCustomerId,
                 },
             }
@@ -135,7 +135,7 @@ export async function   processInBatches(tasks: (() => Promise<any>)[], batchSiz
  
   }
 
-  export async function fetchWebsitesInnerHtmlAndFindErrors(domains: Domain[], batchSize: number): Promise<any[]> {
+  export async function fetchWebsitesInnerHtmlAndFindErrors(domains: Domain[], batchSize: number, ignoreList:string[]): Promise<any[]> {
     logToCloudWatch('Entering fetchWebsitesInnerHtml');
     let domainPagesInnerHtml: websiteText[] = [];
     
@@ -174,7 +174,7 @@ export async function   processInBatches(tasks: (() => Promise<any>)[], batchSiz
                 }
             }));
         }
-        domainPagesInnerHtml.forEach(webSiteText => { webSiteText.detectedErrors = extractMisspelledWords(webSiteText.innerHtml, webSitesIgnoreWords); }); // assign array of errors to each website     
+        domainPagesInnerHtml.forEach(webSiteText => { webSiteText.detectedErrors = extractMisspelledWords(webSiteText.innerHtml, ignoreList); }); // assign array of errors to each website     
         domainPagesInnerHtml = domainPagesInnerHtml.filter((w) => w.detectedErrors.length > 0); // Remove websites with no errors
 
   

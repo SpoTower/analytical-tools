@@ -17,7 +17,8 @@ import * as KF from '@spotower/my-utils';
   import { Knex } from 'knex';
   import fs from 'fs';
   import path from 'path';
- 
+  import { JWT } from 'google-auth-library';
+
 //state.paths.filter((p) => !ignoredLanguages.some(lang => p.path.includes(lang)));
 
 
@@ -39,11 +40,20 @@ export class SpellCheckerService {
     let domainsToProcess = state.domains.filter((domain : Domain) => domain.googleAdsId).filter((domain: Domain) => !domainId || domain.id === domainId);; // Only domains with googleAdsId
     domainsToProcess = domainsToProcess.slice(0, sliceSize || domainsToProcess.length);  
 
+// ✅ Step 0: get google token of companies
+    const allTokens = [];
+
+    for (const c of state.companies) {
+        const token = await KF.getGoogleAuthToken(c);
+        allTokens.push({ company: c.name, token });
+    }
+    
+ 
 
      // ✅ Step 1: Batch Fetch Google Ads per domain of Domains
      const googleAdsPromiseRequests = domainsToProcess.map((domain: Domain) => async () => {
          try {
-             return {domain, ads: await fetchGoogleAds(domain, state.companies, state.allTokens)};
+             return {domain, ads: await fetchGoogleAds(domain, state.companies, allTokens)};
          } catch (error) {
              logToCloudWatch(`❌ Error fetching Google Ads for domain ${domain.id}: ${error.message}`, "ERROR");
              return { domain, ads: [] };  
@@ -99,18 +109,20 @@ slackMessage += "```"; // ✅ Close the monospace block
 
   async findAndFixWebsitesGrammaticalErrors(domainId?: number, batchSize?: number) {
     const state = this.globalState.getAllState(); if(!state) return 'No state found';
-        // ✅ Step 1: filter non english paths out and assign relevant paths to domains
+    const ignoreList = await this.kidonClient.raw('SELECT * FROM configuration WHERE `key` = ?', ['ATwebsitesIgnore']);
+         // ✅ Step 1: filter non english paths out and assign relevant paths to domains
         const englishPats =  state.paths.filter((p) => !ignoredLanguages.some(lang => p.path.includes(lang)));  //filter out non english paths
 
         // ✅ Step 2: filter out non visited domains, attach paths to each domain
 
         const weekAgo = new Date(new Date().setDate(new Date().getDate() - 7)).toISOString().split('T')[0];
         const recentlyVisitedDomains =  await this.kidonClient('tracker_visitors').select('domain_name').where('created_at', '>', weekAgo).whereIn('utm_source', ['GOOGLE', 'BING']).distinct();   
+        if(!recentlyVisitedDomains || recentlyVisitedDomains.length === 0) return('No recently visited domains found (you are probably not connected to production tracker visitors table)');
         const chosenDomains = domainId ? state.domains.filter((d: Domain) => d.id === domainId) : state.domains.filter(d => recentlyVisitedDomains.some(r => r.domainName === d.hostname));
         chosenDomains.forEach((domain: Domain) => {domain.paths = englishPats.filter((p: Paths) => p.domainId === domain.id).map((p: Paths) => p.path).filter((p)=> p); });  // asign paths per domain
  
         // ✅ Step 3: fetch all paths' text,   check each word for errors and send result to mail
-         await fetchWebsitesInnerHtmlAndFindErrors(chosenDomains, batchSize); //get inner html of websites
+         await fetchWebsitesInnerHtmlAndFindErrors(chosenDomains, batchSize, ignoreList[0]); //get inner html of websites
  
      //   await KF.sendEmail(process.env.SERVICE_GMAIL, 'Websites errors!', 'csvData', state.emailClientPassword);
         

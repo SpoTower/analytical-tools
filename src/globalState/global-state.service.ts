@@ -33,16 +33,14 @@ export class GlobalStateService implements OnModuleInit {
 
   async loadInitialData() {
     try {
-      const [domains, companies,paths, secrets, allTokens] = await Promise.all([
+      const [domains, companies,paths, secrets] = await Promise.all([
         this.kidonClient('domain').select('*'),
         this.kidonClient('companies').select('*'),
         this.kidonClient('paths').select('*'),
         
        KF.getSecretFromSecretManager('kidonSecrets'),
 
-      axios.get(`${process.env.KIDON_SERVER}/company/googleTokens`, {
-          headers: { Authorization: `Bearer ${process.env.KIDON_TOKEN}` },
-      }),
+
     ]);
         this.setState('domains', domains);
         this.setState('companies', companies);
@@ -53,8 +51,8 @@ export class GlobalStateService implements OnModuleInit {
 
          
 
-         this.setState('allTokens', allTokens.data);
-         this.setState('allTokens', allTokens);
+    //     this.setState('allTokens', allTokens.data);
+        // this.setState('allTokens', allTokens);
          this.setState('requestMetadata'  , {source: 'analytical' });
 
       logToCloudWatch('✅ Global state initialized with data', 'INFO', 'GlobalStateService');
