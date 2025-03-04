@@ -23,6 +23,7 @@ export const analyticsDbConfig = async (): Promise<Knex.Config> => {
 export const kidonDbConfig = async (): Promise<Knex.Config> => {
   const res = await getSecretFromSecretManager(process.env.KIDON_PASSWORD_KEY);
   const secretData = JSON.parse(res);
+  logToCloudWatch(JSON.stringify(secretData),'INFO', 'knexfile');
   logToCloudWatch( `Connecting to ${process.env.KIDON_RDS_HOSTNAME}`,'INFO', 'knexfile');
   return {
     client: 'mysql2',
