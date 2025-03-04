@@ -4,7 +4,8 @@ import { Domain  } from 'src/kidonInterfaces/shared';
 export interface websiteText{
     domain:number,
     fullPath:string,
-    innerHtml:string
+    innerHtml:string,
+    detectedErrors?:string[]
 }
 
 export interface gptProposal{
@@ -30,3 +31,16 @@ export interface googleAds {
    }
   
   
+   export interface adsPreparedForErrorDetection {
+    changeDateTime: string; // Timestamp as a string
+    changedFields: string[]; // List of changed fields
+    descriptions: { text: string }[]; // Array of objects containing text
+    domain: string; // Domain name
+    googleAdsId: string; // Google Ads ID
+    headlines: { text: string }[]; // Array of objects containing text
+    id: number; // Unique ad ID
+    resourceChangeOperation: 'CREATE' | 'UPDATE' | 'REMOVE'; // Operation type
+    resourceName: string; // Full resource name
+}
+
+ 

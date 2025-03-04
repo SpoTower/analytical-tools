@@ -74,7 +74,7 @@ export class AbTestManagementService {
             controlGroup: values.group === 'control' ? groupValue : null,
             variantGroup: values.group === 'variant' ? groupValue : null,
             parentPath: event.eventName === 'page' ? values.userSawPath : event.path,
-            hostname: event.domainName,
+            hostname: event.hostname,
             lastVisited: event.createdAt,
         });
     }
@@ -96,7 +96,9 @@ export class AbTestManagementService {
         try {
             const nowUtc = dayjs().utc().format(QUERY_DATE_FORMAT);
             const oneHourAgo = dayjs(nowUtc).subtract(hoursBack, 'hours').format(QUERY_DATE_FORMAT);
-            return await this.kidonDb(KIDON_TRACKER_EVENTS).select('tracker_events.*', 'paths.path' ).from('tracker_events')
+            return await this.kidonDb(KIDON_TRACKER_EVENTS)
+                .select('tracker_events.*', 'paths.path', 'domain.hostname' ).from('tracker_events')
+                .leftJoin('domain', 'domain.id', 'tracker_events.domain_id')
                 .leftJoin('paths', 'paths.id', 'tracker_events.path_id')
                 .where({ event: 'AB_TEST' })
                 .andWhereBetween('tracker_events.created_at', [oneHourAgo, nowUtc]);
