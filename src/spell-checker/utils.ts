@@ -139,11 +139,12 @@ export async function   processInBatches(tasks: (() => Promise<any>)[], batchSiz
     logToCloudWatch('Entering fetchWebsitesInnerHtml');
     let domainPagesInnerHtml: websiteText[] = [];
     
-    const browser = await chromium.launch({ headless: false }); // Launch browser once
+    const browser = await chromium.launch({ headless: true }); // Launch browser once
 
     for (const domain of domains) {  
         const pathBatches: string[][] = [];
- 
+        logToCloudWatch('Entering domains loop');
+
         // Create batches of paths, each batch with at most 'batchSize' paths
         for (let i = 10; i < 12; i += batchSize) { 
             pathBatches.push(domain.paths.slice(i, i + batchSize));
