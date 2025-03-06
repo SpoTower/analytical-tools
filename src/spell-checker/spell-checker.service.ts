@@ -117,7 +117,8 @@ slackMessage += "```"; // ✅ Close the monospace block
 
 
   async findAndFixWebsitesGrammaticalErrors(domainId?: number, batchSize?: number) {
-    const state =   this.globalState.getAllState(); if(!state){
+    const state =   this.globalState.getAllState(); 
+    if(!state){
       logToCloudWatch('No state found');
      }
 
