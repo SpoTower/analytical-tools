@@ -39,7 +39,11 @@ export class SpellCheckerService {
       logToCloudWatch('Starting Playwright');
       (async () => {
         logToCloudWatch('Launching browser...');
-        const browser = await chromium.launch({ headless: true });
+        const browser = await chromium.launch({
+          headless: true,
+          executablePath: '/home/ssm-user/.cache/ms-playwright/chromium-1155/chrome-linux/chrome',
+          args: ['--no-sandbox', '--disable-setuid-sandbox']
+      });
         logToCloudWatch('Browser launched.');
     
         try {
