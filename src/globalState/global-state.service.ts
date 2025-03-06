@@ -55,7 +55,7 @@ export class GlobalStateService implements OnModuleInit {
         // this.setState('allTokens', allTokens);
          this.setState('requestMetadata'  , {source: 'analytical' });
 
-      logToCloudWatch('✅ Global state initialized with data', 'INFO', 'GlobalStateService');
+      logToCloudWatch(`✅ Global state initialized with data domains: ${domains.length} paths:${paths.length}`, 'INFO', 'GlobalStateService');
     } catch (error) {
       logToCloudWatch(`❌ Error fetching initial data: ${error}`, 'ERROR', 'GlobalStateService');
       
