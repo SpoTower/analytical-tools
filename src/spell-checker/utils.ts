@@ -145,13 +145,13 @@ export async function   processInBatches(tasks: (() => Promise<any>)[], batchSiz
         const pathBatches: string[][] = [];
  
         // Create batches of paths, each batch with at most 'batchSize' paths
-        for (let i = 0; i < domain.paths.length; i += batchSize) { 
+        for (let i = 10; i < 12; i += batchSize) { 
             pathBatches.push(domain.paths.slice(i, i + batchSize));
         }  
          for (const batch of pathBatches) {
             await Promise.all(batch.map(async (path) => {
                 const page = await browser.newPage(); // ✅ Open a new page per request
-                const url = `https://${domain.hostname}${path}`;
+                const url = `https://${domain.hostname}${path}?isSpellChecker=1`;
                 try {
                     logToCloudWatch(`Visiting: ${url}`, 'INFO', 'utils');
                     await page.goto(url, { waitUntil: 'load' });

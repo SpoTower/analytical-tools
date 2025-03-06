@@ -601,7 +601,76 @@ export const webSitesIgnoreWords = [
       "entre",
       "contato",
       "onde",
-      'pao'
+      'pao',
+      'Luckland',
+      'LivescoreBet',
+      'DDos',
+      'Godaddy',
+      'Allpoint',
+      'Varo',
+      'Piermont',
+      'Bluevine',
+      'Yinon',
+      'Axos',
+      'Evo',
+      'Vak',
+      'Apy',
+      'Playstar',
+      'Paypal',
+      'Hardrock',
+      'Fanduel',
+      'Entain',
+      'Roxor',
+      'Amica',
+      'Lightspeed',
+      'Stax',
+      'Worldpay',
+      'Firstrust',
+      'Safra',
+      'BMbet',
+      'Corvee',
+      'Toonibet',
+      'Kambi',
+      'Floriana',
+      'Hos',
+      'Klirr',
+      'Betvictor',
+      'Pinacle',
+      'ConnexOntario',
+      'Priva',
+      'Safra',
+      "denna", "samlar", "enhet", "ansvarig", "refereras", "Samlar", "identifiera",
+      "intressen", "adress", "enbart", "kontakta", "samt", "statistisk", "analys",
+      "enlighet", "enligt", "instruktionerna", "Grund", "behandling", "baseras",
+      "behandla", "analysera", "legitima", "delas", "leverera", "juridiska",
+      "skyddar", "administrativa", "vidta", "surfar", "meddelas", "myndighet",'Multihand','Euronet','Moneyfacts',     "Euronet",
+      "Remitly",'Funrize','Wynnbet','Quontic'
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
