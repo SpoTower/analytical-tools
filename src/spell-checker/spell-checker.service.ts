@@ -36,24 +36,24 @@ export class SpellCheckerService {
 
 
     async test( ){
-      console.log('Starting Playwright');
+      logToCloudWatch('Starting Playwright');
       (async () => {
-        console.log('Launching browser...');
+        logToCloudWatch('Launching browser...');
         const browser = await chromium.launch({ headless: true });
-        console.log('Browser launched.');
+        logToCloudWatch('Browser launched.');
     
         try {
             const page = await browser.newPage();
-            console.log('New page created.');
+            logToCloudWatch('New page created.');
     
             const url = 'https://10bestmealdeliveryservices.com/compare-d.html';
-            console.log('Navigating to:', url);
-    
+     
             await page.goto(url, { timeout: 15000, waitUntil: 'load' });
-    
-            console.log('Page loaded successfully.');
+            let pageText = await page.evaluate(() => document.body.innerText);
+
+            logToCloudWatch(`Page text: ${pageText}`);
         } catch (error) {
-            console.error('Error:', error.message);
+          logToCloudWatch(`'Error:', ${error.message}`);
         } finally {
             await browser.close();
             console.log('Browser closed.');
