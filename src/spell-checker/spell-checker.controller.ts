@@ -15,6 +15,12 @@ export class SpellCheckerController {
     return this.spellCheckerService.create(createSpellCheckerDto);
   }
 
+
+  @Get('/test')
+  async test() {
+    return await this.spellCheckerService.test();
+  }
+
   @Get('/findGoogleAdsGrammaticalErrors')
   async findGoogleAdsGrammaticalErrors(
     @Query('batchSize', new DefaultValuePipe(10), ParseIntPipe) batchSize: number,
