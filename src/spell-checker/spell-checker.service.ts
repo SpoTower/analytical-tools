@@ -18,6 +18,7 @@ import * as KF from '@spotower/my-utils';
   import fs from 'fs';
   import path from 'path';
   import { JWT } from 'google-auth-library';
+  const { chromium } = require('playwright');
 
 //state.paths.filter((p) => !ignoredLanguages.some(lang => p.path.includes(lang)));
 
@@ -35,6 +36,12 @@ export class SpellCheckerService {
 
 
     async test( ){
+      console.log('Starting Playwright');
+      const browser = await chromium.launch({
+        headless: true,
+        args: ['--no-sandbox', '--disable-setuid-sandbox']
+    });      console.log('Browser launched successfully');
+      await browser.close();
      let c =  await this.kidonClient('configuration').select('*') 
       logToCloudWatch('entering test');
       logToCloudWatch(`c is ${JSON.stringify(c[0])}`);
