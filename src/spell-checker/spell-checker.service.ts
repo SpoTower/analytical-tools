@@ -37,15 +37,30 @@ export class SpellCheckerService {
 
     async test( ){
       console.log('Starting Playwright');
-      const browser = await chromium.launch({
-        headless: true,
-        args: ['--no-sandbox', '--disable-setuid-sandbox']
-    });      console.log('Browser launched successfully');
-      await browser.close();
-     let c =  await this.kidonClient('configuration').select('*') 
-      logToCloudWatch('entering test');
-      logToCloudWatch(`c is ${JSON.stringify(c[0])}`);
-
+      (async () => {
+        console.log('Launching browser...');
+        const browser = await chromium.launch({ headless: true });
+        console.log('Browser launched.');
+    
+        try {
+            const page = await browser.newPage();
+            console.log('New page created.');
+    
+            const url = 'https://10bestmealdeliveryservices.com/compare-d.html';
+            console.log('Navigating to:', url);
+    
+            await page.goto(url, { timeout: 15000, waitUntil: 'load' });
+    
+            console.log('Page loaded successfully.');
+        } catch (error) {
+            console.error('Error:', error.message);
+        } finally {
+            await browser.close();
+            console.log('Browser closed.');
+        }
+    })();
+      logToCloudWatch('finishing test');
+ 
  return 'test success';
     }
 
