@@ -153,18 +153,15 @@ slackMessage += "```"; // ✅ Close the monospace block
     // const ignoreList = await this.kidonClient.raw('SELECT * FROM configuration WHERE `key` = ?', ['ATwebsitesIgnore']);
          // ✅ Step 1: filter non english paths out and assign relevant paths to domains
         const englishPats =  state.paths.filter((p) => !ignoredLanguages.some(lang => p.path.includes(lang)));  //filter out non english paths
-       logToCloudWatch(`englishPats: ${englishPats.length}`);       
-        // ✅ Step 2: filter out non visited domains, attach paths to each domain
+         // ✅ Step 2: filter out non visited domains, attach paths to each domain
 
         const weekAgo = new Date(new Date().setDate(new Date().getDate() - 7)).toISOString().split('T')[0];
         const recentlyVisitedDomains =  await this.kidonClient('tracker_visitors').select('domain_name').where('created_at', '>', weekAgo).whereIn('utm_source', ['GOOGLE', 'BING']).distinct(); 
-       logToCloudWatch( `recentlyVisitedDomainsAll:  ${recentlyVisitedDomains.length}}`);
-        if(!recentlyVisitedDomains || recentlyVisitedDomains.length === 0)     logToCloudWatch('no tracker visitors Data!');
+         if(!recentlyVisitedDomains || recentlyVisitedDomains.length === 0)     logToCloudWatch('no tracker visitors Data!');
 
         const chosenDomains = domainId ? state.domains.filter((d: Domain) => d.id === domainId) : state.domains.filter(d => recentlyVisitedDomains.some(r => r.domainName === d.hostname));
         chosenDomains.forEach((domain: Domain) => {domain.paths = englishPats.filter((p: Paths) => p.domainId === domain.id).map((p: Paths) => p.path).filter((p)=> p); });  // asign paths per domain
-        logToCloudWatch( `chosenDomains:  ${chosenDomains.length}}`);
-        // ✅ Step 3: fetch all paths' text,   check each word for errors and send result to mail
+         // ✅ Step 3: fetch all paths' text,   check each word for errors and send result to mail
          await fetchWebsitesInnerHtmlAndFindErrors(chosenDomains, batchSize, webSitesIgnoreWords); //get inner html of websites
  
      //   await KF.sendEmail(process.env.SERVICE_GMAIL, 'Websites errors!', 'csvData', state.emailClientPassword);
@@ -173,18 +170,13 @@ slackMessage += "```"; // ✅ Close the monospace block
               let slackWebsiteMessage = "```" + 
         "Domain  | Full Path                                      | Detected Errors \n" +
         "--------|-----------------------------------------------|-----------------\n";
-        logToCloudWatch( `fileContent:  ${fileContent}}`);
-
+ 
       // ✅ Add each row formatted properly
       const websiteErrors = JSON.parse(fileContent); // Read saved JSON file
 
-      websiteErrors.forEach((error) => {
-        error.fullPath = error.fullPath.replace(/[%7C|]+$/, ''); // Remove %7C or | at the end
-    
-        slackWebsiteMessage += `${error.domain.toString().padEnd(8)} | ${error.fullPath.padEnd(45)} | ${error.detectedErrors.join(", ")}\n`;
-    });
-
-      slackWebsiteMessage += "```"; // ✅ Close the monospace block
+      websiteErrors.forEach((error) => {slackWebsiteMessage += `${error.domain.toString().padEnd(8)} | ${error.fullPath.padEnd(45)} | ${error.detectedErrors.join(", ")}\n`; });
+     
+        slackWebsiteMessage += "```"; // ✅ Close the monospace block
         await KF.sendSlackAlert('Web Sites Errors: ','C08GHM3NY8K', state.slackToken);
         await KF.sendSlackAlert(slackWebsiteMessage,'C08GHM3NY8K', state.slackToken);
         return `websites were processed by local spellchecker and sent to kidon to be sended by slack to content errors channel`;

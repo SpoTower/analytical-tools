@@ -22,7 +22,7 @@ export class SpellCheckerController {
   }
 
   @Get('/findGoogleAdsGrammaticalErrors')
-  async findGoogleAdsGrammaticalErrors(
+  async GoogleAdsGrammaticalErrors(
     @Query('batchSize', new DefaultValuePipe(10), ParseIntPipe) batchSize: number,
     @Query('domainId' ) domainId?: number,
      @Query('sliceSize' ) sliceSize?: number
@@ -39,7 +39,7 @@ export class SpellCheckerController {
    
    
   @Get('/findWebsitesGrammaticalErrors')
-  async findWebsitesGrammaticalErrors(
+  async WebsitesGrammaticalErrors(
     @Query('domainId' ) domainId?: number,
     @Query('batchSize', new DefaultValuePipe(1), ParseIntPipe) batchSize?: number  
     ) {
