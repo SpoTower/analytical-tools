@@ -144,7 +144,7 @@ export async function   processInBatches(tasks: (() => Promise<any>)[], batchSiz
     for (const domain of domains) {  
         logToCloudWatch('Entering domains loop');
         const pathBatches: string[][] = [];
-        for (let i = 0; i < 12; i += batchSize) { pathBatches.push(domain.paths.slice(i, i + batchSize));}  
+        for (let i = 0; i < domain.paths.length; i += batchSize) { pathBatches.push(domain.paths.slice(i, i + batchSize));}  
 
         for (const batch of pathBatches) {
             await Promise.all(batch.map(async (path) => {
@@ -233,7 +233,7 @@ export function extractMisspelledWords(text: string, excludedWords: string[]): s
 
  
 export function saveResults(results: any[]) {
-    const filePath = path.join(__dirname, '../..', 'savedData.json');
+    const filePath = path.join(__dirname, '../..', 'webSiteErrors.json');
     
     // Read existing file
     let existingData: any[] = [];
@@ -248,6 +248,37 @@ export function saveResults(results: any[]) {
     fs.writeFileSync(filePath, JSON.stringify(newData, null, 2), 'utf-8');
 }
 
-export function fetchOnlyLiveDomains(domains: Domain[]) {
+ export function createErrorsTable(fileContent): string {
+    let slackWebsiteMessage = "```\n"; // Start code block
+    slackWebsiteMessage += "Domain  | Full Path                                       | Detected Errors \n";
+    slackWebsiteMessage += "--------|------------------------------------------------|----------------\n";
+    
+  // ✅ Add each row formatted properly
+  const websiteErrors = JSON.parse(fileContent); // Read saved JSON file
 
-}
+  websiteErrors.forEach((error) => {
+    let errorList = error.detectedErrors.join(", ");
+
+    // If error list is too long, break it into multiple lines
+    if (errorList.length > 50) {
+        const words = errorList.split(", ");
+        errorList = "";
+        let line = "";
+
+        for (let word of words) {
+            if ((line + word).length > 50) {
+                errorList += line + "\n\t\t\t\t\t\t\t\t\t  "; // Add a tabbed indent for continuation
+                line = word + ", ";
+            } else {
+                line += word + ", ";
+            }
+        }
+        errorList += line.trimEnd(); // Add the last line
+    }
+
+    slackWebsiteMessage += `${error.domain.toString().padEnd(8)} | ${error.fullPath.padEnd(48)} | ${errorList}\n`;
+});    
+    slackWebsiteMessage += "```"; // ✅ Close the monospace block
+
+    return slackWebsiteMessage;
+ }
