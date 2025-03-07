@@ -167,15 +167,17 @@ slackMessage += "```"; // ✅ Close the monospace block
      //   await KF.sendEmail(process.env.SERVICE_GMAIL, 'Websites errors!', 'csvData', state.emailClientPassword);
         
         const fileContent = fs.readFileSync(path.join(__dirname, '../..', 'savedData.json'), 'utf-8');
-              let slackWebsiteMessage = "```" + 
-        "Domain  | Full Path                                      | Detected Errors \n" +
-        "--------|-----------------------------------------------|-----------------\n";
- 
+        let slackWebsiteMessage = "```\n"; // Start code block
+
+        slackWebsiteMessage += "Domain  | Full Path                                       | Detected Errors \n";
+        slackWebsiteMessage += "--------|------------------------------------------------|----------------\n";
+        
       // ✅ Add each row formatted properly
       const websiteErrors = JSON.parse(fileContent); // Read saved JSON file
 
-      websiteErrors.forEach((error) => {slackWebsiteMessage += `${error.domain.toString().padEnd(8)} | ${error.fullPath.padEnd(45)} | ${error.detectedErrors.join(", ")}\n`; });
-     
+      websiteErrors.forEach((error) => {
+        slackWebsiteMessage += `${error.domain.toString().padEnd(8)} | ${error.fullPath.padEnd(48)} | ${error.detectedErrors.join(", ")}\n`;
+    });     
         slackWebsiteMessage += "```"; // ✅ Close the monospace block
         await KF.sendSlackAlert('Web Sites Errors: ','C08GHM3NY8K', state.slackToken);
         await KF.sendSlackAlert(slackWebsiteMessage,'C08GHM3NY8K', state.slackToken);
