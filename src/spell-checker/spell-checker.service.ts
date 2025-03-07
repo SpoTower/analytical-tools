@@ -19,7 +19,7 @@ import * as KF from '@spotower/my-utils';
   import path from 'path';
   import { JWT } from 'google-auth-library';
   const { chromium } = require('playwright');
-
+import { createErrorsTable } from './utils';
 //state.paths.filter((p) => !ignoredLanguages.some(lang => p.path.includes(lang)));
 
 
@@ -144,13 +144,8 @@ slackMessage += "```"; // ✅ Close the monospace block
 
   async findAndFixWebsitesGrammaticalErrors(domainId?: number, batchSize?: number) {
     const state =   this.globalState.getAllState(); 
-    if(!state){
-      logToCloudWatch('No state found');
-     }
+    if(!state){ logToCloudWatch('No state found'); }
 
-    await KF.sendSlackAlert('hi: ','C08GHM3NY8K', state.slackToken);
-
-    // const ignoreList = await this.kidonClient.raw('SELECT * FROM configuration WHERE `key` = ?', ['ATwebsitesIgnore']);
          // ✅ Step 1: filter non english paths out and assign relevant paths to domains
         const englishPats =  state.paths.filter((p) => !ignoredLanguages.some(lang => p.path.includes(lang)));  //filter out non english paths
          // ✅ Step 2: filter out non visited domains, attach paths to each domain
@@ -164,21 +159,10 @@ slackMessage += "```"; // ✅ Close the monospace block
          // ✅ Step 3: fetch all paths' text,   check each word for errors and send result to mail
          await fetchWebsitesInnerHtmlAndFindErrors(chosenDomains, batchSize, webSitesIgnoreWords); //get inner html of websites
  
-     //   await KF.sendEmail(process.env.SERVICE_GMAIL, 'Websites errors!', 'csvData', state.emailClientPassword);
+         
+        const fileContent = fs.readFileSync(path.join(__dirname, '../..', 'webSiteErrors.json'), 'utf-8');
+      const slackWebsiteMessage =   createErrorsTable(fileContent)
         
-        const fileContent = fs.readFileSync(path.join(__dirname, '../..', 'savedData.json'), 'utf-8');
-        let slackWebsiteMessage = "```\n"; // Start code block
-
-        slackWebsiteMessage += "Domain  | Full Path                                       | Detected Errors \n";
-        slackWebsiteMessage += "--------|------------------------------------------------|----------------\n";
-        
-      // ✅ Add each row formatted properly
-      const websiteErrors = JSON.parse(fileContent); // Read saved JSON file
-
-      websiteErrors.forEach((error) => {
-        slackWebsiteMessage += `${error.domain.toString().padEnd(8)} | ${error.fullPath.padEnd(48)} | ${error.detectedErrors.join(", ")}\n`;
-    });     
-        slackWebsiteMessage += "```"; // ✅ Close the monospace block
         await KF.sendSlackAlert('Web Sites Errors: ','C08GHM3NY8K', state.slackToken);
         await KF.sendSlackAlert(slackWebsiteMessage,'C08GHM3NY8K', state.slackToken);
         return `websites were processed by local spellchecker and sent to kidon to be sended by slack to content errors channel`;
