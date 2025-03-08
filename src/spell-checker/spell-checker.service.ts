@@ -18,7 +18,8 @@ import * as KF from '@spotower/my-utils';
   import fs from 'fs';
   import path from 'path';
   import { JWT } from 'google-auth-library';
-
+  const { chromium } = require('playwright');
+import { createErrorsTable } from './utils';
 //state.paths.filter((p) => !ignoredLanguages.some(lang => p.path.includes(lang)));
 
 
@@ -35,10 +36,35 @@ export class SpellCheckerService {
 
 
     async test( ){
-     let c =  await this.kidonClient('configuration').select('*') 
-      logToCloudWatch('entering test');
-      logToCloudWatch(`c is ${JSON.stringify(c[0])}`);
+      logToCloudWatch('Starting Playwright');
+      (async () => {
+        logToCloudWatch('Launching browser...');
+        const browser = await chromium.launch({
+          headless: true,
+          executablePath: '/home/ssm-user/.cache/ms-playwright/chromium-1155/chrome-linux/chrome',
+          args: ['--no-sandbox', '--disable-setuid-sandbox']
+      });
+        logToCloudWatch('Browser launched.');
+    
+        try {
+            const page = await browser.newPage();
+            logToCloudWatch('New page created.');
+    
+            const url = 'https://10bestmealdeliveryservices.com/compare-d.html';
+     
+            await page.goto(url, { timeout: 15000, waitUntil: 'load' });
+            let pageText = await page.evaluate(() => document.body.innerText);
 
+            logToCloudWatch(`Page text: ${pageText}`);
+        } catch (error) {
+          logToCloudWatch(`'Error:', ${error.message}`);
+        } finally {
+            await browser.close();
+            console.log('Browser closed.');
+        }
+    })();
+      logToCloudWatch('finishing test');
+ 
  return 'test success';
     }
 
@@ -118,47 +144,25 @@ slackMessage += "```"; // ✅ Close the monospace block
 
   async findAndFixWebsitesGrammaticalErrors(domainId?: number, batchSize?: number) {
     const state =   this.globalState.getAllState(); 
-    if(!state){
-      logToCloudWatch('No state found');
-     }
+    if(!state){ logToCloudWatch('No state found'); }
 
-    await KF.sendSlackAlert('hi: ','C08GHM3NY8K', state.slackToken);
-
-    // const ignoreList = await this.kidonClient.raw('SELECT * FROM configuration WHERE `key` = ?', ['ATwebsitesIgnore']);
          // ✅ Step 1: filter non english paths out and assign relevant paths to domains
         const englishPats =  state.paths.filter((p) => !ignoredLanguages.some(lang => p.path.includes(lang)));  //filter out non english paths
-       logToCloudWatch(`englishPats: ${englishPats.length}`);       
-        // ✅ Step 2: filter out non visited domains, attach paths to each domain
+         // ✅ Step 2: filter out non visited domains, attach paths to each domain
 
         const weekAgo = new Date(new Date().setDate(new Date().getDate() - 7)).toISOString().split('T')[0];
         const recentlyVisitedDomains =  await this.kidonClient('tracker_visitors').select('domain_name').where('created_at', '>', weekAgo).whereIn('utm_source', ['GOOGLE', 'BING']).distinct(); 
-       logToCloudWatch( `recentlyVisitedDomainsAll:  ${recentlyVisitedDomains.length}}`);
-        if(!recentlyVisitedDomains || recentlyVisitedDomains.length === 0)     logToCloudWatch('no tracker visitors Data!');
+         if(!recentlyVisitedDomains || recentlyVisitedDomains.length === 0)     logToCloudWatch('no tracker visitors Data!');
 
         const chosenDomains = domainId ? state.domains.filter((d: Domain) => d.id === domainId) : state.domains.filter(d => recentlyVisitedDomains.some(r => r.domainName === d.hostname));
         chosenDomains.forEach((domain: Domain) => {domain.paths = englishPats.filter((p: Paths) => p.domainId === domain.id).map((p: Paths) => p.path).filter((p)=> p); });  // asign paths per domain
-        logToCloudWatch( `chosenDomains:  ${chosenDomains.length}}`);
-        // ✅ Step 3: fetch all paths' text,   check each word for errors and send result to mail
+         // ✅ Step 3: fetch all paths' text,   check each word for errors and send result to mail
          await fetchWebsitesInnerHtmlAndFindErrors(chosenDomains, batchSize, webSitesIgnoreWords); //get inner html of websites
  
-     //   await KF.sendEmail(process.env.SERVICE_GMAIL, 'Websites errors!', 'csvData', state.emailClientPassword);
+         
+        const fileContent = fs.readFileSync(path.join(__dirname, '../..', 'webSiteErrors.json'), 'utf-8');
+      const slackWebsiteMessage =   createErrorsTable(fileContent)
         
-        const fileContent = fs.readFileSync(path.join(__dirname, '../..', 'savedData.json'), 'utf-8');
-              let slackWebsiteMessage = "```" + 
-        "Domain  | Full Path                                      | Detected Errors \n" +
-        "--------|-----------------------------------------------|-----------------\n";
-        logToCloudWatch( `fileContent:  ${fileContent}}`);
-
-      // ✅ Add each row formatted properly
-      const websiteErrors = JSON.parse(fileContent); // Read saved JSON file
-
-      websiteErrors.forEach((error) => {
-        error.fullPath = error.fullPath.replace(/[%7C|]+$/, ''); // Remove %7C or | at the end
-    
-        slackWebsiteMessage += `${error.domain.toString().padEnd(8)} | ${error.fullPath.padEnd(45)} | ${error.detectedErrors.join(", ")}\n`;
-    });
-
-      slackWebsiteMessage += "```"; // ✅ Close the monospace block
         await KF.sendSlackAlert('Web Sites Errors: ','C08GHM3NY8K', state.slackToken);
         await KF.sendSlackAlert(slackWebsiteMessage,'C08GHM3NY8K', state.slackToken);
         return `websites were processed by local spellchecker and sent to kidon to be sended by slack to content errors channel`;

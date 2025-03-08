@@ -14,7 +14,7 @@ import spellchecker from 'spellchecker';
 import fs from 'fs';
 import path from 'path';
 import { webSitesIgnoreWords,   } from './ignoreWords';
-
+ 
 
 export async function fetchGoogleAds(domain: Domain, companies: Company[], tokens:any ) {
     logToCloudWatch(`Entering fetchGoogleAds, fetching google ads for domain ${domain.id}`);
@@ -135,56 +135,39 @@ export async function   processInBatches(tasks: (() => Promise<any>)[], batchSiz
  
   }
 
-  export async function fetchWebsitesInnerHtmlAndFindErrors(domains: Domain[], batchSize: number, ignoreList:string[]): Promise<any[]> {
-    logToCloudWatch('Entering fetchWebsitesInnerHtml');
-    let domainPagesInnerHtml: websiteText[] = [];
-    
-    const browser = await chromium.launch({ headless: false }); // Launch browser once
 
+  export async function fetchWebsitesInnerHtmlAndFindErrors( domains: Domain[],   batchSize: number, ignoreList: string[]): Promise<any[]> {
+   
+    logToCloudWatch('Entering fetchWebsitesInnerHtml');
+
+    let domainPagesInnerHtml: websiteText[] = [];
     for (const domain of domains) {  
+        logToCloudWatch('Entering domains loop');
         const pathBatches: string[][] = [];
- 
-        // Create batches of paths, each batch with at most 'batchSize' paths
-        for (let i = 10; i < 12; i += batchSize) { 
-            pathBatches.push(domain.paths.slice(i, i + batchSize));
-        }  
-         for (const batch of pathBatches) {
+        for (let i = 0; i < domain.paths.length; i += batchSize) { pathBatches.push(domain.paths.slice(i, i + batchSize));}  
+
+        for (const batch of pathBatches) {
             await Promise.all(batch.map(async (path) => {
-                const page = await browser.newPage(); // ✅ Open a new page per request
                 const url = `https://${domain.hostname}${path}?isSpellChecker=1`;
                 try {
-                    logToCloudWatch(`Visiting: ${url}`, 'INFO', 'utils');
-                    await page.goto(url, { waitUntil: 'load' });
-
-                    // ✅ Retry logic: Check if the page is a security verification page
-                    let pageText = await page.evaluate(() => document.body.innerText);
-                    let retries = 5; // Max retries
-                    while (retries > 0 && pageText.includes("Vercel Security Checkpoint")) {
-                        logToCloudWatch(`Security checkpoint detected, retrying... (${5 - retries}/5)`, 'INFO', 'utils');
-                        await page.waitForTimeout(2000); // Wait for 2 seconds
-                        pageText = await page.evaluate(() => document.body.innerText);
-                        retries--;
-                    }
-
-                    domainPagesInnerHtml.push({ domain: domain.id, fullPath: url, innerHtml: pageText });
+                    logToCloudWatch(`Fetching: ${url}`, 'INFO', 'utils');
+                    const response = await axios.get(url, { headers: {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/110.0.0.0 Safari/537.36'    } });
+                    domainPagesInnerHtml.push({ domain: domain.id, fullPath: url,  innerHtml: response.data });
                 } catch (error) {
-                    logToCloudWatch(`Failed to load ${url}: ${error.message}`, 'ERROR', 'utils');
-                } finally {
-                    await page.close(); // ✅ Close the page after processing
+                    logToCloudWatch(`Failed to fetch ${url}: ${error.message}`, 'ERROR', 'utils');
                 }
             }));
         }
-        domainPagesInnerHtml.forEach(webSiteText => { webSiteText.detectedErrors = extractMisspelledWords(webSiteText.innerHtml, ignoreList); }); // assign array of errors to each website     
-        domainPagesInnerHtml = domainPagesInnerHtml.filter((w) => w.detectedErrors.length > 0); // Remove websites with no errors
 
-  
-      saveResults(domainPagesInnerHtml.map(({ innerHtml, ...rest }) => rest)); // errors per path
-      domainPagesInnerHtml = []; // Clear array for next domain
+        domainPagesInnerHtml.forEach(webSiteText => { webSiteText.detectedErrors = extractMisspelledWords(webSiteText.innerHtml, ignoreList); });      
+        domainPagesInnerHtml = domainPagesInnerHtml.filter((w) => w.detectedErrors.length > 0);
+        saveResults(domainPagesInnerHtml.map(({ innerHtml, ...rest }) => rest));
+        domainPagesInnerHtml = [];
     }
 
-    await browser.close(); // Close browser after all tasks are done
     return domainPagesInnerHtml;
 }
+
 
 
   export async function detectErrorsWithGpt(gptKey: string, websitesInnerHtml: any,gptService: GptService,  batchSize: number): Promise<string> {
@@ -235,18 +218,22 @@ export   function filterOutIrrelevantErrors(gptErrorDetectionResults: gptProposa
 export function extractMisspelledWords(text: string, excludedWords: string[]): string[] {
     const lowerExcludedWords = excludedWords.map(word => word.toLowerCase()); // Convert excluded words to lowercase
 
+    // Remove HTML tags before processing
+    text = text.replace(/<[^>]+>/g, ' ');
+
     return [...new Set(
         text
-            .split(" ")
+            .split(/\s+/) // Use regex to split on any whitespace
             .filter(word => /^[A-Za-z]+$/.test(word)) // Keep only words with letters
-            .filter(word => !lowerExcludedWords.some(excluded => word.toLowerCase().includes(excluded))) // Case-insensitive comparison
+            .filter(word => !lowerExcludedWords.includes(word.toLowerCase())) // Case-insensitive filtering
             .filter(word => spellchecker.isMisspelled(word)) // Check for misspelled words
     )];
 }
 
+
  
 export function saveResults(results: any[]) {
-    const filePath = path.join(__dirname, '../..', 'savedData.json');
+    const filePath = path.join(__dirname, '../..', 'webSiteErrors.json');
     
     // Read existing file
     let existingData: any[] = [];
@@ -261,6 +248,37 @@ export function saveResults(results: any[]) {
     fs.writeFileSync(filePath, JSON.stringify(newData, null, 2), 'utf-8');
 }
 
-export function fetchOnlyLiveDomains(domains: Domain[]) {
+ export function createErrorsTable(fileContent): string {
+    let slackWebsiteMessage = "```\n"; // Start code block
+    slackWebsiteMessage += "Domain  | Full Path                                       | Detected Errors \n";
+    slackWebsiteMessage += "--------|------------------------------------------------|----------------\n";
+    
+  // ✅ Add each row formatted properly
+  const websiteErrors = JSON.parse(fileContent); // Read saved JSON file
 
-}
+  websiteErrors.forEach((error) => {
+    let errorList = error.detectedErrors.join(", ");
+
+    // If error list is too long, break it into multiple lines
+    if (errorList.length > 50) {
+        const words = errorList.split(", ");
+        errorList = "";
+        let line = "";
+
+        for (let word of words) {
+            if ((line + word).length > 50) {
+                errorList += line + "\n\t\t\t\t\t\t\t\t\t  "; // Add a tabbed indent for continuation
+                line = word + ", ";
+            } else {
+                line += word + ", ";
+            }
+        }
+        errorList += line.trimEnd(); // Add the last line
+    }
+
+    slackWebsiteMessage += `${error.domain.toString().padEnd(8)} | ${error.fullPath.padEnd(48)} | ${errorList}\n`;
+});    
+    slackWebsiteMessage += "```"; // ✅ Close the monospace block
+
+    return slackWebsiteMessage;
+ }
