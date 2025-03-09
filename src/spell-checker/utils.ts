@@ -136,50 +136,40 @@ export async function   processInBatches(tasks: (() => Promise<any>)[], batchSiz
   }
 
 
-  export async function fetchWebsitesInnerHtmlAndFindErrors( domains: Domain[],   batchSize: number, ignoreList: string[]): Promise<any[]> {
-   
+  export async function fetchWebsitesInnerHtmlAndFindErrors(domains: Domain[], ignoreList: string[]): Promise<any[]> {
     logToCloudWatch('Entering fetchWebsitesInnerHtml');
-
     let domainPagesInnerHtml: websiteText[] = [];
+  
     for (const domain of domains) {  
-        logToCloudWatch('Entering domains loop');
-        const pathBatches: string[][] = [];
-        for (let i = 0; i < domain.paths.length; i += batchSize) { pathBatches.push(domain.paths.slice(i, i + batchSize));}  
-
-        for (const batch of pathBatches) {
-            await Promise.all(batch.map(async (path) => {
-                const url = `https://${domain.hostname}${path}`;
-                try {
-                    logToCloudWatch(`Fetching: ${url}`, 'INFO', 'utils');
-                 const { data: html } = await axios.get(url);
-                   // const $ = cheerio.load(html); 
-                  //  $('script, style, noscript, meta, link, head, iframe, [aria-hidden="true"], [style*="display:none"], [style*="visibility:hidden"]').remove();
-                  //  const visibleText = $('body').text().replace(/\s+/g, ' ').trim();
-                   //  domainPagesInnerHtml.push({ domain: domain.id, fullPath: url,  innerHtml: visibleText });
-                   const dom = new JSDOM(html, { url });
-                   const article = new Readability(dom.window.document).parse();
-                 domainPagesInnerHtml.push({ domain: domain.id, fullPath: url,  innerHtml: article.textContent });
-
-                 } catch (error) {
-                    logToCloudWatch(`Failed to fetch ${url}: ${error.message}`, 'ERROR', 'utils');
-                }
-            }));
+      logToCloudWatch(`Processing domain: ${domain.hostname}`);
+      domain.paths
+      for (const path of domain.paths) {
+        const url = `https://${domain.hostname}${path}`;
+        try {
+          logToCloudWatch(`Fetching: ${url}`, 'INFO', 'utils');
+          const { data: html } = await axios.get(url);
+          const dom = new JSDOM(html, { url });
+          const article = new Readability(dom.window.document).parse();
+          domainPagesInnerHtml.push({ domain: domain.id, fullPath: url, innerHtml: article.textContent });
+        } catch (error) {
+          logToCloudWatch(`Failed to fetch ${url}: ${error.message}`, 'ERROR', 'utils');
         }
- try {
-       domainPagesInnerHtml.forEach(webSiteText => { webSiteText.detectedErrors = extractMisspelledWords(webSiteText.innerHtml, ignoreList); });      
-        domainPagesInnerHtml = domainPagesInnerHtml.filter((w) => w.detectedErrors.length > 0);
-        saveResults(domainPagesInnerHtml.map(({ innerHtml, ...rest }) => rest));
-        domainPagesInnerHtml = [];
-        return domainPagesInnerHtml;
-
-} catch (error) {
-    console.log(error)
-}
-     
+      }
+  
+      // Process all domain (single domain) paths inner html **per domain** before moving to the next
+      domainPagesInnerHtml.forEach(webSiteText => { 
+        webSiteText.detectedErrors = extractMisspelledWords(webSiteText.innerHtml, ignoreList);
+      });
+      domainPagesInnerHtml = domainPagesInnerHtml.filter((w) => w.detectedErrors.length > 0);
+      saveResults(domainPagesInnerHtml.map(({ innerHtml, ...rest }) => rest));
+  
+      // Clear results for next domain
+      domainPagesInnerHtml = [];
     }
-
- }
-
+  
+    return []; // No need to return accumulated results since they're saved per domain
+  }
+  
 
 
   export async function detectErrorsWithGpt(gptKey: string, websitesInnerHtml: any,gptService: GptService,  batchSize: number): Promise<string> {

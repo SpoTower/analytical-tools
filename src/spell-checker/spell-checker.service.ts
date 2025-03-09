@@ -123,7 +123,7 @@ slackMessage += "```"; // ✅ Close the monospace block
         const chosenDomains = domainId ? state.domains.filter((d: Domain) => d.id === domainId) : state.domains.filter(d => recentlyVisitedDomains.some(r => r.domainName === d.hostname));
         chosenDomains.forEach((domain: Domain) => {domain.paths = englishPats.filter((p: Paths) => p.domainId === domain.id).map((p: Paths) => p.path).filter((p)=> p); });  // asign paths per domain
          // ✅ Step 3: fetch all paths' text,   check each word for errors and send result to mail
-         await fetchWebsitesInnerHtmlAndFindErrors(chosenDomains, batchSize, ignoredWords); //get inner html of websites
+         await fetchWebsitesInnerHtmlAndFindErrors(chosenDomains, ignoredWords); //get inner html of websites
           const filePath = path.join(__dirname, '../..', 'webSiteErrors.json');
         const fileContent = fs.readFileSync(path.join(filePath), 'utf-8');
        const slackWebsiteMessage =   createErrorsTable(fileContent)
