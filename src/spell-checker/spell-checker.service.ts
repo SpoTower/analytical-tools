@@ -124,7 +124,7 @@ slackMessage += "```"; // ✅ Close the monospace block
         chosenDomains.forEach((domain: Domain) => {domain.paths = englishPats.filter((p: Paths) => p.domainId === domain.id).map((p: Paths) => p.path).filter((p)=> p); });  // asign paths per domain
          // ✅ Step 3: fetch all paths' text,   check each word for errors and send result to mail
          await fetchWebsitesInnerHtmlAndFindErrors(chosenDomains, batchSize, ignoredWords); //get inner html of websites
- 
+ //'/Users/dimitriyglefa/analyticalTools4/analytical-tools/dist/spell-checker'
          
         const fileContent = fs.readFileSync(path.join(__dirname, '../..', 'webSiteErrors.json'), 'utf-8');
       const slackWebsiteMessage =   createErrorsTable(fileContent)

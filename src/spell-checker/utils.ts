@@ -13,7 +13,8 @@ import spellchecker from 'spellchecker';
 import fs from 'fs';
 import path from 'path';
 const cheerio = require('cheerio');
-
+const { Readability } = require('@mozilla/readability');
+const { JSDOM } = require('jsdom');
 
 export async function fetchGoogleAds(domain: Domain, companies: Company[], tokens:any ) {
     logToCloudWatch(`Entering fetchGoogleAds, fetching google ads for domain ${domain.id}`);
@@ -150,18 +151,21 @@ export async function   processInBatches(tasks: (() => Promise<any>)[], batchSiz
                 const url = `https://${domain.hostname}${path}`;
                 try {
                     logToCloudWatch(`Fetching: ${url}`, 'INFO', 'utils');
-                    const { data: html } = await axios.get(url);
-                    const $ = cheerio.load(html); 
-                    $('script, style, noscript, meta, link, head, iframe, [aria-hidden="true"], [style*="display:none"], [style*="visibility:hidden"]').remove();
-                    const visibleText = $('body').text().replace(/\s+/g, ' ').trim();
-                     domainPagesInnerHtml.push({ domain: domain.id, fullPath: url,  innerHtml: visibleText });
-                } catch (error) {
+                 const { data: html } = await axios.get(url);
+                   // const $ = cheerio.load(html); 
+                  //  $('script, style, noscript, meta, link, head, iframe, [aria-hidden="true"], [style*="display:none"], [style*="visibility:hidden"]').remove();
+                  //  const visibleText = $('body').text().replace(/\s+/g, ' ').trim();
+                   //  domainPagesInnerHtml.push({ domain: domain.id, fullPath: url,  innerHtml: visibleText });
+                   const dom = new JSDOM(html, { url });
+                   const article = new Readability(dom.window.document).parse();
+                 domainPagesInnerHtml.push({ domain: domain.id, fullPath: url,  innerHtml: article.textContent });
+
+                 } catch (error) {
                     logToCloudWatch(`Failed to fetch ${url}: ${error.message}`, 'ERROR', 'utils');
                 }
             }));
         }
-//688363
-try {
+ try {
        domainPagesInnerHtml.forEach(webSiteText => { webSiteText.detectedErrors = extractMisspelledWords(webSiteText.innerHtml, ignoreList); });      
         domainPagesInnerHtml = domainPagesInnerHtml.filter((w) => w.detectedErrors.length > 0);
         saveResults(domainPagesInnerHtml.map(({ innerHtml, ...rest }) => rest));
