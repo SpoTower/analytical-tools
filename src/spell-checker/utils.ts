@@ -144,7 +144,7 @@ export async function   processInBatches(tasks: (() => Promise<any>)[], batchSiz
     for (const domain of domains) {  
         logToCloudWatch('Entering domains loop');
         const pathBatches: string[][] = [];
-        for (let i = 0; i < domain.paths.length; i += batchSize) { pathBatches.push(domain.paths.slice(i, i + batchSize));}  
+        for (let i = 0; i < 10; i += batchSize) { pathBatches.push(domain.paths.slice(i, i + batchSize));}  
 
         for (const batch of pathBatches) {
             await Promise.all(batch.map(async (path) => {
