@@ -1,7 +1,6 @@
 import axios from 'axios';
 import { AnyObject } from './consts';
 import { logToCloudWatch } from 'src/logger';
-const { chromium } = require('playwright');
 import { BadRequestException, InternalServerErrorException } from '@nestjs/common';
 import { GptService } from 'src/gpt/gpt.service';
  import {websiteText} from './interfaces';
@@ -13,8 +12,8 @@ import { getDateRange } from 'src/utils';
 import spellchecker from 'spellchecker';
 import fs from 'fs';
 import path from 'path';
-import { webSitesIgnoreWords,   } from './ignoreWords';
- 
+const cheerio = require('cheerio');
+
 
 export async function fetchGoogleAds(domain: Domain, companies: Company[], tokens:any ) {
     logToCloudWatch(`Entering fetchGoogleAds, fetching google ads for domain ${domain.id}`);
@@ -148,25 +147,34 @@ export async function   processInBatches(tasks: (() => Promise<any>)[], batchSiz
 
         for (const batch of pathBatches) {
             await Promise.all(batch.map(async (path) => {
-                const url = `https://${domain.hostname}${path}?isSpellChecker=1`;
+                const url = `https://${domain.hostname}${path}`;
                 try {
                     logToCloudWatch(`Fetching: ${url}`, 'INFO', 'utils');
-                    const response = await axios.get(url, { headers: {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/110.0.0.0 Safari/537.36'    } });
-                    domainPagesInnerHtml.push({ domain: domain.id, fullPath: url,  innerHtml: response.data });
+                    const { data: html } = await axios.get(url);
+                    const $ = cheerio.load(html); 
+                    $('script, style, noscript, meta, link, head, iframe, [aria-hidden="true"], [style*="display:none"], [style*="visibility:hidden"]').remove();
+                    const visibleText = $('body').text().replace(/\s+/g, ' ').trim();
+                     domainPagesInnerHtml.push({ domain: domain.id, fullPath: url,  innerHtml: visibleText });
                 } catch (error) {
                     logToCloudWatch(`Failed to fetch ${url}: ${error.message}`, 'ERROR', 'utils');
                 }
             }));
         }
-
-        domainPagesInnerHtml.forEach(webSiteText => { webSiteText.detectedErrors = extractMisspelledWords(webSiteText.innerHtml, ignoreList); });      
+//688363
+try {
+       domainPagesInnerHtml.forEach(webSiteText => { webSiteText.detectedErrors = extractMisspelledWords(webSiteText.innerHtml, ignoreList); });      
         domainPagesInnerHtml = domainPagesInnerHtml.filter((w) => w.detectedErrors.length > 0);
         saveResults(domainPagesInnerHtml.map(({ innerHtml, ...rest }) => rest));
         domainPagesInnerHtml = [];
+        return domainPagesInnerHtml;
+
+} catch (error) {
+    console.log(error)
+}
+     
     }
 
-    return domainPagesInnerHtml;
-}
+ }
 
 
 

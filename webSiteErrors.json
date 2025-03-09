@@ -1,158 +1,34 @@
 [
   {
     "domain": 3,
-    "fullPath": "https://tophomewarrantyservices.com/roof-coverage/?isSpellChecker=1",
-    "detectedErrors": [
-      "fs",
-      "Meses",
-      "Experiencia",
-      "Assurant",
-      "Fourplexes",
-      "Fourplex",
-      "Nonmechanical"
-    ]
-  },
-  {
-    "domain": 3,
-    "fullPath": "https://tophomewarrantyservices.com/?isSpellChecker=1",
-    "detectedErrors": [
-      "fs",
-      "Meses",
-      "Experiencia",
-      "Assurant",
-      "Nonmechanical",
-      "hwa",
-      "Fourplexes",
-      "Fourplex"
-    ]
-  },
-  {
-    "domain": 3,
-    "fullPath": "https://tophomewarrantyservices.com/appliance/?isSpellChecker=1",
-    "detectedErrors": [
-      "fs",
-      "Meses",
-      "Experiencia",
-      "Assurant",
-      "Fourplexes",
-      "Fourplex",
-      "Nonmechanical"
-    ]
-  },
-  {
-    "domain": 3,
     "fullPath": "https://tophomewarrantyservices.com/choice-home-warranty-review/?isSpellChecker=1",
     "detectedErrors": [
-      "Aditi",
-      "fs",
-      "Fourplexes",
-      "Fourplex",
-      "Nonmechanical",
-      "Assurant"
-    ]
-  },
-  {
-    "domain": 3,
-    "fullPath": "https://tophomewarrantyservices.com/american-home-shield/?isSpellChecker=1",
-    "detectedErrors": [
-      "fs",
-      "Meses",
-      "Experiencia",
-      "Fourplexes",
-      "Fourplex",
-      "Nonmechanical",
-      "Assurant"
+      "PlanAditi",
+      "ITEMCOVERAGE"
     ]
   },
   {
     "domain": 3,
     "fullPath": "https://tophomewarrantyservices.com/choice-home-warranty-vs-american-home-shield-who-is-better/?isSpellChecker=1",
     "detectedErrors": [
-      "Aditi",
-      "Avg",
-      "fs",
-      "Fourplexes",
-      "Fourplex",
-      "Nonmechanical",
-      "Assurant"
-    ]
-  },
-  {
-    "domain": 3,
-    "fullPath": "https://tophomewarrantyservices.com/ca/?isSpellChecker=1",
-    "detectedErrors": [
-      "fs",
-      "Meses",
-      "Experiencia",
-      "Fourplexes",
-      "Fourplex",
-      "Nonmechanical",
-      "Assurant"
+      "ComparisonCHWAHSAvg"
     ]
   },
   {
     "domain": 3,
     "fullPath": "https://tophomewarrantyservices.com/roof-replacement/?isSpellChecker=1",
     "detectedErrors": [
-      "Visita",
-      "fs",
-      "Meses",
-      "Experiencia",
-      "Fourplexes",
-      "Fourplex",
-      "Nonmechanical",
-      "Assurant"
+      "Menos",
+      "Mes",
+      "GratisVisita"
     ]
   },
   {
     "domain": 3,
     "fullPath": "https://tophomewarrantyservices.com/fl-2/?isSpellChecker=1",
     "detectedErrors": [
-      "Petersborg",
-      "fs",
-      "Meses",
-      "Experiencia",
-      "Fourplexes",
-      "Fourplex",
-      "Nonmechanical",
-      "Assurant"
-    ]
-  },
-  {
-    "domain": 3,
-    "fullPath": "https://tophomewarrantyservices.com/what-is-a-home-warranty/?isSpellChecker=1",
-    "detectedErrors": [
-      "Aditi",
-      "fs",
-      "Fourplexes",
-      "Fourplex",
-      "Nonmechanical",
-      "Assurant"
-    ]
-  },
-  {
-    "domain": 3,
-    "fullPath": "https://tophomewarrantyservices.com/plumbing-coverage/?isSpellChecker=1",
-    "detectedErrors": [
-      "fs",
-      "Meses",
-      "Experiencia",
-      "Fourplexes",
-      "Fourplex",
-      "Nonmechanical",
-      "Assurant"
-    ]
-  },
-  {
-    "domain": 3,
-    "fullPath": "https://tophomewarrantyservices.com/what-to-know-about-buying-a-home-warranty/?isSpellChecker=1",
-    "detectedErrors": [
-      "Aditi",
-      "Nonmechanical",
-      "fs",
-      "Fourplexes",
-      "Fourplex",
-      "Assurant"
+      "Warrantiesin",
+      "Petersborg"
     ]
   }
 ]

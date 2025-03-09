@@ -4,24 +4,21 @@ import { UpdateSpellCheckerDto } from './dto/update-spell-checker.dto';
  import {fetchGoogleAds,filterOutTextlessAds,prepareAdsForErrorChecking,fetchWebsitesInnerHtmlAndFindErrors, detectErrorsWithGpt, detectErrorsWithGpt2 } from './utils';
 import { GlobalStateService } from 'src/globalState/global-state.service';
  const logger = new Logger('analytical-tools.spellchecker');
- import { GptService } from 'src/gpt/gpt.service';
- import { logToCloudWatch } from 'src/logger'; 
+  import { logToCloudWatch } from 'src/logger'; 
  import {adsPreparedForErrorDetection} from './interfaces';
  import { Domain,Paths } from 'src/kidonInterfaces/shared';
    import {processInBatches,extractMisspelledWords} from './utils';
  import {googleAds } from './interfaces';
  export {emailSubjects} from './consts';
 import * as KF from '@spotower/my-utils';
-  import {googleAdsIgnoreList,ignoredLanguages,webSitesIgnoreWords} from './ignoreWords';
+  import {googleAdsIgnoreList,ignoredLanguages} from './ignoreWords';
   import { KIDON_CONNECTION } from 'src/knex/knex.module';
   import { Knex } from 'knex';
   import fs from 'fs';
   import path from 'path';
-  import { JWT } from 'google-auth-library';
-  const { chromium } = require('playwright');
+   const { chromium } = require('playwright');
 import { createErrorsTable } from './utils';
-//state.paths.filter((p) => !ignoredLanguages.some(lang => p.path.includes(lang)));
-
+ 
 
 
 
@@ -31,43 +28,10 @@ export class SpellCheckerService {
   constructor(
     @Inject(KIDON_CONNECTION) private readonly kidonClient: Knex,
     private readonly globalState: GlobalStateService,
-    private readonly gptService: GptService
-    ) {}
+     ) {}
 
 
-    async test( ){
-      logToCloudWatch('Starting Playwright');
-      (async () => {
-        logToCloudWatch('Launching browser...');
-        const browser = await chromium.launch({
-          headless: true,
-          executablePath: '/home/ssm-user/.cache/ms-playwright/chromium-1155/chrome-linux/chrome',
-          args: ['--no-sandbox', '--disable-setuid-sandbox']
-      });
-        logToCloudWatch('Browser launched.');
-    
-        try {
-            const page = await browser.newPage();
-            logToCloudWatch('New page created.');
-    
-            const url = 'https://10bestmealdeliveryservices.com/compare-d.html';
-     
-            await page.goto(url, { timeout: 15000, waitUntil: 'load' });
-            let pageText = await page.evaluate(() => document.body.innerText);
-
-            logToCloudWatch(`Page text: ${pageText}`);
-        } catch (error) {
-          logToCloudWatch(`'Error:', ${error.message}`);
-        } finally {
-            await browser.close();
-            console.log('Browser closed.');
-        }
-    })();
-      logToCloudWatch('finishing test');
  
- return 'test success';
-    }
-
   async findAndFixGoogleAdsGrammaticalErrors( batchSize: number, domainId?: number, sliceSize?: number,   ) {
     logToCloudWatch('entering findAndFixGoogleAdsGrammaticalErrors');
 
@@ -144,8 +108,10 @@ slackMessage += "```"; // ✅ Close the monospace block
 
   async findAndFixWebsitesGrammaticalErrors(domainId?: number, batchSize?: number) {
     const state =   this.globalState.getAllState(); 
-    if(!state){ logToCloudWatch('No state found'); }
+     let ignoredWords =  await this.kidonClient.raw('select * from configuration where id = ?', ['56']);
+     ignoredWords = ignoredWords[0][0].values.split(',')
 
+     if(!state || !ignoredWords){ logToCloudWatch('No state/ No ignore words found'); }
          // ✅ Step 1: filter non english paths out and assign relevant paths to domains
         const englishPats =  state.paths.filter((p) => !ignoredLanguages.some(lang => p.path.includes(lang)));  //filter out non english paths
          // ✅ Step 2: filter out non visited domains, attach paths to each domain
@@ -157,7 +123,7 @@ slackMessage += "```"; // ✅ Close the monospace block
         const chosenDomains = domainId ? state.domains.filter((d: Domain) => d.id === domainId) : state.domains.filter(d => recentlyVisitedDomains.some(r => r.domainName === d.hostname));
         chosenDomains.forEach((domain: Domain) => {domain.paths = englishPats.filter((p: Paths) => p.domainId === domain.id).map((p: Paths) => p.path).filter((p)=> p); });  // asign paths per domain
          // ✅ Step 3: fetch all paths' text,   check each word for errors and send result to mail
-         await fetchWebsitesInnerHtmlAndFindErrors(chosenDomains, batchSize, webSitesIgnoreWords); //get inner html of websites
+         await fetchWebsitesInnerHtmlAndFindErrors(chosenDomains, batchSize, ignoredWords); //get inner html of websites
  
          
         const fileContent = fs.readFileSync(path.join(__dirname, '../..', 'webSiteErrors.json'), 'utf-8');
