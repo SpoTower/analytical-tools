@@ -16,10 +16,7 @@ export class SpellCheckerController {
   }
 
 
-  @Get('/test')
-  async test() {
-    return await this.spellCheckerService.test();
-  }
+ 
 
   @Get('/findGoogleAdsGrammaticalErrors')
   async GoogleAdsGrammaticalErrors(
