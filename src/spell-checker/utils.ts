@@ -144,11 +144,16 @@ export async function   processInBatches(tasks: (() => Promise<any>)[], batchSiz
       logToCloudWatch(`Processing domain: ${domain.hostname}`);
       const limitedPaths = domain.paths.slice(0, 5);
 
-      for (const path of limitedPaths) {
+      for (const path of domain.paths) {
         const url = `https://${domain.hostname}${path}`;
         logToCloudWatch(`Fetching ${url}`);
         try {
-          const { data: html } = await axios.get(url);
+          const { data: html } = await axios.get(url,{headers: {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+            'Accept-Language': 'en-US,en;q=0.9'
+        }});
+        await new Promise((resolve) => setTimeout(resolve, 2000));
+
           const dom = new JSDOM(html, { url });
           const article = new Readability(dom.window.document).parse();
           domainPagesInnerHtml.push({ domain: domain.id, fullPath: url, innerHtml: article.textContent });
