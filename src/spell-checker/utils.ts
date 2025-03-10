@@ -144,7 +144,7 @@ export async function   processInBatches(tasks: (() => Promise<any>)[], batchSiz
       logToCloudWatch(`Processing domain: ${domain.hostname}`);
       const limitedPaths = domain.paths.slice(0, 2);
 
-      for (const path of limitedPaths) {
+      for (const path of domain.paths) {
         const url = `https://${domain.hostname}${path}`;
         try {
           const { data: html } = await axios.get(url);
