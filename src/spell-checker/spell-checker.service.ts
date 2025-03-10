@@ -18,6 +18,7 @@ import * as KF from '@spotower/my-utils';
   import path from 'path';
    const { chromium } = require('playwright');
 import { createErrorsTable } from './utils';
+import { log } from 'console';
  
 
 
@@ -110,22 +111,24 @@ slackMessage += "```"; // ✅ Close the monospace block
     const state =   this.globalState.getAllState(); 
      let ignoredWords =  await this.kidonClient.raw('select * from configuration where id = ?', ['56']);
      ignoredWords = ignoredWords[0][0].values.split(',')
-
+     logToCloudWatch(`ignoredWords: ${ignoredWords}`,  );
      if(!state || !ignoredWords){ logToCloudWatch('No state/ No ignore words found'); }
          // ✅ Step 1: filter non english paths out and assign relevant paths to domains
         const englishPats =  state.paths.filter((p) => !ignoredLanguages.some(lang => p.path.includes(lang)));  //filter out non english paths
+
          // ✅ Step 2: filter out non visited domains, attach paths to each domain
-
         const weekAgo = new Date(new Date().setDate(new Date().getDate() - 7)).toISOString().split('T')[0];
-        const recentlyVisitedDomains =  await this.kidonClient('tracker_visitors').select('domain_name').where('created_at', '>', weekAgo).whereIn('utm_source', ['GOOGLE', 'BING']).distinct(); 
+        const recentlyVisitedDomains =  await this.kidonClient('tracker_visitors').select('domain_name').where('created_at', '>', weekAgo).whereIn('utm_source', ['GOOGLE', 'BING']).distinct();
+        logToCloudWatch(`recentlyVisitedDomains length: ${recentlyVisitedDomains.length}  `); 
          if(!recentlyVisitedDomains || recentlyVisitedDomains.length === 0)     logToCloudWatch('no tracker visitors Data!');
-
         const chosenDomains = domainId ? state.domains.filter((d: Domain) => d.id === domainId) : state.domains.filter(d => recentlyVisitedDomains.some(r => r.domainName === d.hostname));
         chosenDomains.forEach((domain: Domain) => {domain.paths = englishPats.filter((p: Paths) => p.domainId === domain.id).map((p: Paths) => p.path).filter((p)=> p); });  // asign paths per domain
+
          // ✅ Step 3: fetch all paths' text,   check each word for errors and send result to mail
          await fetchWebsitesInnerHtmlAndFindErrors(chosenDomains, ignoredWords); //get inner html of websites
           const filePath = path.join(__dirname, '../..', 'webSiteErrors.json');
         const fileContent = fs.readFileSync(path.join(filePath), 'utf-8');
+        logToCloudWatch( `fileContent: ${fileContent}  `);
        const slackWebsiteMessage =   createErrorsTable(fileContent)
         
         await KF.sendSlackAlert('Web Sites Errors: ','C08GHM3NY8K', state.slackToken);
