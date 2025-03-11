@@ -142,16 +142,14 @@ export async function   processInBatches(tasks: (() => Promise<any>)[], batchSiz
   
     for (const domain of domains) {  
       logToCloudWatch(`Processing domain: ${domain.hostname}`);
-      const limitedPaths = domain.paths.slice(0, 5);
+      const limitedPaths = domain.paths.slice(0,   1);
 
       for (const path of domain.paths) {
         const url = `https://${domain.hostname}${path}`;
+
         logToCloudWatch(`Fetching ${url}`);
         try {
-          const { data: html } = await axios.get(url,{headers: {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
-            'Accept-Language': 'en-US,en;q=0.9'
-        }});
+          const { data: html } = await axios.get(url,{headers: {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36','Accept-Language': 'en-US,en;q=0.9' }});
         await new Promise((resolve) => setTimeout(resolve, 2000));
 
           const dom = new JSDOM(html, { url });
@@ -163,10 +161,10 @@ export async function   processInBatches(tasks: (() => Promise<any>)[], batchSiz
       }
   
       // Process all domain (single domain) paths inner html **per domain** before moving to the next
-      domainPagesInnerHtml.forEach(webSiteText => { 
-        webSiteText.detectedErrors = extractMisspelledWords(webSiteText.innerHtml, ignoreList);
-      });
+      domainPagesInnerHtml.forEach(webSiteText => {webSiteText.detectedErrors = extractMisspelledWords(webSiteText.innerHtml, ignoreList);});
+      // filter out pages with no errors
       domainPagesInnerHtml = domainPagesInnerHtml.filter((w) => w.detectedErrors.length > 0);
+      // save to json file that will later be used to create a table and
       saveResults(domainPagesInnerHtml.map(({ innerHtml, ...rest }) => rest));
   
       // Clear results for next domain
@@ -222,21 +220,28 @@ export   function filterOutIrrelevantErrors(gptErrorDetectionResults: gptProposa
 
 }
 
-
 export function extractMisspelledWords(text: string, excludedWords: string[]): string[] {
-    const lowerExcludedWords = excludedWords.map(word => word.toLowerCase()); // Convert excluded words to lowercase
+    const lowerExcludedWords = new Set(excludedWords.map(word => word.toLowerCase()));
 
-    // Remove HTML tags before processing
+    // Remove HTML tags
     text = text.replace(/<[^>]+>/g, ' ');
 
-    return [...new Set(
-        text
-            .split(/\s+/) // Use regex to split on any whitespace
-            .filter(word => /^[A-Za-z]+$/.test(word)) // Keep only words with letters
-            .filter(word => !lowerExcludedWords.includes(word.toLowerCase())) // Case-insensitive filtering
-            .filter(word => spellchecker.isMisspelled(word)) // Check for misspelled words
-    )];
+    // Function to split words with multiple capital letters (e.g., "TotalAV" → ["Total", "AV"])
+    const splitByCapitalLetters = (word: string): string[] => {
+        return word.split(/(?=[A-Z][a-z])/); // Split before capital letters followed by lowercase
+    };
+
+    // Process each word: split by spaces, then split merged words
+    const words = text
+        .split(/\s+/) // Split by spaces
+        .flatMap(splitByCapitalLetters) // Further split words with multiple capital letters
+        .filter(word => /^[A-Za-z]+$/.test(word)) // Keep only valid words
+        .filter(word => !lowerExcludedWords.has(word.toLowerCase())) // Exclude known words
+        .filter(word => spellchecker.isMisspelled(word)); // Check for misspellings
+
+    return [...new Set(words)]; // Remove duplicates
 }
+
 
 
  
