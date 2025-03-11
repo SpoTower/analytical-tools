@@ -133,7 +133,7 @@ slackMessage += "```"; // ✅ Close the monospace block
         
         await KF.sendSlackAlert('Web Sites Errors: ','C08GHM3NY8K', state.slackToken);
         await KF.sendSlackAlert(slackWebsiteMessage,'C08GHM3NY8K', state.slackToken);
-        fs.unlinkSync(filePath);
+       // fs.unlinkSync(filePath);
 
         return `websites were processed by local spellchecker and sent to kidon to be sended by slack to content errors channel`;
 }
