@@ -144,8 +144,8 @@ export async function   processInBatches(tasks: (() => Promise<any>)[], batchSiz
       logToCloudWatch(`Processing domain: ${domain.hostname}`);
       const limitedPaths = domain.paths.slice(0,   1);
 
-      for (const path of domain.paths.slice(0,1)) {
-        const url = `https://top10antivirusexperts.com/mac-cleaner-m/`;
+      for (const path of domain.paths) {
+        const url = `https://${domain.hostname}${path}`;
 
         logToCloudWatch(`Fetching ${url}`);
         try {
