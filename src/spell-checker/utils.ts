@@ -136,50 +136,53 @@ export async function   processInBatches(tasks: (() => Promise<any>)[], batchSiz
   }
 
 
-  export async function fetchWebsitesInnerHtmlAndFindErrors(domains: Domain[], ignoreList: string[]): Promise<any[]> {
-    logToCloudWatch('Entering fetchWebsitesInnerHtml');
-    let domainPagesInnerHtml: websiteText[] = [];
-  
+  export async function fetchWebsitesInnerHtmlAndFindErrors(domains: Domain[], ignoreList: string[]): Promise<void> {
+    logToCloudWatch('Entering fetchAndLogWebsiteErrors');
+
     for (const domain of domains) {  
-      logToCloudWatch(`Processing domain: ${domain.hostname}`);
-      const limitedPaths = domain.paths.slice(0,   1);
+        logToCloudWatch(`Processing domain: ${domain.hostname}`);
 
-      for (const path of domain.paths) {
-        const url = `https://${domain.hostname}${path}`;
+        for (const path of domain.paths) {
+            const url = `https://${domain.hostname}${path}`;
 
-        logToCloudWatch(`Fetching ${url}`);
-        try {
-          const { data: html } = await axios.get(url,{headers: {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36','Accept-Language': 'en-US,en;q=0.9' }});
- 
+            logToCloudWatch(`Fetching ${url}`);
+            try {
+                const { data: html } = await axios.get(url, {
+                    headers: {
+                        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+                        'Accept-Language': 'en-US,en;q=0.9'
+                    }
+                });
 
- const $ = cheerio.load(html); 
-                     $('script, style, noscript, meta, link, head, iframe, [aria-hidden="true"], [style*="display:none"], [style*="visibility:hidden"]').remove();
-                     const visibleText = $('body').text().replace(/\s+/g, ' ').trim();
-                     domainPagesInnerHtml.push({ domain: domain.id, fullPath: url,  innerHtml: visibleText });
+                // Extract visible text from the page
+                const $ = cheerio.load(html);
+                $('script, style, noscript, meta, link, head, iframe, [aria-hidden="true"], [style*="display:none"], [style*="visibility:hidden"]').remove();
+                let visibleText = $('body').text().replace(/\s+/g, ' ').trim();
 
+                // Process and filter words
+                const lowerExcludedWords = new Set(ignoreList.map(word => word.toLowerCase()));
+                visibleText = visibleText.replace(/<[^>]+>/g, ' ');
 
-        //  const dom = new JSDOM(html, { url });
-          //const article = new Readability(dom.window.document).parse();
-          //domainPagesInnerHtml.push({ domain: domain.id, fullPath: url, innerHtml: article.textContent });
-        } catch (error) {
-          logToCloudWatch(`Failed to fetch ${url}: ${error.message}`, 'ERROR', 'utils');
+                const splitByCapitalLetters = (word: string): string[] => {
+                    return word.split(/(?=[A-Z][a-z])/);
+                };
+
+                let words = visibleText
+                    .split(/\s+/)
+                    .flatMap(splitByCapitalLetters)
+                    .filter(word => /^[A-Za-z]+$/.test(word))
+                    .filter(word => !lowerExcludedWords.has(word.toLowerCase()))
+                    .filter(word => spellchecker.isMisspelled(word));
+
+                // Log results
+                logToCloudWatch(`Misspelled words in ${url}: ${[...new Set(words)]}`);
+
+            } catch (error) {
+                logToCloudWatch(`Failed to fetch ${url}: ${error.message}`, 'ERROR', 'utils');
+            }
         }
-      }
-  
-      // Process all domain (single domain) paths inner html **per domain** before moving to the next
-      domainPagesInnerHtml.forEach(webSiteText => {webSiteText.detectedErrors = extractMisspelledWords(webSiteText.innerHtml, ignoreList);});
-      // filter out pages with no errors
-      domainPagesInnerHtml = domainPagesInnerHtml.filter((w) => w.detectedErrors.length > 0);
-       // save to json file that will later be used to create a table and
-      saveResults(domainPagesInnerHtml.map(({ innerHtml, ...rest }) => rest));
-  
-      // Clear results for next domain
-      domainPagesInnerHtml = [];
     }
-  
-    return []; // No need to return accumulated results since they're saved per domain
-  }
-  
+}
 
 
   export async function detectErrorsWithGpt(gptKey: string, websitesInnerHtml: any,gptService: GptService,  batchSize: number): Promise<string> {
