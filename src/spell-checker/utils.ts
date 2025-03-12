@@ -227,8 +227,9 @@ export   function filterOutIrrelevantErrors(gptErrorDetectionResults: gptProposa
 }
 
 export function extractMisspelledWords(text: string, excludedWords: string[]): string[] {
-    const lowerExcludedWords = new Set(excludedWords.map(word => word.toLowerCase()));
-     // Remove HTML tags
+    const lowerExcludedWords = excludedWords.map(word => word.toLowerCase());
+
+    // Remove HTML tags
     text = text.replace(/<[^>]+>/g, ' ');
 
     // Function to split words with multiple capital letters (e.g., "TotalAV" → ["Total", "AV"])
@@ -237,12 +238,22 @@ export function extractMisspelledWords(text: string, excludedWords: string[]): s
     };
 
     // Process each word: split by spaces, then split merged words
-    const words = text
+    logToCloudWatch(`Processing text: ${text}`);
+    
+    let words = text
         .split(/\s+/) // Split by spaces
         .flatMap(splitByCapitalLetters) // Further split words with multiple capital letters
-        .filter(word => /^[A-Za-z]+$/.test(word)) // Keep only valid words
-        .filter(word => !lowerExcludedWords.has(word.toLowerCase())) // Exclude known words
-        .filter(word => spellchecker.isMisspelled(word)); // Check for misspellings
+        .filter(word => /^[A-Za-z]+$/.test(word)); // Keep only valid words
+
+    logToCloudWatch(`Formatted words: ${words}`);
+
+    // Corrected filtering of excluded words
+    words = words.filter(word => !lowerExcludedWords.includes(word.toLowerCase()));
+    logToCloudWatch(`Excluded words removed: ${words}`);
+
+    // Check for misspellings
+    words = words.filter(word => spellchecker.isMisspelled(word));
+    logToCloudWatch(`Misspelled words: ${words}`);
 
     return [...new Set(words)]; // Remove duplicates
 }
