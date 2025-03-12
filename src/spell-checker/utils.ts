@@ -174,8 +174,13 @@ export async function   processInBatches(tasks: (() => Promise<any>)[], batchSiz
                     .filter(word => !lowerExcludedWords.has(word.toLowerCase()))
                     .filter(word => spellchecker.isMisspelled(word));
 
+
+                    words.filter(word => spellchecker.isMisspelled(word));
                 // Log results
-                logToCloudWatch(`Misspelled words in ${url}: ${[...new Set(words)]}`);
+                if(words)
+                      logToCloudWatch(`Misspelled words in ${url}: ${[...new Set(words)]}`);
+
+                
 
             } catch (error) {
                 logToCloudWatch(`Failed to fetch ${url}: ${error.message}`, 'ERROR', 'utils');
