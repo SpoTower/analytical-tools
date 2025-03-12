@@ -151,9 +151,16 @@ export async function   processInBatches(tasks: (() => Promise<any>)[], batchSiz
         try {
           const { data: html } = await axios.get(url,{headers: {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36','Accept-Language': 'en-US,en;q=0.9' }});
  
-          const dom = new JSDOM(html, { url });
-          const article = new Readability(dom.window.document).parse();
-          domainPagesInnerHtml.push({ domain: domain.id, fullPath: url, innerHtml: article.textContent });
+
+ const $ = cheerio.load(html); 
+                     $('script, style, noscript, meta, link, head, iframe, [aria-hidden="true"], [style*="display:none"], [style*="visibility:hidden"]').remove();
+                     const visibleText = $('body').text().replace(/\s+/g, ' ').trim();
+                     domainPagesInnerHtml.push({ domain: domain.id, fullPath: url,  innerHtml: visibleText });
+
+
+        //  const dom = new JSDOM(html, { url });
+          //const article = new Readability(dom.window.document).parse();
+          //domainPagesInnerHtml.push({ domain: domain.id, fullPath: url, innerHtml: article.textContent });
         } catch (error) {
           logToCloudWatch(`Failed to fetch ${url}: ${error.message}`, 'ERROR', 'utils');
         }
@@ -163,7 +170,7 @@ export async function   processInBatches(tasks: (() => Promise<any>)[], batchSiz
       domainPagesInnerHtml.forEach(webSiteText => {webSiteText.detectedErrors = extractMisspelledWords(webSiteText.innerHtml, ignoreList);});
       // filter out pages with no errors
       domainPagesInnerHtml = domainPagesInnerHtml.filter((w) => w.detectedErrors.length > 0);
-      // save to json file that will later be used to create a table and
+       // save to json file that will later be used to create a table and
       saveResults(domainPagesInnerHtml.map(({ innerHtml, ...rest }) => rest));
   
       // Clear results for next domain
@@ -221,8 +228,7 @@ export   function filterOutIrrelevantErrors(gptErrorDetectionResults: gptProposa
 
 export function extractMisspelledWords(text: string, excludedWords: string[]): string[] {
     const lowerExcludedWords = new Set(excludedWords.map(word => word.toLowerCase()));
-
-    // Remove HTML tags
+     // Remove HTML tags
     text = text.replace(/<[^>]+>/g, ' ');
 
     // Function to split words with multiple capital letters (e.g., "TotalAV" → ["Total", "AV"])
