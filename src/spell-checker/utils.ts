@@ -155,17 +155,17 @@ export async function   processInBatches(tasks: (() => Promise<any>)[], batchSiz
       domainPagesInnerHtml.forEach(webSiteText => {   webSiteText.detectedErrors = extractMisspelledWords(webSiteText.innerHtml, ignoreList);  });
       const lowerExcludedWords = new Set(ignoreList.map(word => word.toLowerCase()));
 
-      await KF.sendSlackAlert('detected errors ',slackChannels.PERSONAL, state.slackToken);
-      await KF.sendSlackAlert(`${ domainPagesInnerHtml[0].detectedErrors}`,slackChannels.PERSONAL, state.slackToken);
-      logToCloudWatch(`${ domainPagesInnerHtml[0].detectedErrors}`)
-      await KF.sendSlackAlert('Inner html ',slackChannels.PERSONAL, state.slackToken);
-      await KF.sendSlackAlert(`${ domainPagesInnerHtml[0].innerHtml}`,slackChannels.PERSONAL, state.slackToken);
-logToCloudWatch(`${ domainPagesInnerHtml[0].innerHtml}`)
-      await KF.sendSlackAlert('Ignore list ',slackChannels.PERSONAL, state.slackToken);
-      await KF.sendSlackAlert(`${ ignoreList}`,slackChannels.PERSONAL, state.slackToken);
-logToCloudWatch(`${ ignoreList}`)
+    //  await KF.sendSlackAlert('detected errors ',slackChannels.PERSONAL, state.slackToken);
+    //  await KF.sendSlackAlert(`${ domainPagesInnerHtml[0].detectedErrors}`,slackChannels.PERSONAL, state.slackToken);
+
+     //  await KF.sendSlackAlert('Inner html ',slackChannels.PERSONAL, state.slackToken);
+     // await KF.sendSlackAlert(`${ domainPagesInnerHtml[0].innerHtml}`,slackChannels.PERSONAL, state.slackToken);
+
+     // await KF.sendSlackAlert('Ignore list ',slackChannels.PERSONAL, state.slackToken);
+    //  await KF.sendSlackAlert(`${ ignoreList}`,slackChannels.PERSONAL, state.slackToken);
+
       await KF.sendSlackAlert('lowerExcludedWords',slackChannels.PERSONAL, state.slackToken);
-      await KF.sendSlackAlert(`${ lowerExcludedWords}`,slackChannels.PERSONAL, state.slackToken);
+      await KF.sendSlackAlert(`${ Array.from(lowerExcludedWords).join(", ") }`, slackChannels.PERSONAL, state.slackToken);
       
 
 
@@ -227,11 +227,10 @@ export   function filterOutIrrelevantErrors(gptErrorDetectionResults: gptProposa
 }
 
 
-export   function extractMisspelledWords(text: string, excludedWords: string[]): string[] {
+export function extractMisspelledWords(text: string, excludedWords: string[]): string[] {
     const lowerExcludedWords = new Set(excludedWords.map(word => word.toLowerCase()));
 
-     
-     // Remove HTML tags
+    // Remove HTML tags
     text = text.replace(/<[^>]+>/g, ' ');
 
     // Function to split words with multiple capital letters (e.g., "TotalAV" → ["Total", "AV"])
@@ -240,14 +239,40 @@ export   function extractMisspelledWords(text: string, excludedWords: string[]):
     };
 
     // Process each word: split by spaces, then split merged words
-    const words = text
+    let words = text
         .split(/\s+/) // Split by spaces
         .flatMap(splitByCapitalLetters) // Further split words with multiple capital letters
-        .filter(word => /^[A-Za-z]+$/.test(word)) // Keep only valid words
-        .filter(word => !lowerExcludedWords.has(word.toLowerCase())) // Exclude known words
-        .filter(word => spellchecker.isMisspelled(word)); // Check for misspellings
+        .filter(word => /^[A-Za-z]+$/.test(word)); // Keep only valid words
 
-    return [...new Set(words)]; // Remove duplicates
+    logToCloudWatch(`Extracted words before filtering: ${words.join(", ")}`);
+
+    // Filter out ignored words
+    words = words.filter(word => {
+        const lowerWord = word.toLowerCase();
+        const isExcluded = lowerExcludedWords.has(lowerWord);
+        
+        return !isExcluded;
+    });
+  // Define additional words to exclude from final errors
+  const additionalExcludedWords = new Set([
+    "apps", "uninstalled", "app", "antivirus", "ransomware", 
+    "malware", "cryptocurrency", "bitcoin", "avira"
+]);
+
+// Check for misspellings and exclude additional words
+const misspelledWords = words.filter(word => {
+    const isMisspelled = spellchecker.isMisspelled(word);
+    const shouldExclude = additionalExcludedWords.has(word.toLowerCase());
+
+    logToCloudWatch(`Checking misspelling: ${word} -> ${isMisspelled ? "❌ Misspelled" : "✅ Correct"}${shouldExclude ? " (Excluded manually)" : ""}`);
+
+    return isMisspelled && !shouldExclude;
+});
+
+
+    logToCloudWatch(`Final misspelled words: ${misspelledWords.join(", ")}`);
+
+    return [...new Set(misspelledWords)]; // Remove duplicates
 }
 
 
