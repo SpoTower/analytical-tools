@@ -15,6 +15,8 @@ import path from 'path';
 const cheerio = require('cheerio');
 const { Readability } = require('@mozilla/readability');
 const { JSDOM } = require('jsdom');
+import * as KF from '@spotower/my-utils';
+import {slackChannels}  from './consts';
 
 export async function fetchGoogleAds(domain: Domain, companies: Company[], tokens:any ) {
     logToCloudWatch(`Entering fetchGoogleAds, fetching google ads for domain ${domain.id}`);
@@ -80,10 +82,7 @@ export async function fetchGoogleAds(domain: Domain, companies: Company[], token
 
 export function filterOutTextlessAds(result: AnyObject[]) {
     return result?.map((r: AnyObject) => ({...r,ads: r.ads?.filter(ad => ad.changeEvent?.newResource?.ad?.responsiveSearchAd) || []}))
-    
-        
-        
-    
+ 
 }
 
 export function extractInfoFromGoogleAdsError(error: any) {
@@ -136,58 +135,51 @@ export async function   processInBatches(tasks: (() => Promise<any>)[], batchSiz
   }
 
 
-  export async function fetchWebsitesInnerHtmlAndFindErrors(domains: Domain[], ignoreList: string[]): Promise<void> {
-    logToCloudWatch('Entering fetchAndLogWebsiteErrors');
-
+  export async function fetchWebsitesInnerHtmlAndFindErrors(domains: Domain[], ignoreList: string[], state:any): Promise<any[]> {
+    logToCloudWatch('Entering fetchWebsitesInnerHtml');
+    let domainPagesInnerHtml: websiteText[] = [];
+  
     for (const domain of domains) {  
-        logToCloudWatch(`Processing domain: ${domain.hostname}`);
-
-        for (const path of domain.paths) {
-            const url = `https://${domain.hostname}${path}`;
-
-            logToCloudWatch(`Fetching ${url}`);
-            try {
-                const { data: html } = await axios.get(url, {
-                    headers: {
-                        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
-                        'Accept-Language': 'en-US,en;q=0.9'
-                    }
-                });
-
-                // Extract visible text from the page
-                const $ = cheerio.load(html);
-                $('script, style, noscript, meta, link, head, iframe, [aria-hidden="true"], [style*="display:none"], [style*="visibility:hidden"]').remove();
-                let visibleText = $('body').text().replace(/\s+/g, ' ').trim();
-
-                // Process and filter words
-                const lowerExcludedWords = new Set(ignoreList.map(word => word.toLowerCase()));
-                visibleText = visibleText.replace(/<[^>]+>/g, ' ');
-
-                const splitByCapitalLetters = (word: string): string[] => {
-                    return word.split(/(?=[A-Z][a-z])/);
-                };
-
-                let words = visibleText
-                    .split(/\s+/)
-                    .flatMap(splitByCapitalLetters)
-                    .filter(word => /^[A-Za-z]+$/.test(word))
-                    .filter(word => !lowerExcludedWords.has(word.toLowerCase()))
-                    .filter(word => spellchecker.isMisspelled(word));
-
-
-                    words.filter(word => spellchecker.isMisspelled(word));
-                // Log results
-                if(words)
-                      logToCloudWatch(`Misspelled words in ${url}: ${[...new Set(words)]}`);
-
-                
-
-            } catch (error) {
-                logToCloudWatch(`Failed to fetch ${url}: ${error.message}`, 'ERROR', 'utils');
+         
+            for (const path of domain.paths.slice(0,1)) {
+            //  const url = `https://${domain.hostname}${path}`;
+            const url = 'https://top10antivirusexperts.com/mac-cleaner-m/'
+                const { data: html } = await axios.get(url);
+                const dom = new JSDOM(html, { url });
+                const article = new Readability(dom.window.document).parse();
+                domainPagesInnerHtml.push({ domain: domain.id, fullPath: url, innerHtml: article.textContent });
             }
-        }
+        
+
+      // Process all domain (single domain) paths inner html **per domain** before moving to the next
+      domainPagesInnerHtml.forEach(webSiteText => {   webSiteText.detectedErrors = extractMisspelledWords(webSiteText.innerHtml, ignoreList);  });
+      const lowerExcludedWords = new Set(ignoreList.map(word => word.toLowerCase()));
+
+      await KF.sendSlackAlert('detected errors ',slackChannels.PERSONAL, state.slackToken);
+      await KF.sendSlackAlert(`${ domainPagesInnerHtml[0].detectedErrors}`,slackChannels.PERSONAL, state.slackToken);
+      logToCloudWatch(`${ domainPagesInnerHtml[0].detectedErrors}`)
+      await KF.sendSlackAlert('Inner html ',slackChannels.PERSONAL, state.slackToken);
+      await KF.sendSlackAlert(`${ domainPagesInnerHtml[0].innerHtml}`,slackChannels.PERSONAL, state.slackToken);
+logToCloudWatch(`${ domainPagesInnerHtml[0].innerHtml}`)
+      await KF.sendSlackAlert('Ignore list ',slackChannels.PERSONAL, state.slackToken);
+      await KF.sendSlackAlert(`${ ignoreList}`,slackChannels.PERSONAL, state.slackToken);
+logToCloudWatch(`${ ignoreList}`)
+      await KF.sendSlackAlert('lowerExcludedWords',slackChannels.PERSONAL, state.slackToken);
+      await KF.sendSlackAlert(`${ lowerExcludedWords}`,slackChannels.PERSONAL, state.slackToken);
+      
+
+
+      domainPagesInnerHtml = domainPagesInnerHtml.filter((w) => w.detectedErrors.length > 0);
+
+     let finalDomainData = domainPagesInnerHtml.map(({ innerHtml, ...rest }) => rest);
+  
+      // Clear results for next domain
+      domainPagesInnerHtml = [];
     }
-}
+  
+    return []; // No need to return accumulated results since they're saved per domain
+  }
+  
 
 
   export async function detectErrorsWithGpt(gptKey: string, websitesInnerHtml: any,gptService: GptService,  batchSize: number): Promise<string> {
@@ -234,10 +226,12 @@ export   function filterOutIrrelevantErrors(gptErrorDetectionResults: gptProposa
 
 }
 
-export function extractMisspelledWords(text: string, excludedWords: string[]): string[] {
-    const lowerExcludedWords = excludedWords.map(word => word.toLowerCase());
 
-    // Remove HTML tags
+export   function extractMisspelledWords(text: string, excludedWords: string[]): string[] {
+    const lowerExcludedWords = new Set(excludedWords.map(word => word.toLowerCase()));
+
+     
+     // Remove HTML tags
     text = text.replace(/<[^>]+>/g, ' ');
 
     // Function to split words with multiple capital letters (e.g., "TotalAV" → ["Total", "AV"])
@@ -246,22 +240,12 @@ export function extractMisspelledWords(text: string, excludedWords: string[]): s
     };
 
     // Process each word: split by spaces, then split merged words
-    logToCloudWatch(`Processing text: ${text}`);
-    
-    let words = text
+    const words = text
         .split(/\s+/) // Split by spaces
         .flatMap(splitByCapitalLetters) // Further split words with multiple capital letters
-        .filter(word => /^[A-Za-z]+$/.test(word)); // Keep only valid words
-
-    logToCloudWatch(`Formatted words: ${words}`);
-
-    // Corrected filtering of excluded words
-    words = words.filter(word => !lowerExcludedWords.includes(word.toLowerCase()));
-    logToCloudWatch(`Excluded words removed: ${words}`);
-
-    // Check for misspellings
-    words = words.filter(word => spellchecker.isMisspelled(word));
-    logToCloudWatch(`Misspelled words: ${words}`);
+        .filter(word => /^[A-Za-z]+$/.test(word)) // Keep only valid words
+        .filter(word => !lowerExcludedWords.has(word.toLowerCase())) // Exclude known words
+        .filter(word => spellchecker.isMisspelled(word)); // Check for misspellings
 
     return [...new Set(words)]; // Remove duplicates
 }
