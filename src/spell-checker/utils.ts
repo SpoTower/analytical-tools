@@ -256,7 +256,7 @@ export function extractMisspelledWords(text: string, excludedWords: string[]): s
   // Define additional words to exclude from final errors
   const additionalExcludedWords = new Set([
     "apps", "uninstalled", "app", "antivirus", "ransomware", 
-    "malware", "cryptocurrency", "bitcoin", "avira"
+ 
 ]);
 
 // Check for misspellings and exclude additional words
@@ -264,8 +264,7 @@ const misspelledWords = words.filter(word => {
     const isMisspelled = spellchecker.isMisspelled(word);
     const shouldExclude = additionalExcludedWords.has(word.toLowerCase());
 
-    logToCloudWatch(`Checking misspelling: ${word} -> ${isMisspelled ? "❌ Misspelled" : "✅ Correct"}${shouldExclude ? " (Excluded manually)" : ""}`);
-
+ 
     return isMisspelled && !shouldExclude;
 });
 
