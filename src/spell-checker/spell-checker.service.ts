@@ -18,8 +18,7 @@ import * as KF from '@spotower/my-utils';
   import path from 'path';
    const { chromium } = require('playwright');
 import { createErrorsTable } from './utils';
-import { log } from 'console';
- 
+ import {slackChannels} from './consts';
 
 
 
@@ -74,16 +73,10 @@ export class SpellCheckerService {
      // ✅ Step 3: checking errors and storing them in JSON format
      for (const ad of (preparedAds as adsPreparedForErrorDetection[])) {
          [...ad.descriptions, ...ad.headlines].forEach((item) => {
+          
              const misspelledWords = extractMisspelledWords(item.text, googleAdsIgnoreList);
              if (misspelledWords.length > 0) {
-                 jsonData.push({
-                     resource: ad.resourceName,
-                     errors: misspelledWords,
-                     domain: ad.domain,
-                     googleAdsId: ad.googleAdsId,
-                     wholeSentence: item.text,
-                     location: ad.descriptions.includes(item) ? 'descriptions' : 'headline'
-                 });
+              jsonData.push({ resource: ad.resourceName, errors: misspelledWords, domain: ad.domain, googleAdsId: ad.googleAdsId, wholeSentence: item.text, location: ad.descriptions.includes(item) ? 'descriptions' : 'headline' });
              }
          });
      }
@@ -100,9 +93,9 @@ slackMessage += "```"; // ✅ Close the monospace block
 
 
      
-       await KF.sendSlackAlert('Google Ads Errors: ','C08EPQYR6AC', state.slackToken);
-       await KF.sendSlackAlert(slackMessage, 'C08EPQYR6AC', state.slackToken);
-       return `ads were processed by local spellchecker and sent to kidon to be sended by slack to content errors channel`;
+    await KF.sendSlackAlert('Google Ads Errors: ',process.env?.ENVIRONMENT == 'local' ? slackChannels.PERSONAL : slackChannels.CONTENT , state.slackToken);
+    await KF.sendSlackAlert(slackMessage, process.env?.ENVIRONMENT == 'local' ? slackChannels.PERSONAL : slackChannels.CONTENT, state.slackToken);
+    return `ads were processed by local spellchecker and sent to kidon to be sended by slack to content errors channel`;
   }
 
 
@@ -111,30 +104,23 @@ slackMessage += "```"; // ✅ Close the monospace block
     const state =   this.globalState.getAllState(); 
      let ignoredWords =  await this.kidonClient.raw('select * from configuration where id = ?', ['56']);
      ignoredWords = ignoredWords[0][0].values.split(',')
-     logToCloudWatch(`ignoredWords: ${ignoredWords}`,  );
+
      if(!state || !ignoredWords){ logToCloudWatch('No state/ No ignore words found'); }
          // ✅ Step 1: filter non english paths out and assign relevant paths to domains
         const englishPats =  state.paths.filter((p) => !ignoredLanguages.some(lang => p.path.includes(lang)));  //filter out non english paths
-
          // ✅ Step 2: filter out non visited domains, attach paths to each domain
+
         const weekAgo = new Date(new Date().setDate(new Date().getDate() - 7)).toISOString().split('T')[0];
-        const recentlyVisitedDomains =  await this.kidonClient('tracker_visitors').select('domain_name').where('created_at', '>', weekAgo).whereIn('utm_source', ['GOOGLE', 'BING']).distinct();
-        logToCloudWatch(`recentlyVisitedDomains length: ${recentlyVisitedDomains.length}  `); 
+        const recentlyVisitedDomains =  await this.kidonClient('tracker_visitors').select('domain_name').where('created_at', '>', weekAgo).whereIn('utm_source', ['GOOGLE', 'BING']).distinct(); 
          if(!recentlyVisitedDomains || recentlyVisitedDomains.length === 0)     logToCloudWatch('no tracker visitors Data!');
+
         const chosenDomains = domainId ? state.domains.filter((d: Domain) => d.id === domainId) : state.domains.filter(d => recentlyVisitedDomains.some(r => r.domainName === d.hostname));
         chosenDomains.forEach((domain: Domain) => {domain.paths = englishPats.filter((p: Paths) => p.domainId === domain.id).map((p: Paths) => p.path).filter((p)=> p); });  // asign paths per domain
-
          // ✅ Step 3: fetch all paths' text,   check each word for errors and send result to mail
-         await fetchWebsitesInnerHtmlAndFindErrors(chosenDomains, ignoredWords); //get inner html of websites
-          const filePath = path.join(__dirname, '../..', 'webSiteErrors.json');
-        const fileContent = fs.readFileSync(path.join(filePath), 'utf-8');
-        logToCloudWatch( `fileContent: ${fileContent}  `);
-       const slackWebsiteMessage =   createErrorsTable(fileContent)
-        
-        await KF.sendSlackAlert('Web Sites Errors: ','C08GHM3NY8K', state.slackToken);
-        await KF.sendSlackAlert(slackWebsiteMessage,'C08GHM3NY8K', state.slackToken);
-        fs.unlinkSync(filePath);
-
+         await fetchWebsitesInnerHtmlAndFindErrors(chosenDomains, ignoredWords,state); //get inner html of websites
+          
+        await KF.sendSlackAlert('Web Sites Errors: ',slackChannels.PERSONAL, state.slackToken);
+  
         return `websites were processed by local spellchecker and sent to kidon to be sended by slack to content errors channel`;
 }
  
