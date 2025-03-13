@@ -140,8 +140,7 @@ export async function   processInBatches(tasks: (() => Promise<any>)[], batchSiz
     let domainPagesInnerHtml: websiteText[] = [];
   
     for (const domain of domains) {  
-      logToCloudWatch(`Processing domain: ${domain.hostname}`);
-        
+         
             for (const path of domain.paths.slice(0,1)) {
             //  const url = `https://${domain.hostname}${path}`;
             const url = 'https://top10antivirusexperts.com/mac-cleaner-m/'
@@ -158,13 +157,13 @@ export async function   processInBatches(tasks: (() => Promise<any>)[], batchSiz
 
       await KF.sendSlackAlert('detected errors ',slackChannels.PERSONAL, state.slackToken);
       await KF.sendSlackAlert(`${ domainPagesInnerHtml[0].detectedErrors}`,slackChannels.PERSONAL, state.slackToken);
-
+      logToCloudWatch(`${ domainPagesInnerHtml[0].detectedErrors}`)
       await KF.sendSlackAlert('Inner html ',slackChannels.PERSONAL, state.slackToken);
       await KF.sendSlackAlert(`${ domainPagesInnerHtml[0].innerHtml}`,slackChannels.PERSONAL, state.slackToken);
-      
+logToCloudWatch(`${ domainPagesInnerHtml[0].innerHtml}`)
       await KF.sendSlackAlert('Ignore list ',slackChannels.PERSONAL, state.slackToken);
       await KF.sendSlackAlert(`${ ignoreList}`,slackChannels.PERSONAL, state.slackToken);
-
+logToCloudWatch(`${ ignoreList}`)
       await KF.sendSlackAlert('lowerExcludedWords',slackChannels.PERSONAL, state.slackToken);
       await KF.sendSlackAlert(`${ lowerExcludedWords}`,slackChannels.PERSONAL, state.slackToken);
       
