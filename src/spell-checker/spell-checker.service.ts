@@ -104,6 +104,7 @@ slackMessage += "```"; // ✅ Close the monospace block
     const state =   this.globalState.getAllState(); 
      let ignoredWords =  await this.kidonClient.raw('select * from configuration where id = ?', ['56']);
      ignoredWords = ignoredWords[0][0].values.split(',')
+     ignoredWords = ignoredWords.map(iw => iw.replace(/\s+/g, ''));
 
      if(!state || !ignoredWords){ logToCloudWatch('No state/ No ignore words found'); }
          // ✅ Step 1: filter non english paths out and assign relevant paths to domains
