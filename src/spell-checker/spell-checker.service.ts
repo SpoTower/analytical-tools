@@ -126,6 +126,7 @@ slackMessage += "```"; // ✅ Close the monospace block
              await KF.sendSlackAlert(message, slackChannels.PERSONAL, state.slackToken);
          }       
  
+
         return `websites were processed by local spellchecker and sent to kidon to be sended by slack to content errors channel`;
 }
  
