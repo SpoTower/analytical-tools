@@ -136,38 +136,32 @@ export async function   processInBatches(tasks: (() => Promise<any>)[], batchSiz
 
 
   export async function fetchWebsitesInnerHtmlAndFindErrors(domains: Domain[], ignoreList: string[], state:any): Promise<any[]> {
-    logToCloudWatch('Entering fetchWebsitesInnerHtml');
+   
+            logToCloudWatch('Entering fetchWebsitesInnerHtml');
     let domainPagesInnerHtml: websiteText[] = [];
   
     for (const domain of domains) {  
          
-            for (const path of domain.paths.slice(0,1)) {
-            //  const url = `https://${domain.hostname}${path}`;
-            const url = 'https://top10antivirusexperts.com/mac-cleaner-m/'
+            for (const path of domain.paths.slice(0,10)) {
+             const url = `https://${domain.hostname}${path}`;
+           // const url = 'https://top10antivirusexperts.com/mac-cleaner-m/'
+           try {
                 const { data: html } = await axios.get(url);
                 const dom = new JSDOM(html, { url });
                 const article = new Readability(dom.window.document).parse();
                 domainPagesInnerHtml.push({ domain: domain.id, fullPath: url, innerHtml: article.textContent });
+           } catch (error) {
+            
+           }
+            
             }
         
 
       // Process all domain (single domain) paths inner html **per domain** before moving to the next
       domainPagesInnerHtml.forEach(webSiteText => {   webSiteText.detectedErrors = extractMisspelledWords(webSiteText.innerHtml, ignoreList);  });
-      const lowerExcludedWords = new Set(ignoreList.map(word => word.toLowerCase()));
-
+ 
     //  await KF.sendSlackAlert('detected errors ',slackChannels.PERSONAL, state.slackToken);
-    //  await KF.sendSlackAlert(`${ domainPagesInnerHtml[0].detectedErrors}`,slackChannels.PERSONAL, state.slackToken);
-
-     //  await KF.sendSlackAlert('Inner html ',slackChannels.PERSONAL, state.slackToken);
-     // await KF.sendSlackAlert(`${ domainPagesInnerHtml[0].innerHtml}`,slackChannels.PERSONAL, state.slackToken);
-
-     // await KF.sendSlackAlert('Ignore list ',slackChannels.PERSONAL, state.slackToken);
-    //  await KF.sendSlackAlert(`${ ignoreList}`,slackChannels.PERSONAL, state.slackToken);
-
-      await KF.sendSlackAlert('lowerExcludedWords',slackChannels.PERSONAL, state.slackToken);
-      await KF.sendSlackAlert(`${ Array.from(lowerExcludedWords).join(", ") }`, slackChannels.PERSONAL, state.slackToken);
-      
-
+ 
 
       domainPagesInnerHtml = domainPagesInnerHtml.filter((w) => w.detectedErrors.length > 0);
 
@@ -178,6 +172,8 @@ export async function   processInBatches(tasks: (() => Promise<any>)[], batchSiz
     }
   
     return []; // No need to return accumulated results since they're saved per domain
+  
+
   }
   
 
@@ -248,21 +244,16 @@ export function extractMisspelledWords(text: string, excludedWords: string[]): s
     // Filter out ignored words
 
 
-    // Define additional words to exclude from final errors
-    const additionalExcludedWords = new Set([
-        "apps", "uninstalled", "app", "antivirus", "ransomware", 
-        "malware", "cryptocurrency", "bitcoin", "avira"
-    ]);
 
-    // Check for misspellings first, then exclude additional words
+
+    // apply spechecer to inner html words
     let misspelledWords = innerHtmlSeparatedWords.filter(word => spellchecker.isMisspelled(word));
 logToCloudWatch("words marked as errors by spellchecker from all the inner html words: " + JSON.stringify([...misspelledWords]));
 
+//apply ignore list to alleged errors after spellchecker
+
 let finalMisspelledWordsDbfiltered = misspelledWords.filter(word => !lowerExcludedWords.has(word.toLowerCase()));
 logToCloudWatch("words that still marked as errors after db ignore list applied: " + JSON.stringify([...finalMisspelledWordsDbfiltered]));
-
-let finalMispelledWordscodefilteres = finalMisspelledWordsDbfiltered.filter(word => !additionalExcludedWords.has(word.toLowerCase()));
-logToCloudWatch("words that still marked as errors after code ignore list applied: " + JSON.stringify([...finalMispelledWordscodefilteres]));
 
 
     return [...new Set(misspelledWords)]; // Remove duplicates
