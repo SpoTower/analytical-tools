@@ -229,6 +229,7 @@ export   function filterOutIrrelevantErrors(gptErrorDetectionResults: gptProposa
 
 export function extractMisspelledWords(text: string, excludedWords: string[]): string[] {
     const lowerExcludedWords = new Set(excludedWords.map(word => word.toLowerCase()));
+    logToCloudWatch("lower ignore list words from db: " + JSON.stringify([...lowerExcludedWords]));
 
     // Remove HTML tags
     text = text.replace(/<[^>]+>/g, ' ');
@@ -239,37 +240,30 @@ export function extractMisspelledWords(text: string, excludedWords: string[]): s
     };
 
     // Process each word: split by spaces, then split merged words
-    let words = text
+    let innerHtmlSeparatedWords = text
         .split(/\s+/) // Split by spaces
         .flatMap(splitByCapitalLetters) // Further split words with multiple capital letters
         .filter(word => /^[A-Za-z]+$/.test(word)); // Keep only valid words
 
-    logToCloudWatch(`Extracted words before filtering: ${words.join(", ")}`);
-
     // Filter out ignored words
-    words = words.filter(word => {
-        const lowerWord = word.toLowerCase();
-        const isExcluded = lowerExcludedWords.has(lowerWord);
-        
-        return !isExcluded;
-    });
-  // Define additional words to exclude from final errors
-  const additionalExcludedWords = new Set([
-    "apps", "uninstalled", "app", "antivirus", "ransomware", 
- 
-]);
-
-// Check for misspellings and exclude additional words
-const misspelledWords = words.filter(word => {
-    const isMisspelled = spellchecker.isMisspelled(word);
-    const shouldExclude = additionalExcludedWords.has(word.toLowerCase());
-
- 
-    return isMisspelled && !shouldExclude;
-});
 
 
-    logToCloudWatch(`Final misspelled words: ${misspelledWords.join(", ")}`);
+    // Define additional words to exclude from final errors
+    const additionalExcludedWords = new Set([
+        "apps", "uninstalled", "app", "antivirus", "ransomware", 
+        "malware", "cryptocurrency", "bitcoin", "avira"
+    ]);
+
+    // Check for misspellings first, then exclude additional words
+    let misspelledWords = innerHtmlSeparatedWords.filter(word => spellchecker.isMisspelled(word));
+logToCloudWatch("words marked as errors by spellchecker from all the inner html words: " + JSON.stringify([...misspelledWords]));
+
+let finalMisspelledWordsDbfiltered = misspelledWords.filter(word => !lowerExcludedWords.has(word.toLowerCase()));
+logToCloudWatch("words that still marked as errors after db ignore list applied: " + JSON.stringify([...finalMisspelledWordsDbfiltered]));
+
+let finalMispelledWordscodefilteres = finalMisspelledWordsDbfiltered.filter(word => !additionalExcludedWords.has(word.toLowerCase()));
+logToCloudWatch("words that still marked as errors after code ignore list applied: " + JSON.stringify([...finalMispelledWordscodefilteres]));
+
 
     return [...new Set(misspelledWords)]; // Remove duplicates
 }
