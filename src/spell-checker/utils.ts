@@ -253,7 +253,7 @@ logToCloudWatch("words that still marked as errors after db ignore list applied:
 logToCloudWatch("lower   list words from db: " + JSON.stringify([...lowerExcludedWords]));
 
 
-    return [...new Set(misspelledWords)]; // Remove duplicates
+    return [...new Set(finalMisspelledWordsDbfiltered)]; // Remove duplicates
 }
 
 
