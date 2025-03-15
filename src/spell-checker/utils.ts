@@ -140,10 +140,10 @@ export async function   processInBatches(tasks: (() => Promise<any>)[], batchSiz
 
     let finalDomainData: websiteText[] = []; // Accumulate results for all domains
 
-    for (const domain of domains.slice(0,10)) {  
+    for (const domain of domains.slice(0,20)) {  
         let domainPagesInnerHtml: websiteText[] = []; // Store results per domain
 
-        for (const path of domain.paths.slice(0,10)) {
+        for (const path of domain.paths.slice(0,20)) {
             const url = `https://${domain.hostname}${path}`;
             try {
                 const { data: html } = await axios.get(url);
@@ -275,37 +275,22 @@ export function saveResults(results: any[]) {
     fs.writeFileSync(filePath, JSON.stringify(newData, null, 2), 'utf-8');
 }
 
- export function createErrorsTable(fileContent): any {
-    let slackWebsiteMessage = "```\n"; // Start code block
-    slackWebsiteMessage += "Domain  | Full Path                                       | Detected Errors \n";
-    slackWebsiteMessage += "--------|------------------------------------------------|----------------\n";
-    
-  // ✅ Add each row formatted properly
-  const websiteErrors = JSON.parse(fileContent); // Read saved JSON file
+export function createErrorsTable(fileContent): string[] {
+    const websiteErrors = JSON.parse(fileContent);
+    const domainTables = new Map();
 
-  websiteErrors.forEach((error) => {
-    let errorList = error.detectedErrors.join(", ");
-
-    // If error list is too long, break it into multiple lines
-    if (errorList.length > 50) {
-        const words = errorList.split(", ");
-        errorList = "";
-        let line = "";
-
-        for (let word of words) {
-            if ((line + word).length > 50) {
-                errorList += line + "\n\t\t\t\t\t\t\t\t\t  "; // Add a tabbed indent for continuation
-                line = word + ", ";
-            } else {
-                line += word + ", ";
-            }
+    websiteErrors.forEach((error) => {
+        const domainId = error.domain;
+        if (!domainTables.has(domainId)) {
+            domainTables.set(domainId, [
+                "```",
+                "Domain  | Full Path                                       | Detected Errors ",
+                "--------|------------------------------------------------|----------------"
+            ]);
         }
-        errorList += line.trimEnd(); // Add the last line
-    }
+        let errorList = error.detectedErrors.join(", ");
+        domainTables.get(domainId).push(`${error.domain.toString().padEnd(8)} | ${error.fullPath.padEnd(48)} | ${errorList}`);
+    });
 
-    slackWebsiteMessage += `${error.domain.toString().padEnd(8)} | ${error.fullPath.padEnd(48)} | ${errorList}\n`;
-});    
-    slackWebsiteMessage += "```"; // ✅ Close the monospace block
-
-    return slackWebsiteMessage;
- }
+    return [...domainTables.values()].map(table => table.join("\n") + "```");
+}
