@@ -250,6 +250,7 @@ logToCloudWatch("words marked as errors by spellchecker from all the inner html 
 
 let finalMisspelledWordsDbfiltered = misspelledWords.filter(word => !lowerExcludedWords.has(word.toLowerCase()));
 logToCloudWatch("words that still marked as errors after db ignore list applied: " + JSON.stringify([...finalMisspelledWordsDbfiltered]));
+logToCloudWatch("lower   list words from db: " + JSON.stringify([...lowerExcludedWords]));
 
 
     return [...new Set(misspelledWords)]; // Remove duplicates
