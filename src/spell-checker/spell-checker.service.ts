@@ -123,6 +123,7 @@ slackMessage += "```"; // ✅ Close the monospace block
          await KF.sendSlackAlert('Web Sites Errors: ',slackChannels.PERSONAL, state.slackToken);
          await KF.sendSlackAlert(slackMessage,slackChannels.PERSONAL, state.slackToken);
 
+
         return `websites were processed by local spellchecker and sent to kidon to be sended by slack to content errors channel`;
 }
  
