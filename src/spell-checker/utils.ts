@@ -140,10 +140,10 @@ export async function   processInBatches(tasks: (() => Promise<any>)[], batchSiz
 
     let finalDomainData: websiteText[] = []; // Accumulate results for all domains
 
-    for (const domain of domains.slice(0,20)) {  
+    for (const domain of domains) {  
         let domainPagesInnerHtml: websiteText[] = []; // Store results per domain
 
-        for (const path of domain.paths.slice(0,20)) {
+        for (const path of domain.paths) {
             const url = `https://${domain.hostname}${path}`;
             try {
                 const { data: html } = await axios.get(url);
