@@ -135,47 +135,44 @@ export async function   processInBatches(tasks: (() => Promise<any>)[], batchSiz
   }
 
 
-  export async function fetchWebsitesInnerHtmlAndFindErrors(domains: Domain[], ignoreList: string[], state:any): Promise<any[]> {
-   
-            logToCloudWatch('Entering fetchWebsitesInnerHtml');
-    let domainPagesInnerHtml: websiteText[] = [];
-  
-    for (const domain of domains) {  
-         
-            for (const path of domain.paths.slice(0,10)) {
-             const url = `https://${domain.hostname}${path}`;
-           // const url = 'https://top10antivirusexperts.com/mac-cleaner-m/'
-           try {
+  export async function fetchWebsitesInnerHtmlAndFindErrors(domains: Domain[], ignoreList: string[], state: any): Promise<any[]> {
+    logToCloudWatch('Entering fetchWebsitesInnerHtml');
+
+    let finalDomainData: websiteText[] = []; // Accumulate results for all domains
+
+    for (const domain of domains.slice(0,10)) {  
+        let domainPagesInnerHtml: websiteText[] = []; // Store results per domain
+
+        for (const path of domain.paths.slice(0,10)) {
+            const url = `https://${domain.hostname}${path}`;
+            try {
                 const { data: html } = await axios.get(url);
                 const dom = new JSDOM(html, { url });
                 const article = new Readability(dom.window.document).parse();
                 domainPagesInnerHtml.push({ domain: domain.id, fullPath: url, innerHtml: article.textContent });
-           } catch (error) {
-            
-           }
-            
+            } catch (error) {
+                logToCloudWatch(`Failed to fetch ${url}: ${error.message}`);
             }
-        
+        }
 
-      // Process all domain (single domain) paths inner html **per domain** before moving to the next
-      domainPagesInnerHtml.forEach(webSiteText => {   webSiteText.detectedErrors = extractMisspelledWords(webSiteText.innerHtml, ignoreList);  });
- 
-    //  await KF.sendSlackAlert('detected errors ',slackChannels.PERSONAL, state.slackToken);
- 
+        // Process inner HTML for each domain before moving to the next one. attach detected errors field to each object that represent path in this array
+        domainPagesInnerHtml.forEach(webSiteText => {
+            webSiteText.detectedErrors = extractMisspelledWords(webSiteText.innerHtml, ignoreList);
+        });
 
-      domainPagesInnerHtml = domainPagesInnerHtml.filter((w) => w.detectedErrors.length > 0);
+        // Filter out pages with no detected errors
+        domainPagesInnerHtml = domainPagesInnerHtml.filter(w => w.detectedErrors.length > 0);
 
-     let finalDomainData = domainPagesInnerHtml.map(({ innerHtml, ...rest }) => rest);
-  
-      // Clear results for next domain
-      domainPagesInnerHtml = [];
+        // Store only relevant results (excluding innerHtml)
+        finalDomainData.push(...domainPagesInnerHtml);
+
+        // Reset per-domain container for the next domain
+        domainPagesInnerHtml = [];
     }
-  
-    return []; // No need to return accumulated results since they're saved per domain
-  
 
-  }
-  
+    return finalDomainData; // Return accumulated results for all domains
+}
+
 
 
   export async function detectErrorsWithGpt(gptKey: string, websitesInnerHtml: any,gptService: GptService,  batchSize: number): Promise<string> {
@@ -225,8 +222,7 @@ export   function filterOutIrrelevantErrors(gptErrorDetectionResults: gptProposa
 
 export function extractMisspelledWords(text: string, excludedWords: string[]): string[] {
     const lowerExcludedWords = new Set(excludedWords.map(word => word.toLowerCase()));
-    logToCloudWatch("lower ignore list words from db: " + JSON.stringify([...lowerExcludedWords]));
-
+ 
     // Remove HTML tags
     text = text.replace(/<[^>]+>/g, ' ');
 
@@ -278,7 +274,7 @@ export function saveResults(results: any[]) {
     fs.writeFileSync(filePath, JSON.stringify(newData, null, 2), 'utf-8');
 }
 
- export function createErrorsTable(fileContent): string {
+ export function createErrorsTable(fileContent): any {
     let slackWebsiteMessage = "```\n"; // Start code block
     slackWebsiteMessage += "Domain  | Full Path                                       | Detected Errors \n";
     slackWebsiteMessage += "--------|------------------------------------------------|----------------\n";
