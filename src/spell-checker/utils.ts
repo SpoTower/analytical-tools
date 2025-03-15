@@ -229,6 +229,7 @@ export   function filterOutIrrelevantErrors(gptErrorDetectionResults: gptProposa
 
 export function extractMisspelledWords(text: string, excludedWords: string[]): string[] {
     const lowerExcludedWords = new Set(excludedWords.map(word => word.toLowerCase()));
+    logToCloudWatch("lowerExcludedWords:" +   Array.from(lowerExcludedWords));
 
     // Remove HTML tags
     text = text.replace(/<[^>]+>/g, ' ');
@@ -244,8 +245,7 @@ export function extractMisspelledWords(text: string, excludedWords: string[]): s
         .flatMap(splitByCapitalLetters) // Further split words with multiple capital letters
         .filter(word => /^[A-Za-z]+$/.test(word)); // Keep only valid words
 
-    logToCloudWatch(`Extracted words before filtering: ${words.join(", ")}`);
-
+ 
     // Filter out ignored words
     words = words.filter(word => {
         const lowerWord = word.toLowerCase();
@@ -253,10 +253,13 @@ export function extractMisspelledWords(text: string, excludedWords: string[]): s
         
         return !isExcluded;
     });
+
+    logToCloudWatch("Allegedly erroneous words after DB-based filtering: " + JSON.stringify([...words]));
+
   // Define additional words to exclude from final errors
   const additionalExcludedWords = new Set([
     "apps", "uninstalled", "app", "antivirus", "ransomware", 
- 
+    "malware", "cryptocurrency", "bitcoin", "avira"
 ]);
 
 // Check for misspellings and exclude additional words
