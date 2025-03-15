@@ -118,11 +118,12 @@ slackMessage += "```"; // ✅ Close the monospace block
         const chosenDomains = domainId ? state.domains.filter((d: Domain) => d.id === domainId) : state.domains.filter(d => recentlyVisitedDomains.some(r => r.domainName === d.hostname));
         chosenDomains.forEach((domain: Domain) => {domain.paths = englishPats.filter((p: Paths) => p.domainId === domain.id).map((p: Paths) => p.path).filter((p)=> p); });  // asign paths per domain
          // ✅ Step 3: fetch all paths' text,   check each word for errors and send result to mail
-          await fetchWebsitesInnerHtmlAndFindErrors(chosenDomains, ignoredWords,state); //get inner html of websites
-          
-        await KF.sendSlackAlert('Web Sites Errors: ',slackChannels.PERSONAL, state.slackToken);
-  
- 
+         const detectedErrors =    await fetchWebsitesInnerHtmlAndFindErrors(chosenDomains, ignoredWords,state); //get inner html of websites
+         const slackMessage = createErrorsTable(JSON.stringify(detectedErrors));
+         await KF.sendSlackAlert('Web Sites Errors: ',slackChannels.PERSONAL, state.slackToken);
+         await KF.sendSlackAlert(slackMessage,slackChannels.PERSONAL, state.slackToken);
+
+
         return `websites were processed by local spellchecker and sent to kidon to be sended by slack to content errors channel`;
 }
  
