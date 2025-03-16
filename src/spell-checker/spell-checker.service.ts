@@ -120,10 +120,10 @@ slackMessage += "```"; // ✅ Close the monospace block
          // ✅ Step 3: fetch all paths' text,   check each word for errors and send result to mail
          const detectedErrors =    await fetchWebsitesInnerHtmlAndFindErrors(chosenDomains, ignoredWords,state); //get inner html of websites
          const domainMessages = createErrorsTable(JSON.stringify(detectedErrors));
-         await KF.sendSlackAlert('Web Sites Errors:', slackChannels.PERSONAL, state.slackToken);
+         await KF.sendSlackAlert('Web Sites Errors:', slackChannels.CONTENT, state.slackToken);
          
          for (const message of domainMessages) {
-             await KF.sendSlackAlert(message, slackChannels.PERSONAL, state.slackToken);
+             await KF.sendSlackAlert(message, slackChannels.CONTENT, state.slackToken);
          }       
  
         return `websites were processed by local spellchecker and sent to kidon to be sended by slack to content errors channel`;
