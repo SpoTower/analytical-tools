@@ -1,7 +1,7 @@
 import { Injectable,Logger,Inject } from '@nestjs/common';
 import { CreateSpellCheckerDto } from './dto/create-spell-checker.dto';
 import { UpdateSpellCheckerDto } from './dto/update-spell-checker.dto';
- import {fetchGoogleAds,filterOutTextlessAds,prepareAdsForErrorChecking,fetchWebsitesInnerHtmlAndFindErrors, detectErrorsWithGpt, detectErrorsWithGpt2 } from './utils';
+ import {fetchGoogleAds,filterOutTextlessAds,prepareAdsForErrorChecking,fetchWebsitesInnerHtmlAndFindErrors, extractNonCapitalLetterWords} from './utils';
 import { GlobalStateService } from 'src/globalState/global-state.service';
  const logger = new Logger('analytical-tools.spellchecker');
   import { logToCloudWatch } from 'src/logger'; 
@@ -11,7 +11,7 @@ import { GlobalStateService } from 'src/globalState/global-state.service';
  import {googleAds } from './interfaces';
  export {emailSubjects} from './consts';
 import * as KF from '@spotower/my-utils';
-  import {googleAdsIgnoreList,ignoredLanguages} from './ignoreWords';
+  import {googleAdsIgnoreList,ignoredLanguages,googleAdsNonCapitalLettersIgnoreList} from './ignoreWords';
   import { KIDON_CONNECTION } from 'src/knex/knex.module';
   import { Knex } from 'knex';
   import fs from 'fs';
@@ -32,70 +32,87 @@ export class SpellCheckerService {
 
 
  
-  async findAndFixGoogleAdsGrammaticalErrors( batchSize: number, domainId?: number, sliceSize?: number,   ) {
+  async findAndFixGoogleAdsGrammaticalErrors(batchSize: number, domainId?: number, sliceSize?: number) {
     logToCloudWatch('entering findAndFixGoogleAdsGrammaticalErrors');
 
-    const state = this.globalState.getAllState(); if(!state) return 'No state found';
-    let domainsToProcess = state.domains.filter((domain : Domain) => domain.googleAdsId).filter((domain: Domain) => !domainId || domain.id === domainId);; // Only domains with googleAdsId
-    domainsToProcess = domainsToProcess.slice(0, sliceSize || domainsToProcess.length);  
+    const state = this.globalState.getAllState();
+    if (!state) return 'No state found';
 
-// ✅ Step 0: get google token of companies
-    const allTokens = [];
+    // Filter and slice domains
+    let domainsToProcess = state.domains.filter((domain: Domain) => domain.googleAdsId).filter((domain: Domain) => !domainId || domain.id === domainId) .slice(0, sliceSize || Infinity);
 
-    for (const c of state.companies) {
-        const token = await KF.getGoogleAuthToken(c);
-        allTokens.push({ company: c.name, token });
+    // Get Google tokens for all companies
+    const allTokens = await Promise.all(
+      state.companies.map(async (c) => ({
+        company: c.name,
+        token: await KF.getGoogleAuthToken(c)
+      }))
+    );
+
+    // Fetch Google Ads in batches
+    const fetchedAdsResults: googleAds[] = await processInBatches(
+      domainsToProcess.map((domain: Domain) => async () => {
+        try {
+          return { domain, ads: await fetchGoogleAds(domain, state.companies, allTokens) };
+        } catch (error) {
+          logToCloudWatch(`❌ Error fetching Google Ads for domain ${domain.id}: ${error.message}`, "ERROR");
+          return { domain, ads: [] };
+        }
+      }),
+      batchSize
+    );
+
+    // Filter and prepare ads
+    const textfullAds = filterOutTextlessAds(fetchedAdsResults.filter(f => f.ads.length > 0));
+    if (!textfullAds?.length) {
+      await KF.sendSlackAlert('Google Ads Errors: No textfull ads found', 'C08EPQYR6AC', state.slackToken);
+      return 'No textfull ads found';
     }
+
+    const preparedAds = prepareAdsForErrorChecking(textfullAds);
+    const errors = {spelling: [] as any[],capitalization: [] as any[] };
+      
+
+    // Check for errors
+    for (const ad of preparedAds as adsPreparedForErrorDetection[]) {
+      [...ad.descriptions, ...ad.headlines].forEach((item) => {
+        const location = ad.descriptions.includes(item) ? 'descriptions' : 'headline';
+        const baseError = {resource: ad.resourceName,domain: ad.domain,googleAdsId: ad.googleAdsId,wholeSentence: item.text,location};
+
+        const misspelledWords = extractMisspelledWords(item.text, googleAdsIgnoreList);
+        if (misspelledWords.length > 0)  errors.spelling.push({ ...baseError, errors: misspelledWords });
+         
+        const nonCapitalWords = extractNonCapitalLetterWords(item.text, googleAdsNonCapitalLettersIgnoreList).filter(c => !c.includes('CUSTOM'));
+        if (nonCapitalWords.length > 0) errors.capitalization.push({ ...baseError, errors: nonCapitalWords });   
+        
+      });
+    }
+
+    // Format and send Slack messages
+    const formatSlackTable = (errors: any[], title: string) => {
+      const header = "resource                                        | errors   |        domain              | googleAdsId  | wholeSentence                                    | location \n" +
+                    "------------------------------------------------|----------|----------------------------|--------------|--------------------------------------------------|-----------\n";
+      
+      const rows = errors.map(ad => 
+        `${ad.resource.padEnd(38)}| ${ad.errors.join(",").padEnd(8)}| ${ad.domain.padEnd(30)}| ${ad.googleAdsId.toString().padEnd(12)}| ${ad.wholeSentence.padEnd(50)}| ${ad.location}`
+      ).join('\n');
+
+      return `\`\`\`${header}${rows}\`\`\``;
+    };
+
+  
     
- 
+    if (errors.spelling.length > 0) {
+      await KF.sendSlackAlert('Google Ads Content Errors:', slackChannels.PERSONAL, state.slackToken);
+      await KF.sendSlackAlert(formatSlackTable(errors.spelling, 'Spelling Errors'), slackChannels.PERSONAL, state.slackToken);
+    }
 
-     // ✅ Step 1: Batch Fetch Google Ads per domain of Domains
-     const googleAdsPromiseRequests = domainsToProcess.map((domain: Domain) => async () => {
-         try {
-             return {domain, ads: await fetchGoogleAds(domain, state.companies, allTokens)};
-         } catch (error) {
-             logToCloudWatch(`❌ Error fetching Google Ads for domain ${domain.id}: ${error.message}`, "ERROR");
-             return { domain, ads: [] };  
-         }
-     });
-      const fetchedAdsResults : googleAds[] = await processInBatches(googleAdsPromiseRequests, batchSize);
+    if (errors.capitalization.length > 0) {
+      await KF.sendSlackAlert('Google Ads non-Capital words Errors:', slackChannels.PERSONAL, state.slackToken);
+      await KF.sendSlackAlert(formatSlackTable(errors.capitalization, 'Capitalization Errors'), slackChannels.PERSONAL, state.slackToken);
+    }
 
-    // ✅ Step 2: filtering out textless ads and preparing the ads for grammar checking
-     const fetchedAdsFiltered = fetchedAdsResults.filter((f)=> f.ads.length > 0)
-     const textfullAds = filterOutTextlessAds(fetchedAdsFiltered)
-     if(!textfullAds || textfullAds.length === 0){
-      await KF.sendSlackAlert('Google Ads Errors: No textfull ads found','C08EPQYR6AC', state.slackToken);
-      return 'No textfull ads found'
-     } 
-     let preparedAds = prepareAdsForErrorChecking(textfullAds);  // row per domain+path
-     let jsonData = []; // ✅ Change CSV string to a JSON array
-
-     // ✅ Step 3: checking errors and storing them in JSON format
-     for (const ad of (preparedAds as adsPreparedForErrorDetection[])) {
-         [...ad.descriptions, ...ad.headlines].forEach((item) => {
-          
-             const misspelledWords = extractMisspelledWords(item.text, googleAdsIgnoreList);
-             if (misspelledWords.length > 0) {
-              jsonData.push({ resource: ad.resourceName, errors: misspelledWords, domain: ad.domain, googleAdsId: ad.googleAdsId, wholeSentence: item.text, location: ad.descriptions.includes(item) ? 'descriptions' : 'headline' });
-             }
-         });
-     }
-// ✅ Step 4: Format data into a Slack-friendly table
-let slackMessage = "```" + 
-  "resource                               | errors   | domain                         | googleAdsId  | wholeSentence                                      | location \n" +
-  "---------------------------------------|---------|--------------------------------|--------------|--------------------------------------------------|-----------\n";
-
-jsonData.forEach((ad) => {
-    slackMessage += `${ad.resource.padEnd(38)}| ${ad.errors.join(",").padEnd(8)}| ${ad.domain.padEnd(30)}| ${ad.googleAdsId.toString().padEnd(12)}| ${ad.wholeSentence.padEnd(50)}| ${ad.location}\n`;
-});
-
-slackMessage += "```"; // ✅ Close the monospace block
-
-
-     
-    await KF.sendSlackAlert('Google Ads Errors: ',process.env?.ENVIRONMENT == 'local' ? slackChannels.PERSONAL : slackChannels.CONTENT , state.slackToken);
-    await KF.sendSlackAlert(slackMessage, process.env?.ENVIRONMENT == 'local' ? slackChannels.PERSONAL : slackChannels.CONTENT, state.slackToken);
-    return `ads were processed by local spellchecker and sent to kidon to be sended by slack to content errors channel`;
+    return 'ads were processed by local spellchecker and sent to kidon to be sended by slack to content errors channel';
   }
 
 

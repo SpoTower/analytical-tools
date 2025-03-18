@@ -244,20 +244,36 @@ export function extractMisspelledWords(text: string, excludedWords: string[]): s
 
     // apply spechecer to inner html words
     let misspelledWords = innerHtmlSeparatedWords.filter(word => spellchecker.isMisspelled(word));
-logToCloudWatch("words marked as errors by spellchecker from all the inner html words: " + JSON.stringify([...misspelledWords]));
-
+ 
 //apply ignore list to alleged errors after spellchecker
 
 let finalMisspelledWordsDbfiltered = misspelledWords.filter(word => !lowerExcludedWords.has(word.toLowerCase()));
-logToCloudWatch("words that still marked as errors after db ignore list applied: " + JSON.stringify([...finalMisspelledWordsDbfiltered]));
-logToCloudWatch("lower   list words from db: " + JSON.stringify([...lowerExcludedWords]));
-
+ 
 
     return [...new Set(finalMisspelledWordsDbfiltered)]; // Remove duplicates
 }
 
+ 
 
+ 
+export function extractNonCapitalLetterWords(text: string, excludedWords: string[]): string[] {
+    try {
+        
+ 
+            const extractedWords = text
+        .replace(/[^a-zA-Z\s]/g, '') // Remove non-letter characters
+        .split(/\s+/)
+        .filter(word => Boolean(word))
+        .filter(word => 
+            word[0] !== word[0].toUpperCase() && // Check if first letter is capital
+            (!excludedWords.includes(word.trim())  ) // Ensure the word is not in excludedWords
+  );
+  return extractedWords;
+    } catch (error) {
+        console.log(error)
+    }
 
+}
  
 export function saveResults(results: any[]) {
     const filePath = path.join(__dirname, '../..', 'webSiteErrors.json');
