@@ -50,6 +50,7 @@ export class GoogleService {
       logger.log('conversion action :', result.data);
       return result.data;
     } catch (error) {
+      logger.log(error.response?.data?.error?.message ||   error.response?.data?.error?.details?.[0]?.errors?.[0]?.message || error.response?.data?.error?.message)
       if (error.response?.data?.error?.message) {
         const errorMessage = error.response?.data?.error?.details?.[0]?.errors?.[0]?.message;
         if(errorMessage)     
@@ -62,6 +63,7 @@ export class GoogleService {
 }  
 
 async updateConversionNamesKidonTable(conversionActions:any[],creationResult:any, domainId:number){
+  logger.log('entering updateConversionNamesKidonTable');
   try {
     if (conversionActions.length === creationResult.results.length) {
       const dataToInsert = conversionActions.map((c, index) => ({
@@ -76,6 +78,7 @@ async updateConversionNamesKidonTable(conversionActions:any[],creationResult:any
       throw new Error('Error updating conversion names in kidon table: mismatch between conversion actions and creation results )');
     } 
   } catch (error) {
+    logger.error(`Error updating conversion names in kidon table: ${error.message}`);
     throw new Error(`Error updating conversion names in kidon table: ${error.message}`);
   }
 }
