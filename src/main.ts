@@ -9,8 +9,8 @@ async function bootstrap() {
   app.enableCors({
     origin: '*', // ✅ for dev. In prod: use specific domain instead of '*'
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization'],
-  });  const port = process.env.PORT || 5000;
+  });  
+  const port = process.env.PORT || 5000;
   await app.listen(port);
  }
 bootstrap();
