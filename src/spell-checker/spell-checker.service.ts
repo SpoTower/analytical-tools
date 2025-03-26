@@ -42,12 +42,12 @@ export class SpellCheckerService {
     let domainsToProcess = state.domains.filter((domain: Domain) => domain.googleAdsId).filter((domain: Domain) => !domainId || domain.id === domainId) .slice(0, sliceSize || Infinity);
 
     // Get Google tokens for all companies
-    const allTokens = await Promise.all(
-      state.companies.map(async (c) => ({
-        company: c.name,
-        token: await KF.getGoogleAuthToken(c)
-      }))
-    );
+    const allTokens = await Promise.all(state.companies.map(async (c) => ({ company: c.name,token: await KF.getGoogleAuthToken(c)})));
+      
+       
+        
+      
+    
 
     // Fetch Google Ads in batches
     const fetchedAdsResults: googleAds[] = await processInBatches(
