@@ -8,6 +8,7 @@ import { GlobalStateService } from './globalState/global-state.service';
 import { GptModule } from './gpt/gpt.module';
 import { KnexModule } from './knex/knex.module';
 import { AbTestManagementModule } from './ab-test-management/ab-test-management.module';
+import { GoogleModule } from './google/google.module';
 
 @Module({
   imports: [
@@ -18,6 +19,7 @@ import { AbTestManagementModule } from './ab-test-management/ab-test-management.
   GptModule,
   KnexModule,
   AbTestManagementModule,
+  GoogleModule,
     ],
   controllers: [AppController],
   providers: [
