@@ -27,21 +27,14 @@ export async function fetchGoogleAds(domain: Domain, companies: Company[], token
             {
                 query: `
                 SELECT
-                change_event.resource_name,   
-                change_event.change_date_time,  
-                change_event.change_resource_name,  
-                change_event.resource_change_operation,   
-                change_event.changed_fields,  
-                change_event.old_resource,  
-                change_event.new_resource  
-            FROM change_event
-            WHERE
-                change_event.change_date_time BETWEEN  '${date.startDate}' AND '${date.endDate}'
-            AND
-                change_event.resource_change_operation IN (CREATE, UPDATE)
-            AND
-                 change_event.change_resource_type IN ('AD' )
-             LIMIT 10000
+                ad_group_ad.ad.id,
+                ad_group_ad.ad.name,
+                ad_group_ad.status,
+                ad_group_ad.ad.type,
+                ad_group_ad.ad.final_urls
+              FROM ad_group_ad
+              WHERE ad_group_ad.status = ENABLED
+              LIMIT 10000
                 `,
             },
             {
