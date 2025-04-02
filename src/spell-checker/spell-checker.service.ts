@@ -97,15 +97,19 @@ export class SpellCheckerService {
 
   
     
-    if (errors.spelling.length > 0) {
-      await KF.sendSlackAlert('Google Ads Content Errors:', slackChannels.PERSONAL, state.slackToken);
-      await KF.sendSlackAlert(formatSlackTable(errors.spelling, 'Spelling Errors'), slackChannels.PERSONAL, state.slackToken);
-    }
+   
+    await KF.sendSlackAlert('*🚨 Google Ads Content Errors:*', slackChannels.CONTENT, state.slackToken);
+    errors.spelling.length > 0 ?
+       await KF.sendSlackAlert(formatSlackTable(errors.spelling, 'Spelling Errors'), slackChannels.CONTENT, state.slackToken):
+        await KF.sendSlackAlert('🌿 No Spelling Errors Found', slackChannels.CONTENT, state.slackToken);
+    
 
-    if (errors.capitalization.length > 0) {
-      await KF.sendSlackAlert('Google Ads non-Capital words Errors:', slackChannels.PERSONAL, state.slackToken);
-      await KF.sendSlackAlert(formatSlackTable(errors.capitalization, 'Capitalization Errors'), slackChannels.PERSONAL, state.slackToken);
-    }
+      
+      await KF.sendSlackAlert('*🚨Google Ads non-Capital words Errors:*', slackChannels.CONTENT, state.slackToken);
+      (errors.capitalization.length > 0)  ?
+        await KF.sendSlackAlert(formatSlackTable(errors.capitalization, 'Capitalization Errors'), slackChannels.CONTENT, state.slackToken) :
+        await KF.sendSlackAlert('*🌿 No Capitalization Errors Found*', slackChannels.CONTENT, state.slackToken);
+    
 
     return 'ads were processed by local spellchecker and sent to kidon to be sended by slack to content errors channel';
   }
