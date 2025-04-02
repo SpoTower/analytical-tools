@@ -170,7 +170,7 @@ export class SpellCheckerService {
    let  uncorrectUrls = rows.filter((r)=> !r.landing_page.includes(r.hostname))
    uncorrectUrls = uncorrectUrls.map((uu) => ({ landingpage: uu.landing_page,hostname: uu.hostname}));
 
-   const msg = uncorrectUrls?.length > 0 ?  uncorrectUrls.forEach((uu) => { console.log(`Landing Page: ${uu.landing_page}, Hostname: ${uu.hostname}`);}) : 'All URLs are correct';
+   const msg = uncorrectUrls?.length > 0 ?  uncorrectUrls.forEach((uu) => { console.log(`*Landing Page: ${uu.landing_page}, Hostname: ${uu.hostname}*`);}) : '*🌿All URLs are correct*';
    
   
     
