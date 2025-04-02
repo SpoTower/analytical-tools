@@ -19,6 +19,7 @@ import * as KF from '@spotower/my-utils';
    const { chromium } = require('playwright');
 import { createErrorsTable } from './utils';
  import {slackChannels} from './consts';
+ import { getSecretFromSecretManager } from 'src/utils/secrets';
 
 
 
@@ -40,14 +41,8 @@ export class SpellCheckerService {
 
     // Filter and slice domains
     let domainsToProcess = state.domains.filter((domain: Domain) => domain.googleAdsId).filter((domain: Domain) => !domainId || domain.id === domainId) .slice(0, sliceSize || Infinity);
-
     // Get Google tokens for all companies
     const allTokens = await Promise.all(state.companies.map(async (c) => ({ company: c.name,token: await KF.getGoogleAuthToken(c)})));
-      
-       
-        
-      
-    
 
     // Fetch Google Ads in batches
     const fetchedAdsResults: googleAds[] = await processInBatches(
@@ -102,15 +97,19 @@ export class SpellCheckerService {
 
   
     
-    if (errors.spelling.length > 0) {
-      await KF.sendSlackAlert('Google Ads Content Errors:', slackChannels.PERSONAL, state.slackToken);
-      await KF.sendSlackAlert(formatSlackTable(errors.spelling, 'Spelling Errors'), slackChannels.PERSONAL, state.slackToken);
-    }
+   
+    await KF.sendSlackAlert('*🚨 Google Ads Content Errors:*', slackChannels.CONTENT, state.slackToken);
+    errors.spelling.length > 0 ?
+       await KF.sendSlackAlert(formatSlackTable(errors.spelling, 'Spelling Errors'), slackChannels.CONTENT, state.slackToken):
+        await KF.sendSlackAlert('🌿 No Spelling Errors Found', slackChannels.CONTENT, state.slackToken);
+    
 
-    if (errors.capitalization.length > 0) {
-      await KF.sendSlackAlert('Google Ads non-Capital words Errors:', slackChannels.PERSONAL, state.slackToken);
-      await KF.sendSlackAlert(formatSlackTable(errors.capitalization, 'Capitalization Errors'), slackChannels.PERSONAL, state.slackToken);
-    }
+      
+      await KF.sendSlackAlert('*🚨Google Ads non-Capital words Errors:*', slackChannels.CONTENT, state.slackToken);
+      (errors.capitalization.length > 0)  ?
+        await KF.sendSlackAlert(formatSlackTable(errors.capitalization, 'Capitalization Errors'), slackChannels.CONTENT, state.slackToken) :
+        await KF.sendSlackAlert('*🌿 No Capitalization Errors Found*', slackChannels.CONTENT, state.slackToken);
+    
 
     return 'ads were processed by local spellchecker and sent to kidon to be sended by slack to content errors channel';
   }
@@ -148,7 +147,47 @@ export class SpellCheckerService {
 }
  
 
+  async urlValidation( ){
+    try {
+    const state =   this.globalState.getAllState(); 
+    const res = await getSecretFromSecretManager(process.env.SECRET_NAME);
+    const googleKey = JSON.parse(res).GOOGLE_SERVICE_PRIVATE_KEY.replace(/\\n/g, '\n');
+    const bq = await KF.connectToBQ(process.env.BQ_EMAIL_SERVICE, googleKey, process.env.BQ_PROJECT_NAME);
+    const [job] = await bq.createQueryJob({ query: 'select domain_id,hostname,landing_page from `kidon3_STG.landing_page_performance` group by all', });
+    let [rows] = await job.getQueryResults();
+
+    rows = rows.filter(r => r.domain_id !== 188); // test domain
+
+  rows = rows.map((row) => {  // attaching correct hoistname to each row that miss it
+    if (row.domain_id == 24) row.hostname = 'topmealkitdelivery';
+    if (row.domain_id == 36) row.hostname = '10beststudentloans';
+    if(row.domain_id == 46) row.hostname = '10beststudentloans';
+    if (row.domain_id == 51) row.hostname = '10bestmortgage';
+    if (row.domain_id == 53) row.hostname = '10bestmortgage'; 
+    if (row.domain_id == 195) row.hostname = '10bestcasino.amazonslots';
+    return row; // ✅ This is the key
+  });
+  
+   let  uncorrectUrls = rows.filter((r)=> !r.landing_page.includes(r.hostname))
+   uncorrectUrls = uncorrectUrls.map((uu) => ({ landingpage: uu.landing_page,hostname: uu.hostname}));
+
+   const msg = uncorrectUrls?.length > 0 ?  uncorrectUrls.forEach((uu) => { console.log(`*Landing Page: ${uu.landing_page}, Hostname: ${uu.hostname}*`);}) : '*🌿All URLs are correct*';
+   
+  
+    
+  
  
+    await KF.sendSlackAlert('Uncorrect URL:', slackChannels.CONTENT, state.slackToken);
+    await KF.sendSlackAlert(`${msg}`, slackChannels.CONTENT, state.slackToken);
+
+    
+      } catch (error) {
+      console.log(error)
+    }
+ 
+     
+   
+    }
  
   create(createSpellCheckerDto: CreateSpellCheckerDto) {
     return 'This action adds a new spellChecker';

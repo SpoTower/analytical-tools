@@ -33,7 +33,19 @@ export class SpellCheckerController {
     }
   }
 
-   
+  @Get('/urlValidation')
+  async urlValidation() {
+ 
+    
+    try {
+       return await this.spellCheckerService.urlValidation( );
+    } catch (error) {
+      if (error instanceof BadRequestException || error instanceof InternalServerErrorException) {
+        throw error;
+      }
+    }
+  }
+
    
   @Get('/findWebsitesGrammaticalErrors')
   async WebsitesGrammaticalErrors(
@@ -48,7 +60,7 @@ export class SpellCheckerController {
       }
     }
   }
-
+ 
 
   @Get(':id')
   findOne(@Param('id') id: string) {
