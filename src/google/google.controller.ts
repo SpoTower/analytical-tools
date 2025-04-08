@@ -10,7 +10,7 @@ import { UpdateGoogleDto } from './dto/update-google.dto';
 export class GoogleController {
   constructor(private readonly googleService: GoogleService) {}
 
-  @Post('upload')
+  @Post('generateConversions')
   async upload(@Body() body: { conversionActions: conversionActions[], hostname: string, domainId: number }) {
     try {
     const { conversionActions, hostname, domainId  } = body;
