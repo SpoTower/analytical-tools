@@ -9,14 +9,16 @@ import { GlobalStateService } from 'src/globalState/global-state.service';
  import { Knex } from 'knex';
  import {   KIDON_CONNECTION } from 'src/knex/knex.module';
  const logger = new Logger('google-service');
-
+import {googleAdsSourceData} from './interfaces'
+import { GptService } from 'src/gpt/gpt.service';
+import {campaignLevelSystemMessage,campaignLevelPrompt,exampleResponseCampaigns,addGroupLevelSystemMessage,addGroupLevelPrompt,addLevelSystemMessage,addLevelPrompt} from './prompts'
 @Injectable()
 export class GoogleService {
 
   constructor(
      private readonly globalState: GlobalStateService,
      @Inject(KIDON_CONNECTION) private readonly kidonClient: Knex,
-
+     private readonly gptService: GptService,
      ) {}
 
      //create conversion action on hostname
@@ -28,7 +30,7 @@ export class GoogleService {
       try {
             allTokens = await Promise.all(state.companies.map(async (c) => ({ company: c.name,token: await KF.getGoogleAuthToken(c)})));
       } catch (error) { 
-        console.log(error);
+        logger.log(error);
       }
      
    const company = state.companies.find((c)=>c.id == state.domains.find((d)=>d.hostname == hostname).companyId)
@@ -84,7 +86,19 @@ async updateConversionNamesKidonTable(conversionActions:any[],creationResult:any
 }
     
  
+  async generateAds(sourceData:googleAdsSourceData){
+    const fullCampaignLevelPrompt = `${campaignLevelPrompt}. the list of raw keywords should use for this task is ${JSON.stringify(sourceData.keywords)}`;
+     const responseCampaign = await this.gptService.askGpt01(process.env.GPT_KEY,campaignLevelSystemMessage,fullCampaignLevelPrompt);
+      console.log(`CAMPAIGNS: \n ${responseCampaign.choices[0].message.content}`)
 
+     const fullAddGroupLevelPrompt = `${addGroupLevelPrompt}. the list of raw keywords should use for this task is ${JSON.stringify(sourceData.keywords)}`;
+     const responseAddGroup = await this.gptService.askGpt01(process.env.GPT_KEY,addGroupLevelSystemMessage,fullAddGroupLevelPrompt);
+    console.log(`ADDGROUPS: \n ${responseAddGroup.choices[0].message.content}`)
+
+     const fullAddLevelPrompt = `${addLevelPrompt}. the list of raw keywords should use for this task is ${JSON.stringify(sourceData.keywords)}`;
+      const responseAdd = await this.gptService.askGpt01(process.env.GPT_KEY,addLevelSystemMessage,fullAddLevelPrompt);
+      console.log(`ADDS: \n ${responseAdd.choices[0].message.content}`)
+   }
 
 
 

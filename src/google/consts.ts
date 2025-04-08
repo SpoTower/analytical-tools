@@ -12,7 +12,7 @@ export function createObcConfigParams(conversions: { name: string; category: str
             },
             valueSettings: {
                 default_value: 0,
-                always_use_default_value: true,
+                always_use_default_value: false,
                 default_currency_code: 'USD',
               },    
             countingType,

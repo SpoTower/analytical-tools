@@ -3,3 +3,7 @@ export interface conversionActions {
     type: 'Once' | 'Every' 
     ConversionCategory: string;
 }
+export interface googleAdsSourceData {
+    campaignCount: string;
+    keywords: string[];
+}
