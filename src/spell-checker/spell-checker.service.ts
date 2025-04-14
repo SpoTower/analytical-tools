@@ -142,6 +142,7 @@ export class SpellCheckerService {
              await KF.sendSlackAlert(message, slackChannels.CONTENT, state.slackToken);
          }       
  
+
         return `websites were processed by local spellchecker and sent to kidon to be sended by slack to content errors channel`;
 }
  
