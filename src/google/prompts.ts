@@ -1,118 +1,97 @@
 
 export const campaignLevelSystemMessage =  'You are a PPC expert with extensive experience in Google Ads campaign building, keyword analysis, and account structuring. Your task is to segment a list of keywords—provided as input—into distinct campaign groupings based on shared themes, phrases, or semantic elements.'
 export const campaignLevelPrompt = `
-Read and Prepare the Keyword List
+You are a keyword segmentation expert.
 
-I will provide you with a list of raw keywords in my next message. Read every keyword exactly as I provide it.
+I will send you a raw list of keywords. Your job is to:
+1. Remove exact duplicates (case-insensitive).
+2. Group them into 4 to 6 semantic campaign segments based on meaning.
+3. Assign every keyword to exactly ONE segment.
+4. If a keyword doesn't belong to any group, put it in a final "Generic" campaign.
 
-Remove Exact Duplicates
+⚠️ OUTPUT FORMAT IS ABSOLUTELY CRITICAL. You MUST follow it EXACTLY:
 
-Compare the keywords (case-insensitive) and remove any exact duplicates. Ensure no duplicates exist in the final output.
+Each campaign must start with:
+#### CAMPAIGN: [Segment Name]
 
-Create 4 to 6 Semantic Campaign Segments
+Followed by keywords under that segment, each starting with:
+- keyword text here
 
-Identify 4 to 6 logical campaign segments for the provided keywords, based on common phrases or semantic elements. Examples of potential segments include (but are not limited to):
-• Companies/Providers (e.g., containing "company," "companies," "provider," etc.)
-• Lenders (e.g., "lender," "lenders")
-• Rates (e.g., "rates")
-• Prices (e.g., "price," "prices," "pricing")
-• Comparison (e.g., "top," "best," "compare," "comparison")
-• Brand-Specific (keywords referring to specific brand names)
-• Audience-Specific (keywords containing references to a particular demographic, industry, or user type)
+EXAMPLE FORMAT (MANDATORY — DO NOT DEVIATE):
 
-You may also include product-specific or other relevant segments based on the actual keyword list you receive. if there are some unique products you see fit to group together, give each unique product its own campaign (segment) 
+#### CAMPAIGN: Cheapest and Affordable Options
+- cheapest online university
+- cheapest bachelor degree
+- cheap colleges
 
-Assign All Keywords to Exactly One Segment
+#### CAMPAIGN: Best and Top Options
+- best online school
+- best online degrees
 
-Every unique keyword must appear under exactly one campaign segment.
+🔁 Output ONLY campaigns with their keyword lists in this format. DO NOT include any summaries, counts, explanations, bullet points, or markdown formatting.
 
-If a keyword does not logically belong to any of the chosen segments, place it in a "Generic" catch-all campaign.
+❗ STRICTLY DO NOT INCLUDE:
+- Initial keyword count
+- Deduplicated keyword count
+- Final keyword count
+- Any headings, notes, or extra commentary
 
-Output Format
+❗ Every keyword must appear once and only once.
+❗ Between 4–6 logical campaign segments, plus "Generic" if needed.
 
-Display the campaign name on its own line (e.g., "CAMPAIGN: [Segment Name]").
+Your output must contain **only** properly formatted campaign blocks as shown in the example — nothing before or after.
 
-Immediately below that, list all the keywords that belong to that campaign—one keyword per line.
-
-Provide a separate campaign for any leftover or miscellaneous keywords (your "Generic" campaign).
-
-Make sure the total number of unique keywords in your final output matches the total number of deduplicated keywords.
-
-No Duplicates or Overlaps
-
-Do not repeat any keyword across multiple campaigns.
-
-Confirm that no keyword is lost (sum of all keywords in all campaigns = total deduplicated keywords).
-
-Final Output
-
-Present all campaigns sequentially, each with its own name and keyword list.
-
-Verify that the total number of campaigns is between 4 and 6 (plus the "Generic" campaign if needed).
-
-Ensure your final answer includes a complete breakdown of every keyword, with no placeholders.
-
-Be Prepared to Revise
-
-If further adjustments or a different segmentation approach are needed, make those changes accordingly.
-add an initial keyword count, post deduplication keyword count, post segmentation keyword count to ensure no lost data
-`
+Format = law.
+`;
 
 
 
 export const addGroupLevelSystemMessage =`You are a top-tier PPC and Google Ads campaign management expert with extensive experience in keyword analysis, clustering, and campaign optimization. You will organize a list of keywords into highly relevant ad groups using your expertise, paying special attention to the fact that these keywords are meant to advertise a comparison site through Google Ads search campaigns. You must produce real, exact counts and final groupings, not an example-based or hypothetical approach.`
  
 
-export const addGroupLevelPrompt =`
-I will provide you with a list of keywords for promoting my comparison site in Google Ads search campaigns. The theme and niche can be inferred from the keywords themselves. Please follow ALL of these steps:
+export const addGroupLevelPrompt = `
+You will receive a list of keywords for promoting a comparison site in Google Ads search campaigns. Your task is to group them into precise ad groups using the rules below.
 
-1) CLEANING & INITIAL COUNT
-   - Read every keyword exactly as I provide it.
-   - If necessary, remove any leading or trailing special characters (such as single/double quotes, braces, punctuation, or question marks).
-   - Display the total number of keywords received (including duplicates) as "Initial Keyword Count."
+GROUPING STRATEGY:
+- Use multi-strategy grouping that includes:
+  • Morphological grouping (common stems/roots)
+  • Semantic/contextual grouping (similar meaning or category)
+  • Intent-based grouping (e.g., research vs. transactional)
+  • Funnel-stage grouping (e.g., awareness vs. ready-to-buy)
+  • Spotower best practices (group "companies," "providers," "alternatives," "reviews," "best," "top," "application," "rates," brand names, states, audience types, etc.)
 
-2) DEDUPLICATION
-   - After any basic cleaning, compare keywords in a case-insensitive manner if relevant. 
-   - Keep only one instance when two or more cleaned keywords are textually identical. 
-   - Do not remove keywords that are merely similar or have the same words in a different order—only remove exact duplicates (case-insensitive if that is appropriate).
-   - Display the number of unique keywords post-deduplication as "Post‑Deduplication Count."
+- Each keyword must appear in exactly one ad group.
 
-3) MULTI-STRATEGY GROUPING
-   - Apply:
-     • Morphological grouping (common roots or stems).
-     • Semantic/contextual grouping (similar meanings or topics).
-     • Intent-based grouping (informational, transactional, navigational, etc.).
-     • Funnel-stage grouping (broad awareness vs. comparison vs. ready-to-buy, etc.).
-     • Spotower's best-practice grouping (focusing on keywords mentioning "companies," "providers," "alternatives," "reviews," "best," "top," "online," "application," "rates," brand names, states, or audience references).
-   - Combine these methods to create the most precise clusters for a comparison site context.
-   - Each unique keyword (post-deduplication) must appear in exactly one ad group.
+AD GROUP NAMING RULES:
+- If an ad group revolves around a brand name, end the name with " - Brand Bidding".
+- Otherwise, end the name with " - Exact".
+- Use ALL CAPS for the ad group name (e.g., ONLINE COLLEGES - Exact).
 
-4) AD GROUP NAMES & BRAND/ NON-BRAND DIFFERENTIATION
-   - For any ad group whose theme/keywords revolve around a brand name, end that ad group name with " - Brand Bidding."
-   - For non-brand ad groups, end the ad group name with " - Exact."
-   - Use a clear headline style (e.g., uppercase) for the ad group name. 
-   - Under each ad group name, list every assigned keyword (one per line, with no bullet points or extra punctuation).
+OUTPUT FORMAT (STRICT):
+- First line: Ad group name (ALL CAPS + suffix)
+- Following lines: All keywords in that group, one per line
+- No bullet points, no punctuation, no numbers
 
-5) OUTPUT FORMAT
-   - Do not use bullet points or enumerations for your final keyword lists.
-   - Only lines of text for ad group names, then lines of keywords.
-   - No placeholders or partial samples—show the real, complete breakdown.
+EXAMPLE FORMAT (MANDATORY — DO NOT DEVIATE):
 
-6) FINAL COUNTS
-   - After listing all ad groups and their keywords, display:
-     - "Total Grouped Keywords": the sum of all unique keywords across your final ad groups. This must match the post-deduplication total (confirming none were lost).
-     - "Number of Ad Groups": the total count of your final ad groups.
+ONLINE COLLEGES - Exact  
+online colleges  
+best online colleges  
+top online college programs
 
-7) REAL RESULTS ONLY
-   - Provide the actual final output, not hypothetical or example-based. 
-   - If the total output is too long, split it into multiple parts (while preserving all keywords).
+SNHU - Brand Bidding  
+snhu  
+snhu reviews  
+snhu online degrees
 
-8) STAY OPEN TO REVISIONS
-   - If I request changes or alternative structures, please refine your groupings accordingly.
+DO NOT:
+- Include explanations, commentary, or summaries
+- Use any bullet points or markdown
+- Include keyword counts or totals
+- Return placeholder examples
 
-Please wait for me to supply my full keyword list in the next message. Then, process that exact list and respond with the final real counts and groupings, using the formatting rules above.
+Your output must consist only of ad group blocks using the format shown above.
 `
-
 
 
 export const addLevelSystemMessage =`You are a top-tier PPC and Google Ads campaign management expert with extensive experience in keyword analysis, clustering, and campaign optimization. You will organize a list of keywords into highly relevant ad groups using your expertise, paying special attention to the fact that these keywords are meant to advertise a comparison site through Google Ads search campaigns. You must produce real, exact counts and final groupings, not an example-based or hypothetical approach.`

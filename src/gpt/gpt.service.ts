@@ -71,13 +71,13 @@ async askGpt01(gptKey: string, prompt: string, userContent: string) {
   const openai = new OpenAI({ apiKey: gptKey })
 
   const res =  await openai.chat.completions.create({
-      model: 'gpt-3.5-turbo',
+    model: 'gpt-4o',
       messages: [
           { role: 'system', content: prompt },
           { role: 'user', content: userContent },
       ],
       max_tokens: 4000,
-      temperature: 0,
+      temperature: 0.4,
   })
 
   return res
