@@ -38,6 +38,7 @@ export class GoogleService {
    const company = state.companies.find((c)=>c.id == state.domains.find((d)=>d.hostname == hostname).companyId)
    const domainGoogleAdsId = state.domains.find((d)=>d.hostname == hostname).googleAdsId
    const token = allTokens.find((t) => t.company === company.name)?.token
+   const results = [];
 
    for (const action of conversionActions) {
     logger.log( 'inserting conversion action:', action);
@@ -52,7 +53,7 @@ export class GoogleService {
       );
 
       logger.log('conversion action :', result.data);
-      return result.data;
+      results.push(result.data);
     } catch (error) {
       logger.log(error.response?.data?.error?.message ||   error.response?.data?.error?.details?.[0]?.errors?.[0]?.message || error.response?.data?.error?.message)
       if (error.response?.data?.error?.message) {
@@ -64,23 +65,28 @@ export class GoogleService {
        }
     }
   }
+  return results;
+
 }  
 
-async updateConversionNamesKidonTable(conversionActions:any[],creationResult:any, domainId:number){
+async updateConversionNamesKidonTable(conversionActions?:any[],creationResult?:any, domainId?:number){
   logger.log('entering updateConversionNamesKidonTable');
+
   try {
-    if (conversionActions.length === creationResult.results.length) {
+    if (Array.isArray(creationResult) && conversionActions?.length === creationResult.length) {
       const dataToInsert = conversionActions.map((c, index) => ({
-        resource_name: creationResult.results[index].resourceName,
+        resource_name: creationResult[index].results[0].resourceName,
         name: c['Conversions Name Action'],
         goal: 'secondary',
-        domain_id: domainId
-        
-       }));
-      let res = await this.kidonClient('conversion_name').insert(dataToInsert);
-    } else{
-      throw new Error('Error updating conversion names in kidon table: mismatch between conversion actions and creation results )');
-    } 
+        domain_id: domainId,
+        created_at: new Date(),
+      }));
+    
+     let res =  await this.kidonClient('conversion_name').insert(dataToInsert);
+    return res;
+    } else {
+      throw new Error('Error updating conversion names in kidon table: mismatch between conversion actions and creation results');
+    }
   } catch (error) {
     logger.error(`Error updating conversion names in kidon table: ${error.message}`);
     throw new Error(`Error updating conversion names in kidon table: ${error.message}`);

@@ -18,7 +18,7 @@ export class GoogleController {
     logger.log(' Entering upload endpoint. Parsed rows:', conversionActions, 'Hostname:',  hostname);
   
     const creationResult = await this.googleService.createConversionActions(conversionActions,  hostname);
-    await this.googleService.updateConversionNamesKidonTable(conversionActions,creationResult, domainId);
+    const res = await this.googleService.updateConversionNamesKidonTable(conversionActions,creationResult, domainId);
     return { status: 'ok', count: conversionActions.length };
     } catch (error) {
       return { status: 'error', count: '', message: error.message };
