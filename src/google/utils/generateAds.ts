@@ -280,3 +280,9 @@ This segmentation ensures all keywords are logically grouped, with no overlaps o
       })
       .filter(Boolean); // remove nulls
   }
+
+  export function generateDualCampaignRows(name: string, templateDefaults: Record<string, string>) {
+    const campaignM = generateRowsFromTemplate(templateDefaults, 1, { Campaign: [`${name} | M`] })[0];
+    const campaignD = generateRowsFromTemplate(templateDefaults, 1, { Campaign: [`${name} | D`] })[0];
+    return [campaignM, campaignD];
+  }
