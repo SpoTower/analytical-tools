@@ -5,7 +5,7 @@ type FieldInstructions = {
     [fieldName: string]: string[] // array of values per row
   }
   
-  export function generateRowsFromTemplate(base: Record<string, string>, rowCount: number, instructions: FieldInstructions = {}): Record<string, string>[] {
+  export function generateRowsUsinObjectTemplate(base: Record<string, string>, rowCount: number, instructions: FieldInstructions = {}): Record<string, string>[] {
 
     const rows: Record<string, string>[] = []
   
@@ -53,7 +53,7 @@ export function extractHeadlinesAndDescriptions(raw: string, baseTemplate: Recor
 
 
 // box A Tommy copy paste trick
-  export function prepareAdsWithCampaigns(adsArray, sourceData) {
+  export function generateFullAddObject(adsArray, sourceData) {
     const finalAds = [];
   
     for (const ad of adsArray) {
@@ -282,7 +282,7 @@ This segmentation ensures all keywords are logically grouped, with no overlaps o
   }
 
   export function generateDualCampaignRows(name: string, templateDefaults: Record<string, string>) {
-    const campaignM = generateRowsFromTemplate(templateDefaults, 1, { Campaign: [`${name} | M`] })[0];
-    const campaignD = generateRowsFromTemplate(templateDefaults, 1, { Campaign: [`${name} | D`] })[0];
+    const campaignM = generateRowsUsinObjectTemplate(templateDefaults, 1, { Campaign: [`${name} | M`] })[0];
+    const campaignD = generateRowsUsinObjectTemplate(templateDefaults, 1, { Campaign: [`${name} | D`] })[0];
     return [campaignM, campaignD];
   }

@@ -12,7 +12,7 @@ import { GlobalStateService } from 'src/globalState/global-state.service';
 import {googleAdsSourceData,CampaignWordsChunk} from './interfaces'
 import { GptService } from 'src/gpt/gpt.service';
 import {campaignLevelSystemMessage,campaignLevelPrompt,exampleResponseCampaigns,addGroupLevelSystemMessage,addGroupLevelPrompt,addLevelSystemMessage,addLevelPrompt} from './prompts'
-import {generateRowsFromTemplate,extractHeadlinesAndDescriptions,exportToCsv,prepareAdsWithCampaigns,extractCampaignChunks,parseAdGroupBlocks,generateDualCampaignRows} from './utils/generateAds'
+import {generateRowsUsinObjectTemplate,extractHeadlinesAndDescriptions,exportToCsv,generateFullAddObject,extractCampaignChunks,parseAdGroupBlocks,generateDualCampaignRows} from './utils/generateAds'
 import { keywordTemplateDefaults,adsTemplateDefaults,adGroupTemplateDefaults,campaignTemplateDefaults } from './adsConsts';
 @Injectable()
 export class GoogleService {
@@ -107,8 +107,8 @@ async updateConversionNamesKidonTable(conversionActions?:any[],creationResult?:a
    campaigns.push(c1, c2);
 
      //Addgroup object fill  
-    let adgroup1 = generateRowsFromTemplate(adGroupTemplateDefaults, 1, {Campaign: [`${sourceData.industryKeyword[0]} | M`], 'Ad Group': [`${sourceData.industryKeyword[0]} - Exact`]});
-    let adgroup2 = generateRowsFromTemplate(adGroupTemplateDefaults, 1, {Campaign: [`${sourceData.industryKeyword[0]} | D`], 'Ad Group': [`${sourceData.industryKeyword[0]} - Exact`]});
+    let adgroup1 = generateRowsUsinObjectTemplate(adGroupTemplateDefaults, 1, {Campaign: [`${sourceData.industryKeyword[0]} | M`], 'Ad Group': [`${sourceData.industryKeyword[0]} - Exact`]});
+    let adgroup2 = generateRowsUsinObjectTemplate(adGroupTemplateDefaults, 1, {Campaign: [`${sourceData.industryKeyword[0]} | D`], 'Ad Group': [`${sourceData.industryKeyword[0]} - Exact`]});
    
     adGroups.push(adgroup1[0]);
     adGroups.push(adgroup2[0]);
@@ -117,13 +117,13 @@ async updateConversionNamesKidonTable(conversionActions?:any[],creationResult?:a
     const fullAddLevelPrompt = `${addLevelPrompt}. the word that should be used for this task is ${JSON.stringify(sourceData.industryKeyword[0])}`;
     let res = await this.gptService.askGpt01(process.env.GPT_KEY, addLevelSystemMessage, fullAddLevelPrompt)
     const [ad1, ad2] = extractHeadlinesAndDescriptions(res.choices[0].message.content, adsTemplateDefaults)
-    const allAds = prepareAdsWithCampaigns([ad1, ad2], sourceData); //todo generatefULLaDSoBJECT
+    const allAds = generateFullAddObject([ad1, ad2], sourceData);  
+    ads.push(...allAds);
 
 
     //keywords
-    //todo generateRowsUsinObjectTemplate
-    let keyword1 = generateRowsFromTemplate(keywordTemplateDefaults, 1, {Campaign: [`${sourceData.industryKeyword[0]} | M`], 'Ad Group': [adgroup1[0]['Ad Group']], 'Keyword': [sourceData.industryKeyword[0]]});
-    let keyword2 = generateRowsFromTemplate(keywordTemplateDefaults, 1, {Campaign: [`${sourceData.industryKeyword[0]} | D`], 'Ad Group': [adgroup2[0]['Ad Group']], 'Keyword': [sourceData.industryKeyword[0]]});
+    let keyword1 = generateRowsUsinObjectTemplate(keywordTemplateDefaults, 1, {Campaign: [`${sourceData.industryKeyword[0]} | M`], 'Ad Group': [adgroup1[0]['Ad Group']], 'Keyword': [sourceData.industryKeyword[0]]});
+    let keyword2 = generateRowsUsinObjectTemplate(keywordTemplateDefaults, 1, {Campaign: [`${sourceData.industryKeyword[0]} | D`], 'Ad Group': [adgroup2[0]['Ad Group']], 'Keyword': [sourceData.industryKeyword[0]]});
     keywords.push(keyword1[0]);
     keywords.push(keyword2[0]);
 
@@ -137,18 +137,18 @@ for (const word of sourceData.paretoKeywords) {
   campaigns.push(campaignM, campaignB);
 
   const adGroupName = `${word} - Exact`;
-  const adGroupM = generateRowsFromTemplate(adGroupTemplateDefaults, 1, { Campaign: [campaignM.Campaign], 'Ad Group': [adGroupName] })[0];
-  const adGroupB = generateRowsFromTemplate(adGroupTemplateDefaults, 1, { Campaign: [campaignB.Campaign], 'Ad Group': [adGroupName] })[0];
+  const adGroupM = generateRowsUsinObjectTemplate(adGroupTemplateDefaults, 1, { Campaign: [campaignM.Campaign], 'Ad Group': [adGroupName] })[0];
+  const adGroupB = generateRowsUsinObjectTemplate(adGroupTemplateDefaults, 1, { Campaign: [campaignB.Campaign], 'Ad Group': [adGroupName] })[0];
   adGroups.push(adGroupM, adGroupB);
 
   const fullPrompt = `${addLevelPrompt}. the word that should be used for this task is ${JSON.stringify(word)}`;
   const gptResponse = await this.gptService.askGpt01(process.env.GPT_KEY, addLevelSystemMessage, fullPrompt);
   const [ad1, ad2] = extractHeadlinesAndDescriptions(gptResponse.choices[0].message.content, adsTemplateDefaults);
-  const preparedAds = prepareAdsWithCampaigns([ad1, ad2], { industryKeyword: [word] });
+  const preparedAds = generateFullAddObject([ad1, ad2], { industryKeyword: [word] });
   ads.push(...preparedAds);
 
-  const keywordM = generateRowsFromTemplate(keywordTemplateDefaults, 1, { Campaign: [campaignM.Campaign], 'Ad Group': [adGroupM['Ad Group']], Keyword: [word] })[0];
-  const keywordB = generateRowsFromTemplate(keywordTemplateDefaults, 1, { Campaign: [campaignB.Campaign], 'Ad Group': [adGroupB['Ad Group']], Keyword: [word] })[0];
+  const keywordM = generateRowsUsinObjectTemplate(keywordTemplateDefaults, 1, { Campaign: [campaignM.Campaign], 'Ad Group': [adGroupM['Ad Group']], Keyword: [word] })[0];
+  const keywordB = generateRowsUsinObjectTemplate(keywordTemplateDefaults, 1, { Campaign: [campaignB.Campaign], 'Ad Group': [adGroupB['Ad Group']], Keyword: [word] })[0];
   keywords.push(keywordM, keywordB);
 }
 
@@ -177,35 +177,43 @@ let campaignsWithWords = gptResponse.choices[0].message.content.split('\n') .map
       
 
         //fill add groups
-      for (const wordsSet of campaignNamesAndWords as CampaignWordsChunk[]) {
+      for (const wordsSet of campaignNamesAndWords as CampaignWordsChunk[]) {  // 4-6 loops
         const keywordList = wordsSet.words.map(w => `"${w}"`).join(', ');
         const fullPrompt = `${addGroupLevelPrompt}\n\nHere is the list of keywords to use:\n${keywordList}`;
         const gptResponse = await this.gptService.askGpt01(process.env.GPT_KEY, addGroupLevelSystemMessage, fullPrompt);
         const addGroupsWithWords = parseAdGroupBlocks(gptResponse.choices[0].message.content);  //?? look for const addGroupsWithWords
       
-        //
-        for (const { adGroup, keywords: kws } of addGroupsWithWords) {
-          const campaignM = `${wordsSet.name} | M`; const campaignD = `${wordsSet.name} | D`;
+                // ?? last call to jpt with add group words -> add level prompt + filling addgroups,adds and keywords
 
-          //  push adgroups to add group csv
-          adGroups.push(generateRowsFromTemplate(adGroupTemplateDefaults, 1, { Campaign: [campaignM], 'Ad Group': [adGroup] })[0]);
-          adGroups.push(generateRowsFromTemplate(adGroupTemplateDefaults, 1, { Campaign: [campaignD], 'Ad Group': [adGroup] })[0]);
-          // Push keywords to keyword csv
-          for (const keyword of kws) {
-            keywords.push(generateRowsFromTemplate(keywordTemplateDefaults, 1, { Campaign: [campaignM], 'Ad Group': [adGroup], Keyword: [keyword] })[0]);
-            keywords.push(generateRowsFromTemplate(keywordTemplateDefaults, 1, { Campaign: [campaignD], 'Ad Group': [adGroup], Keyword: [keyword] })[0]);
-          }
-
-          // ?? last call to jpt with add group words -> add level prompt
-          //sending each campaign words set with content divider prompt to gpt to create headers and descriptions
-
-          const fullPrompt = `${addLevelPrompt}. the words that should be used for this task is ${JSON.stringify(kws)}`;
-          const gptResponse = await this.gptService.askGpt01(process.env.GPT_KEY, addLevelSystemMessage, fullPrompt);
-          const [ad1, ad2] = extractHeadlinesAndDescriptions(gptResponse.choices[0].message.content, adsTemplateDefaults);
-          const preparedAds = prepareAdsWithCampaigns([ad1, ad2], { industryKeyword: [wordsSet.name] });
-          ads.push(...preparedAds);
-          console.log()
-        }
+                const campaignM = `${wordsSet.name} | M`;
+                const campaignD = `${wordsSet.name} | D`;
+              
+                const adLevelResults = await Promise.all(
+                  addGroupsWithWords.map(async ({ adGroup, keywords: kws }) => {
+                    const fullPrompt = `${addLevelPrompt}. the words that should be used for this task is ${JSON.stringify(kws)}`;
+                    const gptResponse = await this.gptService.askGpt01(process.env.GPT_KEY, addLevelSystemMessage, fullPrompt);
+                    const [ad1, ad2] = extractHeadlinesAndDescriptions(gptResponse.choices[0].message.content, adsTemplateDefaults);
+                    const preparedAds = generateFullAddObject([ad1, ad2], { industryKeyword: [wordsSet.name] });
+              
+                    const adGroupRows = [
+                      generateRowsUsinObjectTemplate(adGroupTemplateDefaults, 1, { Campaign: [campaignM], 'Ad Group': [adGroup] })[0],
+                      generateRowsUsinObjectTemplate(adGroupTemplateDefaults, 1, { Campaign: [campaignD], 'Ad Group': [adGroup] })[0]
+                    ];
+              
+                    const keywordRows = kws.flatMap(keyword => [
+                      generateRowsUsinObjectTemplate(keywordTemplateDefaults, 1, { Campaign: [campaignM], 'Ad Group': [adGroup], Keyword: [keyword] })[0],
+                      generateRowsUsinObjectTemplate(keywordTemplateDefaults, 1, { Campaign: [campaignD], 'Ad Group': [adGroup], Keyword: [keyword] })[0]
+                    ]);
+              
+                    return { adGroupRows, keywordRows, preparedAds };
+                  })
+                );
+              
+                for (const result of adLevelResults) {
+                  adGroups.push(...result.adGroupRows);
+                  keywords.push(...result.keywordRows);
+                  ads.push(...result.preparedAds);
+                }
       }
 
 
