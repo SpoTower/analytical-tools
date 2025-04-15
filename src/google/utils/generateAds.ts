@@ -286,3 +286,6 @@ This segmentation ensures all keywords are logically grouped, with no overlaps o
     const campaignD = generateRowsUsinObjectTemplate(templateDefaults, 1, { Campaign: [`${name} | D`] })[0];
     return [campaignM, campaignD];
   }
+
+
+  
