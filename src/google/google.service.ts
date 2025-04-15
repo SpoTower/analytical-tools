@@ -115,7 +115,7 @@ async updateConversionNamesKidonTable(conversionActions?:any[],creationResult?:a
  
     //Adds  object fill   +  gpt(addLevelPrompt)
     const fullAddLevelPrompt = `${addLevelPrompt}. the word that should be used for this task is ${JSON.stringify(sourceData.industryKeyword[0])}`;
-    let res = await this.gptService.askGpt01(process.env.GPT_KEY, addLevelSystemMessage, fullAddLevelPrompt)
+    let res = await this.gptService.askGpt01(process.env.GPT_KEY, addLevelSystemMessage, fullAddLevelPrompt) // 1 loop to gpt
     const [ad1, ad2] = extractHeadlinesAndDescriptions(res.choices[0].message.content, adsTemplateDefaults)
     const allAds = generateFullAddObject([ad1, ad2], sourceData);  
     ads.push(...allAds);
@@ -142,7 +142,7 @@ for (const word of sourceData.paretoKeywords) {
   adGroups.push(adGroupM, adGroupB);
 
   const fullPrompt = `${addLevelPrompt}. the word that should be used for this task is ${JSON.stringify(word)}`;
-  const gptResponse = await this.gptService.askGpt01(process.env.GPT_KEY, addLevelSystemMessage, fullPrompt);
+  const gptResponse = await this.gptService.askGpt01(process.env.GPT_KEY, addLevelSystemMessage, fullPrompt); //2-3 loops to gpt
   const [ad1, ad2] = extractHeadlinesAndDescriptions(gptResponse.choices[0].message.content, adsTemplateDefaults);
   const preparedAds = generateFullAddObject([ad1, ad2], { industryKeyword: [word] });
   ads.push(...preparedAds);
@@ -156,7 +156,7 @@ for (const word of sourceData.paretoKeywords) {
 //TODO box C
 
 const fullPromptC = `${campaignLevelPrompt}. the word that should be used for this task is ${sourceData.genericKeywords}`;
-const gptResponse = await this.gptService.askGpt01(process.env.GPT_KEY, campaignLevelSystemMessage, fullPromptC);
+const gptResponse = await this.gptService.askGpt01(process.env.GPT_KEY, campaignLevelSystemMessage, fullPromptC);  // 1 loop to gpt
 let campaignsWithWords = gptResponse.choices[0].message.content.split('\n') .map(line => line.trim()).filter(line => line.startsWith('####') || line.startsWith('-')) // ?? const lines
 
      const campaignsWithWordsArray = JSON.stringify(campaignsWithWords).split('####').slice(1);  //?? arr
@@ -177,7 +177,7 @@ let campaignsWithWords = gptResponse.choices[0].message.content.split('\n') .map
       
 
         //fill add groups
-      for (const wordsSet of campaignNamesAndWords as CampaignWordsChunk[]) {  // 4-6 loops
+      for (const wordsSet of campaignNamesAndWords as CampaignWordsChunk[]) {  // 4-6 loops to gpt
         const keywordList = wordsSet.words.map(w => `"${w}"`).join(', ');
         const fullPrompt = `${addGroupLevelPrompt}\n\nHere is the list of keywords to use:\n${keywordList}`;
         const gptResponse = await this.gptService.askGpt01(process.env.GPT_KEY, addGroupLevelSystemMessage, fullPrompt);
@@ -188,7 +188,7 @@ let campaignsWithWords = gptResponse.choices[0].message.content.split('\n') .map
                 const campaignM = `${wordsSet.name} | M`;
                 const campaignD = `${wordsSet.name} | D`;
               
-                const adLevelResults = await Promise.all(
+                const adLevelResults = await Promise.all(         // 1 loop to gpt for each outer loop
                   addGroupsWithWords.map(async ({ adGroup, keywords: kws }) => {
                     const fullPrompt = `${addLevelPrompt}. the words that should be used for this task is ${JSON.stringify(kws)}`;
                     const gptResponse = await this.gptService.askGpt01(process.env.GPT_KEY, addLevelSystemMessage, fullPrompt);
