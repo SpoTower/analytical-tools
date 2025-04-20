@@ -15,7 +15,8 @@ export class GoogleController {
   async upload(@Body() body: { conversionActions: conversionActions[], hostname: string, domainId: number }) {
     try {
     const { conversionActions, hostname, domainId  } = body;
-    logToCloudWatch(` Entering upload endpoint. Parsed rows:, ${conversionActions}, Hostname:,  ${hostname}`);
+    logToCloudWatch(` Entering upload endpoint. Parsed rows:, ${conversionActions.map((ca)=>JSON.stringify(ca))}, Hostname:,  ${hostname}`,  'INFO', 'UPLOAD_CONVERSIONS' );
+   
   
     const creationResult = await this.googleService.createConversionActions(conversionActions,  hostname);
     const res = await this.googleService.updateConversionNamesKidonTable(conversionActions,creationResult, domainId);
