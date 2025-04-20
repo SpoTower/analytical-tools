@@ -17,7 +17,7 @@ cheap colleges
 what is the cheapest online university
 `
 
-const lines = `
+const campaignsWithWords = `
 '#### CAMPAIGN: Cheapest and Affordable Options'
 1:
 '- cheapest online university'
@@ -76,7 +76,7 @@ const lines = `
 `
 
 
-const arr = `
+const campaignsWithWordsArray = `
 3:
 ' CAMPAIGN: Graphic Design and Creative Fields","- graphic design bachelor's degree online","- online graphic design degree","- get a graphic design degree online","- graphic design online courses","- masters in graphic design online","- graphic design programs online","- creative writing degrees","- online creative writing degree","- best online graphic design programs","'
 4:
