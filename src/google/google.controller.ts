@@ -5,7 +5,7 @@ import { UpdateGoogleDto } from './dto/update-google.dto';
  import { FileInterceptor } from '@nestjs/platform-express';
  import {conversionActions,googleAdsSourceData} from './interfaces'
  const logger = new Logger('google-service');
-
+ import { logToCloudWatch }  from 'src/logger';
 @Controller('google')
 export class GoogleController {
   constructor(private readonly googleService: GoogleService) {}
@@ -15,7 +15,7 @@ export class GoogleController {
   async upload(@Body() body: { conversionActions: conversionActions[], hostname: string, domainId: number }) {
     try {
     const { conversionActions, hostname, domainId  } = body;
-    logger.log(' Entering upload endpoint. Parsed rows:', conversionActions, 'Hostname:',  hostname);
+    logToCloudWatch(` Entering upload endpoint. Parsed rows:, ${conversionActions}, Hostname:,  ${hostname}`);
   
     const creationResult = await this.googleService.createConversionActions(conversionActions,  hostname);
     const res = await this.googleService.updateConversionNamesKidonTable(conversionActions,creationResult, domainId);

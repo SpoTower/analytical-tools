@@ -95,7 +95,7 @@ export function extractHeadlinesAndDescriptions(raw: string, baseTemplate: Recor
     }
   
     const outputPath = path.resolve(__dirname, '..', outputDir)
-    const fullFilePath = path.join(outputPath, filename)
+    const fullFilePath = path.join(outputPath, filename) //'/Users/dimitriyglefa/analyticalTools4/analytical-tools/dist/google/exports/campaigns.csv'
   
     await fs.mkdir(outputPath, { recursive: true }) // Ensure folder exists
     await fs.writeFile(fullFilePath, csvRows.join('\n'), 'utf8')
