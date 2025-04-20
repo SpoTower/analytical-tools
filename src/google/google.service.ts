@@ -45,7 +45,7 @@ export class GoogleService {
    for (const action of conversionActions) {
     const operations = createObcConfigParams([{ name: action['Conversions Name Action'], category: action['Conversion Category'], attributionModel: action['Attribution'],countingType: action['Type']  },]); //Attribution
       
-    logToCloudWatch(`uploading to google: ${operations.map((op)=>JSON.stringify(op))}, length: ${operations.length}`);
+    logToCloudWatch(`uploading to google: ${operations.map((op)=>JSON.stringify(op))}, length: ${operations.length}`,  'INFO', 'UPLOAD_CONVERSIONS');
 
   
     try {
@@ -54,7 +54,7 @@ export class GoogleService {
         { headers: { 'developer-token': company.googleDeveloperToken, Authorization: `Bearer ${token}`,'login-customer-id': company.googleCustomerId,},}
       );
  
-      logToCloudWatch(`number of uploaded conversion actions :, ${result?.data?.results?.length}`);
+      logToCloudWatch(`number of uploaded conversion actions :, ${result?.data?.results?.length}`,  'INFO', 'UPLOAD_CONVERSIONS');
       results.push(result.data);
     } catch (error) {
       logToCloudWatch(error.response?.data?.error?.message ||   error.response?.data?.error?.details?.[0]?.errors?.[0]?.message || error.response?.data?.error?.message)
