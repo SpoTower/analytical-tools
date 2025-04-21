@@ -3,28 +3,42 @@ import { GoogleService } from './google.service';
 import { CreateGoogleDto } from './dto/create-google.dto';
 import { UpdateGoogleDto } from './dto/update-google.dto';
  import { FileInterceptor } from '@nestjs/platform-express';
- import {conversionActions} from './interfaces'
+ import {conversionActions,googleAdsSourceData} from './interfaces'
  const logger = new Logger('google-service');
-
+ import { logToCloudWatch }  from 'src/logger';
 @Controller('google')
 export class GoogleController {
   constructor(private readonly googleService: GoogleService) {}
 
-  @Post('upload')
+  //creating conversion names
+  @Post('generateConversions')
   async upload(@Body() body: { conversionActions: conversionActions[], hostname: string, domainId: number }) {
     try {
     const { conversionActions, hostname, domainId  } = body;
-    logger.log(' Entering upload endpoint. Parsed rows:', conversionActions, 'Hostname:',  hostname);
+    logToCloudWatch(` Entering upload endpoint. Parsed rows:, ${conversionActions.map((ca)=>JSON.stringify(ca))}, Hostname:,  ${hostname}`,  'INFO', 'UPLOAD_CONVERSIONS' );
+   
   
     const creationResult = await this.googleService.createConversionActions(conversionActions,  hostname);
-    await this.googleService.updateConversionNamesKidonTable(conversionActions,creationResult, domainId);
+    const res = await this.googleService.updateConversionNamesKidonTable(conversionActions,creationResult, domainId);
     return { status: 'ok', count: conversionActions.length };
     } catch (error) {
       return { status: 'error', count: '', message: error.message };
     }
- 
   }
  
+  //generating ads using gpt
+  @Post('generateAds')
+  async generateAds(@Body() body: { sourceData: googleAdsSourceData,   } ) {
+    const { sourceData } = body;
+
+    logger.log(' Entering generateAds endpoint. ');
+    try {
+       const creationResult = await this.googleService.generateAds(sourceData);
+    } catch (error) {
+      return { status: 'error', count: '', message: error.message };
+    }
+  }
+
 
   @Get()
   findAll() {
