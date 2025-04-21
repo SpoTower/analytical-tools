@@ -11,7 +11,7 @@ import { GlobalStateService } from 'src/globalState/global-state.service';
  import {googleAds } from './interfaces';
  export {emailSubjects} from './consts';
 import * as KF from '@spotower/my-utils';
-  import {googleAdsIgnoreList,ignoredLanguages,googleAdsNonCapitalLettersIgnoreList} from './ignoreWords';
+  import {ignoredLanguages} from './ignoreWords';
   import { KIDON_CONNECTION } from 'src/knex/knex.module';
   import { Knex } from 'knex';
   import fs from 'fs';
@@ -35,6 +35,17 @@ export class SpellCheckerService {
  
   async findAndFixGoogleAdsGrammaticalErrors(batchSize: number, domainId?: number, sliceSize?: number) {
     logToCloudWatch('entering findAndFixGoogleAdsGrammaticalErrors');
+
+    let googleAdsIgnoreList =  await this.kidonClient.raw('select * from configuration where id = ?', ['59']);
+    googleAdsIgnoreList = googleAdsIgnoreList[0][0].values.split(',')
+    googleAdsIgnoreList = googleAdsIgnoreList.map(iw => iw.replace(/[\n"']/g, '').trim());
+
+
+    let googleAdsNonCapitalLettersIgnoreList =  await this.kidonClient.raw('select * from configuration where id = ?', ['60']);
+    googleAdsNonCapitalLettersIgnoreList = googleAdsNonCapitalLettersIgnoreList[0][0].values.split(',')
+    googleAdsNonCapitalLettersIgnoreList = googleAdsNonCapitalLettersIgnoreList.map(s => s.replace(/[\n"']/g, '').trim())
+
+     
 
     const state = this.globalState.getAllState();
     if (!state) return 'No state found';
