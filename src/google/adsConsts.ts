@@ -105,7 +105,7 @@ export const adsTemplateDefaults = {
     'Description 2': '',
     'Description 2 position': 'fha_loan',
     'Description 3': '',
-    'Description 3 position': 'https://tophomewarrantyservices.com/',
+    'Description 3 position': '',
     'Description 4': '',
     'Description 4 position': '',
     'Path 1': '',
