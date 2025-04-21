@@ -1,4 +1,4 @@
-import { Injectable,Logger,Inject } from '@nestjs/common';
+import { Injectable,Logger,Inject,HttpException } from '@nestjs/common';
 import { CreateSpellCheckerDto } from './dto/create-spell-checker.dto';
 import { UpdateSpellCheckerDto } from './dto/update-spell-checker.dto';
  import {fetchGoogleAds,filterOutTextlessAds,prepareAdsForErrorChecking,fetchWebsitesInnerHtmlAndFindErrors, extractNonCapitalLetterWords} from './utils';
@@ -14,13 +14,10 @@ import * as KF from '@spotower/my-utils';
   import {ignoredLanguages} from './ignoreWords';
   import { KIDON_CONNECTION } from 'src/knex/knex.module';
   import { Knex } from 'knex';
-  import fs from 'fs';
-  import path from 'path';
-   const { chromium } = require('playwright');
 import { createErrorsTable } from './utils';
  import {slackChannels} from './consts';
  import { getSecretFromSecretManager } from 'src/utils/secrets';
-
+ 
 
 
   @Injectable()
@@ -159,6 +156,8 @@ export class SpellCheckerService {
  
 
   async urlValidation( ){
+    logToCloudWatch (`entering url checker:   `, "INFO", 'url checker');
+
     try {
     const state =   this.globalState.getAllState(); 
     const res = await getSecretFromSecretManager(process.env.SECRET_NAME);
@@ -168,6 +167,7 @@ export class SpellCheckerService {
     let [rows] = await job.getQueryResults();
 
     rows = rows.filter(r => r.domain_id !== 188); // test domain
+    logToCloudWatch (`rows : ${rows ? rows.length : 0} `, "INFO", 'url checker');
 
   rows = rows.map((row) => {  // attaching correct hoistname to each row that miss it
     if (row.domain_id == 24) row.hostname = 'topmealkitdelivery';
@@ -182,18 +182,20 @@ export class SpellCheckerService {
    let  uncorrectUrls = rows.filter((r)=> !r.landing_page.includes(r.hostname))
    uncorrectUrls = uncorrectUrls.map((uu) => ({ landingpage: uu.landing_page,hostname: uu.hostname}));
 
-   const msg = uncorrectUrls?.length > 0 ?  uncorrectUrls.forEach((uu) => { console.log(`*Landing Page: ${uu.landing_page}, Hostname: ${uu.hostname}*`);}) : '*🌿All URLs are correct*';
-   
+   const msg = uncorrectUrls?.length > 0 ?  uncorrectUrls.forEach((uu) => { `*Landing Page: ${uu.landing_page}, Hostname: ${uu.hostname}*`;}) : '*🌿All URLs are correct*';
+   logToCloudWatch (`msg : ${msg} `, "INFO", 'url checker');
+
   
     
   
  
     await KF.sendSlackAlert('Uncorrect URL:', slackChannels.CONTENT, state.slackToken);
-    await KF.sendSlackAlert(`${msg}`, slackChannels.CONTENT, state.slackToken);
-
+    await KF.sendSlackAlert(`${msg}`, slackChannels.CONTENT, state.slackToken); 
+    return ` url validation function find ${uncorrectUrls ? uncorrectUrls.length : 0} invalid url's `
     
       } catch (error) {
-      console.log(error)
+        logToCloudWatch (`❌ Error in urlValidation: ${error.message}`, "ERROR", 'url checker');
+         throw new HttpException('Error processing AB Test events', error?.status || 500);
     }
  
      
