@@ -33,6 +33,8 @@ export class SpellCheckerController {
     }
   }
 
+ 
+
   @Get('/urlValidation')
   async urlValidation() {
  
@@ -61,6 +63,10 @@ export class SpellCheckerController {
     }
   }
  
+
+
+
+  
 
   @Get(':id')
   findOne(@Param('id') id: string) {
