@@ -7,7 +7,7 @@ import { GlobalStateService } from 'src/globalState/global-state.service';
   import { logToCloudWatch } from 'src/logger'; 
  import {adsPreparedForErrorDetection} from './interfaces';
  import { Domain,Paths } from 'src/kidonInterfaces/shared';
-   import {processInBatches,extractMisspelledWords} from './utils';
+   import {processInBatches,extractMisspelledWords,extractOutdatedYears} from './utils';
  import {googleAds } from './interfaces';
  export {emailSubjects} from './consts';
 import * as KF from '@spotower/my-utils';
@@ -17,7 +17,7 @@ import * as KF from '@spotower/my-utils';
 import { createErrorsTable } from './utils';
  import {slackChannels} from './consts';
  import { getSecretFromSecretManager } from 'src/utils/secrets';
- 
+ import {googleAdsGrammarErrors,googleAdsYearsErrors} from './gaqlQuerys';
 
 
   @Injectable()
@@ -56,7 +56,7 @@ export class SpellCheckerService {
     const fetchedAdsResults: googleAds[] = await processInBatches(
       domainsToProcess.map((domain: Domain) => async () => {
         try {
-          return { domain, ads: await fetchGoogleAds(domain, state.companies, allTokens) };
+          return { domain, ads: await fetchGoogleAds(domain, state.companies, allTokens,googleAdsGrammarErrors) };
         } catch (error) {
           logToCloudWatch(`❌ Error fetching Google Ads for domain ${domain.id}: ${error.message}`, "ERROR");
           return { domain, ads: [] };
@@ -73,7 +73,7 @@ export class SpellCheckerService {
     }
 
     const preparedAds = prepareAdsForErrorChecking(textfullAds);
-    const errors = {spelling: [] as any[],capitalization: [] as any[] };
+    const errors = {spelling: [] as any[],capitalization: [] as any[],outdatedYears: [] as any[]};
       
 
     // Check for errors
@@ -87,6 +87,10 @@ export class SpellCheckerService {
          
         const nonCapitalWords = extractNonCapitalLetterWords(item.text, googleAdsNonCapitalLettersIgnoreList).filter(c => !c.includes('CUSTOM'));
         if (nonCapitalWords.length > 0) errors.capitalization.push({ ...baseError, errors: nonCapitalWords });   
+
+        const outdatedYears = extractOutdatedYears(item.text);
+        if (outdatedYears.length > 0) errors.outdatedYears.push({ ...baseError, errors: outdatedYears });
+
         
       });
     }
@@ -119,8 +123,43 @@ export class SpellCheckerService {
         await KF.sendSlackAlert('*🌿 No Capitalization Errors Found*', slackChannels.CONTENT, state.slackToken);
     
 
+
+    await KF.sendSlackAlert('*🚨Google Ads Outdated Years Errors:*', slackChannels.CONTENT, state.slackToken);
+    (errors.outdatedYears.length > 0) ?
+        await KF.sendSlackAlert(formatSlackTable(errors.outdatedYears, 'Outdated Years Errors'), slackChannels.CONTENT, state.slackToken) :
+        await KF.sendSlackAlert('*🌿 No Outdated Years Errors Found*', slackChannels.CONTENT, state.slackToken);
+
     return 'ads were processed by local spellchecker and sent to kidon to be sended by slack to content errors channel';
   }
+
+
+
+async findGoogleAdsYearsErrors(domainId?: number) {
+  const state = this.globalState.getAllState();
+
+    // Filter and slice domains
+    let domainsToProcess = state.domains.filter((domain: Domain) => domain.googleAdsId).filter((domain: Domain) => !domainId || domain.id === domainId)  
+    // Get Google tokens for all companies
+    const allTokens = await Promise.all(state.companies.map(async (c) => ({ company: c.name,token: await KF.getGoogleAuthToken(c)})));
+
+    // Fetch Google Ads in batches
+    const fetchedAdsResults: googleAds[] = await processInBatches(
+      domainsToProcess.map((domain: Domain) => async () => {
+        try {
+          return { domain, ads: await fetchGoogleAds(domain, state.companies, allTokens,googleAdsYearsErrors) };
+        } catch (error) {
+          logToCloudWatch(`❌ Error fetching Google Ads for domain ${domain.id}: ${error.message}`, "ERROR");
+          return { domain, ads: [] };
+        }
+      }),
+      100
+    );
+
+
+    console.log(fetchedAdsResults)
+
+}
+
 
 
 

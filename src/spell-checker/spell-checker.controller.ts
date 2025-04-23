@@ -33,6 +33,21 @@ export class SpellCheckerController {
     }
   }
 
+
+  @Get('/findGoogleAdsYearsErrors')
+  async GoogleAdsYearsErrors(
+    @Query('domainId' ) domainId?: number
+     ) {
+    try {
+       return await this.spellCheckerService.findGoogleAdsYearsErrors(+domainId);
+    } catch (error) {
+      if (error instanceof BadRequestException || error instanceof InternalServerErrorException) {
+        throw error;
+      }
+    }
+  }
+ 
+
   @Get('/urlValidation')
   async urlValidation() {
  
@@ -61,6 +76,10 @@ export class SpellCheckerController {
     }
   }
  
+
+
+
+  
 
   @Get(':id')
   findOne(@Param('id') id: string) {

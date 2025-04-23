@@ -18,31 +18,19 @@ const { JSDOM } = require('jsdom');
 import * as KF from '@spotower/my-utils';
 import {slackChannels}  from './consts';
 
-export async function fetchGoogleAds(domain: Domain, companies: Company[], tokens:any ) {
+export async function fetchGoogleAds(domain: Domain, companies: Company[], tokens:any, query:string ) {
     logToCloudWatch(`Entering fetchGoogleAds, fetching google ads for domain ${domain.id}`);
+
     const date = getDateRange(1, 'YYYY-MM-DD');
+    if(query.includes('<startDate>') && query.includes('<endDate>')) {
+        query = query.replace('<startDate>', date.startDate).replace('<endDate>', date.endDate);
+    }
+
     try {
         const changeEventResult = await axios.post(
             `https://googleads.googleapis.com/v17/customers/${domain.googleAdsId}/googleAds:searchStream`,
             {
-                query: `
-                SELECT
-                change_event.resource_name,   
-                change_event.change_date_time,  
-                change_event.change_resource_name,  
-                change_event.resource_change_operation,   
-                change_event.changed_fields,  
-                change_event.old_resource,  
-                change_event.new_resource  
-            FROM change_event
-            WHERE
-                change_event.change_date_time BETWEEN  '${date.startDate}' AND '${date.endDate}'
-            AND
-                change_event.resource_change_operation IN (CREATE, UPDATE)
-            AND
-                 change_event.change_resource_type IN ('AD' )
-             LIMIT 10000
-                `,
+                query: query,
             },
             {
                 headers: {
@@ -258,8 +246,6 @@ let finalMisspelledWordsDbfiltered = misspelledWords.filter(word => !lowerExclud
  
 export function extractNonCapitalLetterWords(text: string, excludedWords: string[]): string[] {
     try {
-        
- 
             const extractedWords = text
         .replace(/[^a-zA-Z\s]/g, '') // Remove non-letter characters
         .split(/\s+/)
@@ -274,6 +260,15 @@ export function extractNonCapitalLetterWords(text: string, excludedWords: string
     }
 
 }
+
+
+export function extractOutdatedYears(text: string): string[] {
+    const currentYear = new Date().getFullYear();
+    return [...text.matchAll(/\b(19|20)\d{2}\b/g)]
+        .map(match => match[0])
+        .filter(year => parseInt(year) !== currentYear);
+}
+
  
 export function saveResults(results: any[]) {
     const filePath = path.join(__dirname, '../..', 'webSiteErrors.json');
