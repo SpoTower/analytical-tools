@@ -17,7 +17,7 @@ import * as KF from '@spotower/my-utils';
 import { createErrorsTable } from './utils';
  import {slackChannels} from './consts';
  import { getSecretFromSecretManager } from 'src/utils/secrets';
- import {googleAdsGrammarErrors,googleAdsYearsErrors} from './gaqlQuerys';
+ import {googleAdsGrammarErrors} from './gaqlQuerys';
 
 
   @Injectable()
@@ -133,33 +133,7 @@ export class SpellCheckerService {
   }
 
 
-
-async findGoogleAdsYearsErrors(domainId?: number) {
-  const state = this.globalState.getAllState();
-
-    // Filter and slice domains
-    let domainsToProcess = state.domains.filter((domain: Domain) => domain.googleAdsId).filter((domain: Domain) => !domainId || domain.id === domainId)  
-    // Get Google tokens for all companies
-    const allTokens = await Promise.all(state.companies.map(async (c) => ({ company: c.name,token: await KF.getGoogleAuthToken(c)})));
-
-    // Fetch Google Ads in batches
-    const fetchedAdsResults: googleAds[] = await processInBatches(
-      domainsToProcess.map((domain: Domain) => async () => {
-        try {
-          return { domain, ads: await fetchGoogleAds(domain, state.companies, allTokens,googleAdsYearsErrors) };
-        } catch (error) {
-          logToCloudWatch(`❌ Error fetching Google Ads for domain ${domain.id}: ${error.message}`, "ERROR");
-          return { domain, ads: [] };
-        }
-      }),
-      100
-    );
-
-
-    console.log(fetchedAdsResults)
-
-}
-
+ 
 
 
 

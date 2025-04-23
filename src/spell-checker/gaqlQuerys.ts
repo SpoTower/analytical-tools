@@ -16,21 +16,4 @@ export let googleAdsGrammarErrors = `
                  change_event.change_resource_type IN ('AD' )
              LIMIT 10000
                 `
-
-                export let googleAdsYearsErrors = `
-                SELECT
-                    ad_group_ad.ad.id,
-                    ad_group_ad.ad.type,
-                    ad_group_ad.ad.responsive_search_ad.headlines,
-                    ad_group_ad.ad.responsive_search_ad.descriptions,
-                    ad_group_ad.ad.expanded_text_ad.headline,
-                    ad_group_ad.ad.expanded_text_ad.description1,
-                    ad_group_ad.ad.expanded_text_ad.description2,
-                    campaign.name
-                FROM ad_group_ad
-                WHERE 
-                    ad_group_ad.status = 'ENABLED'
-                    AND campaign.status = 'ENABLED'
-                LIMIT 10000
-            `
-            
+ 
