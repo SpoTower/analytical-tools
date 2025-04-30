@@ -1,5 +1,6 @@
 
-export const campaignLevelSystemMessage =  'You are a PPC expert with extensive experience in Google Ads campaign building, keyword analysis, and account structuring. Your task is to segment a list of keywords—provided as input—into distinct campaign groupings based on shared themes, phrases, or semantic elements.'
+export const campaignLevelSystemMessage =  
+'You are a PPC expert with extensive experience in Google Ads campaign building, keyword analysis, and account structuring. Your task is to segment a list of keywords—provided as input—into distinct campaign groupings based on shared themes, phrases, or semantic elements.'
 export const campaignLevelPrompt = `
 You are a keyword segmentation expert.
 
