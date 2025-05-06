@@ -1,26 +1,28 @@
 import { Injectable,Logger,Inject,HttpException } from '@nestjs/common';
 import { CreateSpellCheckerDto } from './dto/create-spell-checker.dto';
 import { UpdateSpellCheckerDto } from './dto/update-spell-checker.dto';
- import {fetchGoogleAds,filterOutTextlessAds,prepareAdsForErrorChecking,fetchWebsitesInnerHtmlAndFindErrors, extractNonCapitalLetterWords} from './utils';
+import { fetchGoogleAds,fetchLineupAds,filterOutTextlessAds,prepareAdsForErrorChecking,fetchWebsitesInnerHtmlAndFindErrors, extractNonCapitalLetterWords, formatGoogleAdsErrors, sendGoogleAdsErrorReports, checkIfLineupExists } from './utils';
 import { GlobalStateService } from 'src/globalState/global-state.service';
- const logger = new Logger('analytical-tools.spellchecker');
-  import { logToCloudWatch } from 'src/logger'; 
- import {adsPreparedForErrorDetection} from './interfaces';
- import { Domain,Paths } from 'src/kidonInterfaces/shared';
-   import {processInBatches,extractMisspelledWords,extractOutdatedYears} from './utils';
- import {googleAds } from './interfaces';
- export {emailSubjects} from './consts';
+const logger = new Logger('analytical-tools.spellchecker');
+import { logToCloudWatch } from 'src/logger'; 
+import {adsPreparedForErrorDetection} from './interfaces';
+import { Domain,Paths } from 'src/kidonInterfaces/shared';
+import {processInBatches,extractMisspelledWords,extractOutdatedYears} from './utils';
+import {googleAds } from './interfaces';
+export {emailSubjects} from './consts';
 import * as KF from '@spotower/my-utils';
-  import {ignoredLanguages} from './ignoreWords';
-  import { KIDON_CONNECTION } from 'src/knex/knex.module';
-  import { Knex } from 'knex';
+import {ignoredLanguages} from './ignoreWords';
+import { KIDON_CONNECTION } from 'src/knex/knex.module';
+import { Knex } from 'knex';
 import { createErrorsTable } from './utils';
- import {slackChannels} from './consts';
- import { getSecretFromSecretManager } from 'src/utils/secrets';
- import {googleAdsGrammarErrors} from './gaqlQuerys';
-
-
-  @Injectable()
+import {slackChannels} from './consts';
+import { getSecretFromSecretManager } from 'src/utils/secrets';
+import {googleAdsGrammarErrors,googleAdsLandingPageQuery} from './gaqlQuerys';
+import { fetchIgnoreWords } from './utils';
+import axios from 'axios';
+import { AnyObject } from './consts';
+import puppeteer from 'puppeteer';
+@Injectable()
 export class SpellCheckerService {
 
   constructor(
@@ -32,31 +34,19 @@ export class SpellCheckerService {
  
   async findAndFixGoogleAdsGrammaticalErrors(batchSize: number, domainId?: number, sliceSize?: number) {
     logToCloudWatch('entering findAndFixGoogleAdsGrammaticalErrors');
-
-    let googleAdsIgnoreList =  await this.kidonClient.raw('select * from configuration where id = ?', ['59']);
-    googleAdsIgnoreList = googleAdsIgnoreList[0][0].values.split(',')
-    googleAdsIgnoreList = googleAdsIgnoreList.map(iw => iw.replace(/[\n"']/g, '').trim());
-
-
-    let googleAdsNonCapitalLettersIgnoreList =  await this.kidonClient.raw('select * from configuration where id = ?', ['60']);
-    googleAdsNonCapitalLettersIgnoreList = googleAdsNonCapitalLettersIgnoreList[0][0].values.split(',')
-    googleAdsNonCapitalLettersIgnoreList = googleAdsNonCapitalLettersIgnoreList.map(s => s.replace(/[\n"']/g, '').trim())
-
-     
-
+    const [googleAdsIgnoreList, googleAdsNonCapitalLettersIgnoreList] = await Promise.all([fetchIgnoreWords(this.kidonClient, '59'),fetchIgnoreWords(this.kidonClient, '60')]);
     const state = this.globalState.getAllState();
     if (!state) return 'No state found';
-
     // Filter and slice domains
-    let domainsToProcess = state.domains.filter((domain: Domain) => domain.googleAdsId).filter((domain: Domain) => !domainId || domain.id === domainId) .slice(0, sliceSize || Infinity);
+    let domainsToProcess = state.domains.filter((domain: Domain) => domain.googleAdsId).filter((domain: Domain) => !domainId || domain.id === domainId).slice(0, sliceSize || Infinity);
     // Get Google tokens for all companies
-    const allTokens = await Promise.all(state.companies.map(async (c) => ({ company: c.name,token: await KF.getGoogleAuthToken(c)})));
+    const allTokens = await Promise.all(state.companies.map(async (c) => ({ company: c.name, token: await KF.getGoogleAuthToken(c) })));
 
     // Fetch Google Ads in batches
     const fetchedAdsResults: googleAds[] = await processInBatches(
       domainsToProcess.map((domain: Domain) => async () => {
         try {
-          return { domain, ads: await fetchGoogleAds(domain, state.companies, allTokens,googleAdsGrammarErrors) };
+          return { domain, ads: await fetchGoogleAds(domain, state.companies, allTokens, googleAdsGrammarErrors) };
         } catch (error) {
           logToCloudWatch(`❌ Error fetching Google Ads for domain ${domain.id}: ${error.message}`, "ERROR");
           return { domain, ads: [] };
@@ -73,75 +63,110 @@ export class SpellCheckerService {
     }
 
     const preparedAds = prepareAdsForErrorChecking(textfullAds);
-    const errors = {spelling: [] as any[],capitalization: [] as any[],outdatedYears: [] as any[]};
-      
+    const errors = { spelling: [] as any[], capitalization: [] as any[], outdatedYears: [] as any[] };
 
     // Check for errors
     for (const ad of preparedAds as adsPreparedForErrorDetection[]) {
       [...ad.descriptions, ...ad.headlines].forEach((item) => {
         const location = ad.descriptions.includes(item) ? 'descriptions' : 'headline';
-        const baseError = {resource: ad.resourceName,domain: ad.domain,googleAdsId: ad.googleAdsId,wholeSentence: item.text,location};
+        const baseError = { resource: ad.resourceName, domain: ad.domain, googleAdsId: ad.googleAdsId, wholeSentence: item.text, location };
 
         const misspelledWords = extractMisspelledWords(item.text, googleAdsIgnoreList);
-        if (misspelledWords.length > 0)  errors.spelling.push({ ...baseError, errors: misspelledWords });
-         
+        if (misspelledWords.length > 0) errors.spelling.push({ ...baseError, errors: misspelledWords });
+
         const nonCapitalWords = extractNonCapitalLetterWords(item.text, googleAdsNonCapitalLettersIgnoreList).filter(c => !c.includes('CUSTOM'));
-        if (nonCapitalWords.length > 0) errors.capitalization.push({ ...baseError, errors: nonCapitalWords });   
+        if (nonCapitalWords.length > 0) errors.capitalization.push({ ...baseError, errors: nonCapitalWords });
 
         const outdatedYears = extractOutdatedYears(item.text);
         if (outdatedYears.length > 0) errors.outdatedYears.push({ ...baseError, errors: outdatedYears });
-
-        
       });
     }
 
-    // Format and send Slack messages
-    const formatSlackTable = (errors: any[], title: string) => {
-      const header = "resource                                        | errors   |        domain              | googleAdsId  | wholeSentence                                    | location \n" +
-                    "------------------------------------------------|----------|----------------------------|--------------|--------------------------------------------------|-----------\n";
-      
-      const rows = errors.map(ad => 
-        `${ad.resource.padEnd(38)}| ${ad.errors.join(",").padEnd(8)}| ${ad.domain.padEnd(30)}| ${ad.googleAdsId.toString().padEnd(12)}| ${ad.wholeSentence.padEnd(50)}| ${ad.location}`
-      ).join('\n');
-
-      return `\`\`\`${header}${rows}\`\`\``;
-    };
-
-  
-    
-   
-    await KF.sendSlackAlert('*🚨 Google Ads Content Errors:*', slackChannels.CONTENT, state.slackToken);
-    errors.spelling.length > 0 ?
-       await KF.sendSlackAlert(formatSlackTable(errors.spelling, 'Spelling Errors'), slackChannels.CONTENT, state.slackToken):
-        await KF.sendSlackAlert('🌿 No Spelling Errors Found', slackChannels.CONTENT, state.slackToken);
-    
-
-      
-      await KF.sendSlackAlert('*🚨Google Ads non-Capital words Errors:*', slackChannels.CONTENT, state.slackToken);
-      (errors.capitalization.length > 0)  ?
-        await KF.sendSlackAlert(formatSlackTable(errors.capitalization, 'Capitalization Errors'), slackChannels.CONTENT, state.slackToken) :
-        await KF.sendSlackAlert('*🌿 No Capitalization Errors Found*', slackChannels.CONTENT, state.slackToken);
-    
-
-
-    await KF.sendSlackAlert('*🚨Google Ads Outdated Years Errors:*', slackChannels.CONTENT, state.slackToken);
-    (errors.outdatedYears.length > 0) ?
-        await KF.sendSlackAlert(formatSlackTable(errors.outdatedYears, 'Outdated Years Errors'), slackChannels.CONTENT, state.slackToken) :
-        await KF.sendSlackAlert('*🌿 No Outdated Years Errors Found*', slackChannels.CONTENT, state.slackToken);
+    await sendGoogleAdsErrorReports(errors, state);
 
     return 'ads were processed by local spellchecker and sent to kidon to be sended by slack to content errors channel';
   }
 
 
  
+ 
+  async lineupValidation() {
+    logToCloudWatch('entering lineupValidation');
 
+
+
+    const browser = await puppeteer.launch({ headless: true });
+    const page = await browser.newPage();
+    await page.goto('https://top10homewarrantyranking.com/spanish/', { waitUntil: 'networkidle2', timeout: 60000 });
+    const res = await page.content();
+    await browser.close();
+ 
+
+return res.includes('ConditionalPartnersList')
+
+
+
+
+
+
+
+    try {
+      let errors = []
+       
+      const state = this.globalState.getAllState(); if (!state) return 'No state found';
+      const domainsToProcess = state.domains.filter((d: Domain) => d.googleAdsId);
+      const allTokens = await Promise.all(state.companies.map(async (c) => ({ company: c.name, token: await KF.getGoogleAuthToken(c) })));
+ 
+      const urlSet = new Set<string>();
+
+      await processInBatches(
+          domainsToProcess.map((domain: Domain) => async () => {
+              try {
+                  await fetchLineupAds(domain, state.companies, allTokens, googleAdsLandingPageQuery, urlSet);
+              } catch (error) {
+                  logToCloudWatch(`❌ Error fetching Google Ads for domain ${domain.id}: ${error.message}`, "ERROR");
+              }
+          }),
+          10
+      );
+      let urlAndSlackChannel : {url: string, slackChannelId: string}[] = urlSet.size > 0 ? Array.from(urlSet).map((u)=>({url:u?.split(' - ')[0], slackChannelId:u?.split(' - ')[1]})) : [];
+         
+ 
+      for (const urlAndSlack of urlAndSlackChannel) {
+        const startTime = Date.now();
+
+        let res = await axios.get(urlAndSlack.url);
+        const durationMs = Date.now() - startTime;
+
+        if(res.status !== 200) {
+           errors.push({url:urlAndSlack.url, slackChannelId:urlAndSlack.slackChannelId, status: res.status, reason: 'response status not success (not 200)'});
+        }else if(durationMs > 10000) {
+          errors.push({url:urlAndSlack.url, slackChannelId:urlAndSlack.slackChannelId, status: res.status, reason: 'timeout'});
+        }else if(!checkIfLineupExists(res.data)){
+          errors.push({url:urlAndSlack.url, slackChannelId:urlAndSlack.slackChannelId, status: res.status, reason: 'no lineup found'});
+        }
+       }
+
+       if(errors.length > 0){
+        logToCloudWatch(`Lineup Validation Errors: ${JSON.stringify(errors)}`, 'ERROR');
+       // await KF.sendSlackAlert('Lineup Validation Errors:', slackChannels.CONTENT, state.slackToken); 
+       }
+
+    } catch (e) {
+      logToCloudWatch(`Error during lineupValidation: ${e}`, 'ERROR');
+        return 'Validation failed';
+      }
+  }
 
 
   async findAndFixWebsitesGrammaticalErrors(domainId?: number, batchSize?: number) {
-    const state =   this.globalState.getAllState(); 
-     let ignoredWords =  await this.kidonClient.raw('select * from configuration where id = ?', ['56']);
-     ignoredWords = ignoredWords[0][0].values.split(',')
-     ignoredWords = ignoredWords.map(iw => iw.replace(/\s+/g, ''));
+    const state = this.globalState.getAllState();
+    const ignoredWords = await fetchIgnoreWords(this.kidonClient, '56');
+
+    if (!state || !ignoredWords.length) {
+      logToCloudWatch('No state/No ignore words found');
+      return;
+    }
 
      if(!state || !ignoredWords){ logToCloudWatch('No state/ No ignore words found'); }
          // ✅ Step 1: filter non english paths out and assign relevant paths to domains
@@ -214,6 +239,7 @@ export class SpellCheckerService {
      
    
     }
+
  
   create(createSpellCheckerDto: CreateSpellCheckerDto) {
     return 'This action adds a new spellChecker';

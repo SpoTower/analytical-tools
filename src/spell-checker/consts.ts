@@ -88,3 +88,4 @@ export function fixingGrammErrorsPrompt2( ) {
   PERSONAL: 'C08GHM3NY8K',
  }
  
+  export const lineupClassNames = ['partnersArea_main-partner-list', 'ConditionalPartnersList', 'test-id-partners-list','homePage_partners-list-section' ];
