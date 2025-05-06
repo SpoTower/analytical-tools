@@ -93,17 +93,24 @@ export class SpellCheckerService {
   async lineupValidation() {
     logToCloudWatch('entering lineupValidation');
 
-
+try {
 
     const browser = await puppeteer.launch({ headless: true });
     const page = await browser.newPage();
     await page.goto('https://top10homewarrantyranking.com/spanish/', { waitUntil: 'networkidle2', timeout: 60000 });
     const res = await page.content();
+    logToCloudWatch(`res: ${res}`);
+
     await browser.close();
  
 
 return res.includes('ConditionalPartnersList')
 
+
+} catch (error) {
+  logToCloudWatch(`Error during lineupValidation: ${error} ${JSON.stringify(error)}`, 'ERROR');
+  return 'Validation failed';
+}
 
 
 
