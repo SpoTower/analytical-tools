@@ -92,29 +92,8 @@ export class SpellCheckerService {
  
   async lineupValidation() {
     logToCloudWatch('entering lineupValidation');
-
-try {
- const browser = await puppeteer.launch({
-    headless: true,
-    executablePath: '/home/webapp/.cache/puppeteer/chrome/linux-136.0.7103.49/chrome-linux64/chrome',
-  });
-    const page = await browser.newPage();
-    await page.goto('https://top10homewarrantyranking.com/spanish/', { waitUntil: 'networkidle2', timeout: 60000 });
-    const res = await page.content();
-    logToCloudWatch(`res: ${res}`);
-
-    await browser.close();
  
-
-return res.includes('ConditionalPartnersList')
-
-
-} catch (error) {
-  logToCloudWatch(`Error during lineupValidation: ${error} ${JSON.stringify(error)}`, 'ERROR');
-  return 'Validation failed';
-}
-
-
+ 
 
 
 
@@ -136,29 +115,43 @@ return res.includes('ConditionalPartnersList')
                   logToCloudWatch(`❌ Error fetching Google Ads for domain ${domain.id}: ${error.message}`, "ERROR");
               }
           }),
-          10
+          30
       );
       let urlAndSlackChannel : {url: string, slackChannelId: string}[] = urlSet.size > 0 ? Array.from(urlSet).map((u)=>({url:u?.split(' - ')[0], slackChannelId:u?.split(' - ')[1]})) : [];
          
  
       for (const urlAndSlack of urlAndSlackChannel) {
+        
         const startTime = Date.now();
-
-        let res = await axios.get(urlAndSlack.url);
+        let axiosRes = await axios.get(urlAndSlack.url);
         const durationMs = Date.now() - startTime;
 
-        if(res.status !== 200) {
-           errors.push({url:urlAndSlack.url, slackChannelId:urlAndSlack.slackChannelId, status: res.status, reason: 'response status not success (not 200)'});
+        const browser = await puppeteer.launch({
+          headless: true,
+          executablePath: '/home/webapp/.cache/puppeteer/chrome/linux-136.0.7103.49/chrome-linux64/chrome',
+        });
+          const page = await browser.newPage();
+          await page.goto(urlAndSlack.url, { waitUntil: 'networkidle2', timeout: 60000 });
+          const pupeteerRes = await page.content();      
+          await browser.close();
+       
+
+
+        logToCloudWatch(`checking ${urlAndSlack.url}  `, 'INFO');
+        if(axiosRes.status !== 200) {
+           errors.push({url:urlAndSlack.url, slackChannelId:urlAndSlack.slackChannelId, status: axiosRes.status, reason: 'response status not success (not 200)'});
         }else if(durationMs > 10000) {
-          errors.push({url:urlAndSlack.url, slackChannelId:urlAndSlack.slackChannelId, status: res.status, reason: 'timeout'});
-        }else if(!checkIfLineupExists(res.data)){
-          errors.push({url:urlAndSlack.url, slackChannelId:urlAndSlack.slackChannelId, status: res.status, reason: 'no lineup found'});
+          errors.push({url:urlAndSlack.url, slackChannelId:urlAndSlack.slackChannelId, status: axiosRes.status, reason: 'timeout'});
+        }else if(!checkIfLineupExists(pupeteerRes)){
+          errors.push({url:urlAndSlack.url, slackChannelId:urlAndSlack.slackChannelId, status: '-', reason: 'no lineup found'});
         }
        }
 
        if(errors.length > 0){
         logToCloudWatch(`Lineup Validation Errors: ${JSON.stringify(errors)}`, 'ERROR');
        // await KF.sendSlackAlert('Lineup Validation Errors:', slackChannels.CONTENT, state.slackToken); 
+       }else{
+        logToCloudWatch(`no lineup errors found`);
        }
 
     } catch (e) {

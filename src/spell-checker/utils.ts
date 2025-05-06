@@ -421,9 +421,9 @@ export function checkIfLineupExists(html: string): boolean {
      if(!lineupClassNames.some(className => html.includes(`class="${className}`) || html.includes(`class='${className}`)))
        console.log('no lineup found');
      const $ = cheerio.load(html);
-     const found = lineupClassNames.some(className =>
+     const isFound = lineupClassNames.some(className =>
         $(`[class*="${className}"]`).length > 0
       );
     
-     return true
+     return isFound
  }
