@@ -95,7 +95,7 @@ export class SpellCheckerService {
 
 try {
 
-    const browser = await puppeteer.launch({ headless: true });
+    const browser = await puppeteer.launch({ headless: true,executablePath: '/home/ssm-user/.cache/puppeteer/chrome/linux-136.0.7103.49/chrome-linux64/chrome'  });
     const page = await browser.newPage();
     await page.goto('https://top10homewarrantyranking.com/spanish/', { waitUntil: 'networkidle2', timeout: 60000 });
     const res = await page.content();
