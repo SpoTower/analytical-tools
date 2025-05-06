@@ -37,8 +37,6 @@ export class SpellCheckerController {
 
   @Get('/urlValidation')
   async urlValidation() {
- 
-    
     try {
        return await this.spellCheckerService.urlValidation( );
     } catch (error) {
@@ -63,6 +61,19 @@ export class SpellCheckerController {
     }
   }
  
+
+  @Get('/lineupValidation')
+  async lineupValidation(
+    @Query('batchSize', new DefaultValuePipe(10), ParseIntPipe) batchSize: number,
+    ) {
+      try {
+        return await this.spellCheckerService.lineupValidation( );
+      } catch (error) {
+        if (error instanceof BadRequestException || error instanceof InternalServerErrorException) {
+          throw error;
+        }
+      }
+    }
 
 
 

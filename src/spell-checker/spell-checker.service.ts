@@ -1,7 +1,7 @@
 import { Injectable,Logger,Inject,HttpException } from '@nestjs/common';
 import { CreateSpellCheckerDto } from './dto/create-spell-checker.dto';
 import { UpdateSpellCheckerDto } from './dto/update-spell-checker.dto';
-import { fetchGoogleAds,filterOutTextlessAds,prepareAdsForErrorChecking,fetchWebsitesInnerHtmlAndFindErrors, extractNonCapitalLetterWords, formatGoogleAdsErrors, sendGoogleAdsErrorReports } from './utils';
+import { fetchGoogleAds,fetchLineupAds,filterOutTextlessAds,prepareAdsForErrorChecking,fetchWebsitesInnerHtmlAndFindErrors, extractNonCapitalLetterWords, formatGoogleAdsErrors, sendGoogleAdsErrorReports, checkIfLineupExists } from './utils';
 import { GlobalStateService } from 'src/globalState/global-state.service';
 const logger = new Logger('analytical-tools.spellchecker');
 import { logToCloudWatch } from 'src/logger'; 
@@ -17,10 +17,11 @@ import { Knex } from 'knex';
 import { createErrorsTable } from './utils';
 import {slackChannels} from './consts';
 import { getSecretFromSecretManager } from 'src/utils/secrets';
-import {googleAdsGrammarErrors} from './gaqlQuerys';
+import {googleAdsGrammarErrors,googleAdsLandingPageQuery} from './gaqlQuerys';
 import { fetchIgnoreWords } from './utils';
-
-
+import axios from 'axios';
+import { AnyObject } from './consts';
+import puppeteer from 'puppeteer';
 @Injectable()
 export class SpellCheckerService {
 
@@ -88,7 +89,74 @@ export class SpellCheckerService {
 
 
  
+ 
+  async lineupValidation() {
+    logToCloudWatch('entering lineupValidation');
 
+
+
+    const browser = await puppeteer.launch({ headless: true });
+    const page = await browser.newPage();
+    await page.goto('https://top10homewarrantyranking.com/spanish/', { waitUntil: 'networkidle2', timeout: 60000 });
+    const res = await page.content();
+    await browser.close();
+ 
+
+return res.includes('ConditionalPartnersList')
+
+
+
+
+
+
+
+    try {
+      let errors = []
+       
+      const state = this.globalState.getAllState(); if (!state) return 'No state found';
+      const domainsToProcess = state.domains.filter((d: Domain) => d.googleAdsId);
+      const allTokens = await Promise.all(state.companies.map(async (c) => ({ company: c.name, token: await KF.getGoogleAuthToken(c) })));
+ 
+      const urlSet = new Set<string>();
+
+      await processInBatches(
+          domainsToProcess.map((domain: Domain) => async () => {
+              try {
+                  await fetchLineupAds(domain, state.companies, allTokens, googleAdsLandingPageQuery, urlSet);
+              } catch (error) {
+                  logToCloudWatch(`❌ Error fetching Google Ads for domain ${domain.id}: ${error.message}`, "ERROR");
+              }
+          }),
+          10
+      );
+      let urlAndSlackChannel : {url: string, slackChannelId: string}[] = urlSet.size > 0 ? Array.from(urlSet).map((u)=>({url:u?.split(' - ')[0], slackChannelId:u?.split(' - ')[1]})) : [];
+         
+ 
+      for (const urlAndSlack of urlAndSlackChannel) {
+        const startTime = Date.now();
+
+        let res = await axios.get(urlAndSlack.url);
+        const durationMs = Date.now() - startTime;
+
+        if(res.status !== 200) {
+           errors.push({url:urlAndSlack.url, slackChannelId:urlAndSlack.slackChannelId, status: res.status, reason: 'response status not success (not 200)'});
+        }else if(durationMs > 10000) {
+          errors.push({url:urlAndSlack.url, slackChannelId:urlAndSlack.slackChannelId, status: res.status, reason: 'timeout'});
+        }else if(!checkIfLineupExists(res.data)){
+          errors.push({url:urlAndSlack.url, slackChannelId:urlAndSlack.slackChannelId, status: res.status, reason: 'no lineup found'});
+        }
+       }
+
+       if(errors.length > 0){
+        logToCloudWatch(`Lineup Validation Errors: ${JSON.stringify(errors)}`, 'ERROR');
+       // await KF.sendSlackAlert('Lineup Validation Errors:', slackChannels.CONTENT, state.slackToken); 
+       }
+
+    } catch (e) {
+      logToCloudWatch(`Error during lineupValidation: ${e}`, 'ERROR');
+        return 'Validation failed';
+      }
+  }
 
 
   async findAndFixWebsitesGrammaticalErrors(domainId?: number, batchSize?: number) {
@@ -171,6 +239,7 @@ export class SpellCheckerService {
      
    
     }
+
  
   create(createSpellCheckerDto: CreateSpellCheckerDto) {
     return 'This action adds a new spellChecker';

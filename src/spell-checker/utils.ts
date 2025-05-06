@@ -17,7 +17,7 @@ const { Readability } = require('@mozilla/readability');
 const { JSDOM } = require('jsdom');
 import * as KF from '@spotower/my-utils';
 import {slackChannels}  from './consts';
-
+ 
 export async function fetchGoogleAds(domain: Domain, companies: Company[], tokens:any, query:string ) {
     logToCloudWatch(`Entering fetchGoogleAds, fetching google ads for domain ${domain.id}`);
 
@@ -67,6 +67,34 @@ export async function fetchGoogleAds(domain: Domain, companies: Company[], token
         else throw new InternalServerErrorException(msg);
     }
 }
+
+
+
+
+    export async function fetchLineupAds(domain: Domain, companies: Company[], tokens:any, query:string,urlSet: Set<string> ){
+         const landingPageResult = await axios.post(
+            `https://googleads.googleapis.com/v17/customers/${domain.googleAdsId}/googleAds:searchStream`,
+            {
+                query: query,
+            },
+            {
+                headers: {
+                    'developer-token': companies.find((c)=>c.id == domain.companyId ).googleDeveloperToken,
+                    Authorization: `Bearer ${tokens.find((t) => t.company ==  companies.find((c)=>c.id == domain.companyId ).name ).token}`,
+                    'login-customer-id': companies.find((c)=>c.id == domain.companyId ).googleCustomerId,
+                },
+            }
+        );
+        if(landingPageResult?.data[0]?.results && landingPageResult?.data[0]?.results?.length > 0) {
+              landingPageResult?.data[0]?.results.forEach((r)=>  {
+                const urls = r?.adGroupAd?.ad?.finalUrls;
+                urls.forEach(url => urlSet.add(`${url} - ${domain?.slackChannelId}`));
+
+                })     
+        }
+
+      } 
+
 
 export function filterOutTextlessAds(result: AnyObject[]) {
     return result?.map((r: AnyObject) => ({...r,ads: r.ads?.filter(ad => ad.changeEvent?.newResource?.ad?.responsiveSearchAd) || []}))
@@ -385,3 +413,17 @@ export async function sendGoogleAdsErrorReports(errors: { spelling: any[], capit
         await KF.sendSlackAlert('*🌿 No Outdated Years Errors Found*', slackChannels.CONTENT, state.slackToken);
     }
 }
+
+
+export function checkIfLineupExists(html: string): boolean {
+   const  lineupClassNames = ['partnersArea_main-partner-list', 'ConditionalPartnersList', 'test-id-partners-list','homePage_partners-list-section' ];
+
+     if(!lineupClassNames.some(className => html.includes(`class="${className}`) || html.includes(`class='${className}`)))
+       console.log('no lineup found');
+     const $ = cheerio.load(html);
+     const found = lineupClassNames.some(className =>
+        $(`[class*="${className}"]`).length > 0
+      );
+    
+     return true
+ }
