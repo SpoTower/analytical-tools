@@ -416,7 +416,7 @@ export async function sendGoogleAdsErrorReports(errors: { spelling: any[], capit
 
 
 export function checkIfLineupExists(html: string): boolean {
-   const  lineupClassNames = ['partnersArea_main-partner-list', 'ConditionalPartnersList', 'test-id-partners-list','homePage_partners-list-section' ];
+   const  lineupClassNames = ['partnersArea_main-partner-list', 'ConditionalPartnersList', 'test-id-partners-list','homePage_partners-list-section', 'articlesSection_container', 'partnerNode' ];
 
 
      const $ = cheerio.load(html);

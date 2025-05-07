@@ -97,7 +97,8 @@ export class SpellCheckerService {
       let errors = []
        
       const state = this.globalState.getAllState(); if (!state) return 'No state found';
-      const domainsToProcess = state.domains.filter((d: Domain) => d.googleAdsId);
+      let domainsToProcess = state.domains.filter((d: Domain) => d.googleAdsId);
+      domainsToProcess = domainsToProcess.filter((d: Domain) =>  ![176,128,153].includes(d.id)  );
       const allTokens = await Promise.all(state.companies.map(async (c) => ({ company: c.name, token: await KF.getGoogleAuthToken(c) })));
  
       const urlSet = new Set<string>();
@@ -126,7 +127,7 @@ export class SpellCheckerService {
               durationMs = Date.now() - startTime;
             
               const browser = await puppeteer.launch({headless: true,
-                  executablePath: '/home/webapp/.cache/puppeteer/chrome/linux-136.0.7103.49/chrome-linux64/chrome'
+                   executablePath: '/home/webapp/.cache/puppeteer/chrome/linux-136.0.7103.49/chrome-linux64/chrome'
                 });
 
               const page = await browser.newPage();
@@ -151,7 +152,9 @@ export class SpellCheckerService {
        if(errors.length > 0){
         logToCloudWatch(`Lineup Validation Errors: ${JSON.stringify(errors)}`, 'ERROR');
         for(let error of errors){
-          await KF.sendSlackAlert(`Lineup Validation Errors: ${error.url}, status: ${error.status}, reason: ${error.reason}`,error.slackChannelId ? error.slackChannelId : slackChannels.CONTENT, state.slackToken); 
+         // await KF.sendSlackAlert(`Lineup Validation Errors: ${error.url}, status: ${error.status}, reason: ${error.reason}`,error.slackChannelId ? error.slackChannelId : slackChannels.CONTENT, state.slackToken);
+           await KF.sendSlackAlert(`Lineup Validation Errors: ${error.url}, status: ${error.status}, reason: ${error.reason}`,error.slackChannelId ? error.slackChannelId : slackChannels.CONTENT, state.slackToken); 
+ 
         }
         }else{
         logToCloudWatch(`No lineup errors found`);
@@ -160,7 +163,7 @@ export class SpellCheckerService {
 
     } catch (e) {
       logToCloudWatch(`Error during lineupValidation: ${e}`, 'ERROR');
-     
+     return `Error during lineupValidation ${JSON.stringify(e)}`;
       }
   }
 

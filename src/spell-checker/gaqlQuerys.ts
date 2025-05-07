@@ -25,10 +25,12 @@ SELECT
   ad_group_ad.ad.final_urls,
   ad_group.name,
   campaign.name,
-  campaign.id
+  campaign.id,
+  metrics.impressions
 FROM ad_group_ad
 WHERE
   ad_group_ad.status = 'ENABLED'
   AND campaign.status = 'ENABLED'
   AND ad_group.status = 'ENABLED'
+  AND metrics.impressions > 1
 `
