@@ -127,7 +127,7 @@ export class SpellCheckerService {
               durationMs = Date.now() - startTime;
             
               const browser = await puppeteer.launch({headless: true,
-                  executablePath: '/home/webapp/.cache/puppeteer/chrome/linux-136.0.7103.49/chrome-linux64/chrome'
+                   executablePath: '/home/webapp/.cache/puppeteer/chrome/linux-136.0.7103.49/chrome-linux64/chrome'
                 });
 
               const page = await browser.newPage();
@@ -152,7 +152,9 @@ export class SpellCheckerService {
        if(errors.length > 0){
         logToCloudWatch(`Lineup Validation Errors: ${JSON.stringify(errors)}`, 'ERROR');
         for(let error of errors){
-          await KF.sendSlackAlert(`Lineup Validation Errors: ${error.url}, status: ${error.status}, reason: ${error.reason}`,error.slackChannelId ? error.slackChannelId : slackChannels.CONTENT, state.slackToken); 
+         // await KF.sendSlackAlert(`Lineup Validation Errors: ${error.url}, status: ${error.status}, reason: ${error.reason}`,error.slackChannelId ? error.slackChannelId : slackChannels.CONTENT, state.slackToken);
+           await KF.sendSlackAlert(`Lineup Validation Errors: ${error.url}, status: ${error.status}, reason: ${error.reason}`,error.slackChannelId ? error.slackChannelId : slackChannels.CONTENT, state.slackToken); 
+ 
         }
         }else{
         logToCloudWatch(`No lineup errors found`);
