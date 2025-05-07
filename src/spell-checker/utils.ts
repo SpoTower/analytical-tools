@@ -71,7 +71,7 @@ export async function fetchGoogleAds(domain: Domain, companies: Company[], token
 
 
 
-    export async function fetchLineups(domain: Domain, companies: Company[], tokens:any, query:string,urlSet: Set<string> ){
+    export async function fetchLineupAds(domain: Domain, companies: Company[], tokens:any, query:string,urlSet: Set<string> ){
          const landingPageResult = await axios.post(
             `https://googleads.googleapis.com/v17/customers/${domain.googleAdsId}/googleAds:searchStream`,
             {
@@ -418,7 +418,8 @@ export async function sendGoogleAdsErrorReports(errors: { spelling: any[], capit
 export function checkIfLineupExists(html: string): boolean {
    const  lineupClassNames = ['partnersArea_main-partner-list', 'ConditionalPartnersList', 'test-id-partners-list','homePage_partners-list-section', 'articlesSection_container', 'partnerNode' ];
 
-
+     if(!lineupClassNames.some(className => html.includes(`class="${className}`) || html.includes(`class='${className}`)))
+       console.log('no lineup found');
      const $ = cheerio.load(html);
      const isFound = lineupClassNames.some(className =>
         $(`[class*="${className}"]`).length > 0
