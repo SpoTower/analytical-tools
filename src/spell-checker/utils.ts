@@ -71,7 +71,7 @@ export async function fetchGoogleAds(domain: Domain, companies: Company[], token
 
 
 
-    export async function fetchLineupAds(domain: Domain, companies: Company[], tokens:any, query:string,urlSet: Set<string> ){
+    export async function fetchLineups(domain: Domain, companies: Company[], tokens:any, query:string,urlSet: Set<string> ){
          const landingPageResult = await axios.post(
             `https://googleads.googleapis.com/v17/customers/${domain.googleAdsId}/googleAds:searchStream`,
             {

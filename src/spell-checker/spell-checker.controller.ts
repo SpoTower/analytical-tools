@@ -77,7 +77,18 @@ export class SpellCheckerController {
 
 
 
+  @Get('/mobileAndDesktopTrafficValidation')
+  async MDTrafficValidation(){
+    try {
+      return await this.spellCheckerService.MDTrafficValidation();
+    } catch (error) {
+      if (error instanceof BadRequestException || error instanceof InternalServerErrorException) {
+        throw error;
+      }
+    }
+  }
   
+ 
 
   @Get(':id')
   findOne(@Param('id') id: string) {
