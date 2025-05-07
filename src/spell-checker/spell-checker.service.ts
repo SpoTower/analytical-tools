@@ -97,7 +97,8 @@ export class SpellCheckerService {
       let errors = []
        
       const state = this.globalState.getAllState(); if (!state) return 'No state found';
-      const domainsToProcess = state.domains.filter((d: Domain) => d.googleAdsId);
+      let domainsToProcess = state.domains.filter((d: Domain) => d.googleAdsId);
+      domainsToProcess = domainsToProcess.filter((d: Domain) =>  ![176,128,153].includes(d.id)  );
       const allTokens = await Promise.all(state.companies.map(async (c) => ({ company: c.name, token: await KF.getGoogleAuthToken(c) })));
  
       const urlSet = new Set<string>();
@@ -160,7 +161,7 @@ export class SpellCheckerService {
 
     } catch (e) {
       logToCloudWatch(`Error during lineupValidation: ${e}`, 'ERROR');
-     
+     return `Error during lineupValidation ${JSON.stringify(e)}`;
       }
   }
 
