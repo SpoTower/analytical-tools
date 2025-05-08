@@ -99,6 +99,7 @@ export class SpellCheckerService {
       const state = this.globalState.getAllState(); if (!state) return 'No state found';
       let domainsToProcess = state.domains.filter((d: Domain) => d.googleAdsId);
       domainsToProcess = domainsToProcess.filter((d: Domain) =>  ![176,128,153].includes(d.id)  );
+      domainsToProcess = domainsToProcess.slice(0, 5);
       const allTokens = await Promise.all(state.companies.map(async (c) => ({ company: c.name, token: await KF.getGoogleAuthToken(c) })));
  
       const urlSet = new Set<string>();
@@ -124,11 +125,11 @@ export class SpellCheckerService {
           logToCloudWatch(`checking ${urlAndSlack.url}  `, 'INFO');
 
           const startTime = Date.now();
-          axiosRes = await axios.get(urlAndSlack.url, { timeout: 10000 });
+          axiosRes = await axios.get('https://10bestmovingcompanies.com/home-long-distance-best-ab/', { timeout: 10000 });
           durationMs = Date.now() - startTime;
         
           const browser = await puppeteer.launch({headless: true,
-              executablePath: '/home/webapp/.cache/puppeteer/chrome/linux-136.0.7103.49/chrome-linux64/chrome'
+               executablePath: '/home/webapp/.cache/puppeteer/chrome/linux-136.0.7103.49/chrome-linux64/chrome'
             });
 
           const page = await browser.newPage();
@@ -156,7 +157,7 @@ export class SpellCheckerService {
        if(errors.length > 0){
         for(let error of errors){
           logToCloudWatch(`Lineup Validation Errors: ${error.url}, status: ${error.status}, reason: ${error.reason}`,  'ERROR');
-          await KF.sendSlackAlert(`Lineup Validation Errors: ${error.url}, status: ${error.status}, reason: ${error.reason}`,  slackChannels.CONTENT, state.slackToken); 
+          await KF.sendSlackAlert(`Lineup Validation Errors: ${error.url}, status: ${error.status}, reason: ${error.reason}`,  slackChannels.PERSONAL, state.slackToken); 
         }
        }else{
         logToCloudWatch(`no lineup errors found`);
