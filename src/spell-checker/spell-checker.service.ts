@@ -115,8 +115,40 @@ export class SpellCheckerService {
           30
       );
       logToCloudWatch(`urlSet length: ${urlSet.size}`, 'INFO');
-      let urlAndSlackChannel : {url: string, slackChannelId: string}[] = urlSet.size > 0 ? Array.from(urlSet).map((u)=>({url:u?.split(' - ')[0], slackChannelId:u?.split(' - ')[1]})) : [];
-         
+   //   let urlAndSlackChannel : {url: string, slackChannelId: string}[] = urlSet.size > 0 ? Array.from(urlSet).map((u)=>({url:u?.split(' - ')[0], slackChannelId:u?.split(' - ')[1]})) : [];
+   const urlAndSlackChannel = [
+    { url: 'https://pawlicypick.com/dogs/', slackChannelId: '' },
+    { url: 'https://pawlicypick.com/cat/', slackChannelId: '' },
+    { url: 'https://pawlicypick.com/spot-alternatives/', slackChannelId: '' },
+    { url: 'https://pawlicypick.com/trupanion-alternatives/', slackChannelId: '' },
+    { url: 'https://top10dogfood.com/dog-food/', slackChannelId: '' },
+    { url: 'https://top10dogfood.com/dog-food-bb/', slackChannelId: '' },
+    { url: 'https://top10dogfood.com/badlands-ranch-comparison/', slackChannelId: '' },
+    { url: 'https://top10dogfood.com/dr-marty-comparison/', slackChannelId: '' },
+    { url: 'https://top10dogfood.com/healthy-dog-food/', slackChannelId: '' },
+    { url: 'https://top10dogfood.com/justfoodfordogs-comparison/', slackChannelId: '' },
+    { url: 'https://top10dogfood.com/open-farm-dog-food-comparison/', slackChannelId: '' },
+    { url: 'https://top10dogfood.com/st-doogfood-comparison/', slackChannelId: '' },
+    { url: 'https://top10dogfood.com/sundays-comparison/', slackChannelId: '' },
+    { url: 'https://top10dogfood.com/maev-comparison/', slackChannelId: '' },
+    { url: 'https://top10dogfood.com/dog-food-for-puppy/', slackChannelId: '' },
+    { url: 'https://top10dogfood.com/dry-dog-food/', slackChannelId: '' },
+    { url: 'https://top10dogfood.com/organic-dog-food/', slackChannelId: '' },
+    { url: 'https://top10dogfood.com/dog-food-for-allergies/', slackChannelId: '' },
+    { url: 'https://top10dogfood.com/raw-dog-food/', slackChannelId: '' },
+    { url: 'https://top10dogfood.com/wet-dog-food/', slackChannelId: '' },
+    { url: 'https://liabilityfreedom.com', slackChannelId: '' },
+    { url: 'https://top10antivirusexperts.com/aw-mac-cleaner/', slackChannelId: '' },
+    { url: 'https://top10antivirusexperts.com/mac-cleaner-m/', slackChannelId: '' },
+    { url: 'https://topfundings.com/land-m/', slackChannelId: '' },
+    { url: 'https://topfundings.com/medical/', slackChannelId: '' },
+    { url: 'https://topfundings.com/military/', slackChannelId: '' },
+    { url: 'https://topfundings.com/motorcycle/', slackChannelId: '' },
+    { url: 'https://topfundings.com/wedding/', slackChannelId: '' },
+    { url: 'https://topfundings.com/land-loans/', slackChannelId: '' },
+    { url: 'https://10bestmovingcompanies.com/home-long-distance-best-ab/', slackChannelId: '' }
+  ];
+  
       // ✅ Step 2: validate lineups
       for (let urlAndSlack of urlAndSlackChannel) {
         let axiosRes, pupeteerRes, durationMs;
@@ -136,6 +168,14 @@ export class SpellCheckerService {
           await page.goto(urlAndSlack.url, { waitUntil: 'networkidle2', timeout: 60000 });
           pupeteerRes = await page.content();
           await browser.close();
+
+          if(urlAndSlack.url === 'https://10bestmovingcompanies.com/home-long-distance-best-ab/'){
+            logToCloudWatch(`checking  wayward link  `, 'INFO');
+
+            logToCloudWatch(`checking ${pupeteerRes}  `, 'INFO');
+            logToCloudWatch(`finished checking  wayward link  `, 'INFO');
+
+          }
         
         } catch (err) {
           if(err.name === 'AxiosError'){
@@ -253,10 +293,26 @@ export class SpellCheckerService {
     }
 
 
-  async MDTrafficValidation(){
-    try {
+  async mobileAndDesktopTrafficCongruenceValidation(){
+    try {    
+      
+      //const result = await this.kidonClient.raw('SELECT campaign_id, COUNT(*) AS clicks FROM tracker_visitors WHERE device = "mobile" AND DATE(created_at) = CURDATE() - INTERVAL 1 DAY GROUP BY campaign_id HAVING COUNT(*) > 5' );;
 
-      const result = await this.kidonClient.raw('select * from configuration   ' );
+      const idList = [10145788963, 10955510778, 11136870413, 16372777859, 16634908692];
+
+ 
+      const res = await getSecretFromSecretManager(process.env.SECRET_NAME);
+      const googleKey = JSON.parse(res).GOOGLE_SERVICE_PRIVATE_KEY.replace(/\\n/g, '\n');
+      const bq = await KF.connectToBQ(process.env.BQ_EMAIL_SERVICE, googleKey, process.env.BQ_PROJECT_NAME);
+      const [job] = await bq.createQueryJob({ query: `select * from kidon3_STG.campaigns_name_network WHERE campaign_id IN (${idList})` });
+      let [rows] = await job.getQueryResults();
+
+
+
+
+
+
+   return 'mobile and desktop traffic congruence validation finished';
 
      } catch (error) {
       if (error instanceof BadRequestException || error instanceof InternalServerErrorException) {
