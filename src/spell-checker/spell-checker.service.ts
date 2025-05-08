@@ -137,7 +137,12 @@ export class SpellCheckerService {
           pupeteerRes = await page.content();
           await browser.close();
         
-        } catch (err) {
+
+      if(urlAndSlack.url == 'https://10bestmovingcompanies.com/home-long-distance-best-ab/'){
+        logToCloudWatch(`pupeteerRes: ${pupeteerRes}`, 'INFO');
+        logToCloudWatch(`bool: ${checkIfLineupExists(pupeteerRes)}`, 'INFO');
+      }
+         } catch (err) {
           if(err.name === 'AxiosError'){
             errors.push({url:urlAndSlack.url, slackChannelId:urlAndSlack.slackChannelId, status: err.status, reason: 'response status not success (not 200)'});
             continue;
@@ -253,10 +258,39 @@ export class SpellCheckerService {
     }
 
 
-  async MDTrafficValidation(){
-    try {
+  async mobileAndDesktopTrafficCongruenceValidation(){
+    try {    
+      
+      //const result = await this.kidonClient.raw('SELECT campaign_id, COUNT(*) AS clicks FROM tracker_visitors WHERE device = "mobile" AND DATE(created_at) = CURDATE() - INTERVAL 1 DAY GROUP BY campaign_id HAVING COUNT(*) > 5' );;
 
-      const result = await this.kidonClient.raw('select * from configuration   ' );
+      const ids = [
+        '10145788963', '10955510778', '11136870413', '16372777859', '16634908692',
+        '17268271860', '17297547762', '17917062869', '18048761275', '18470128292',
+        '18651293203', '18651293221', '18884185372', '18884185375', '19216145501',
+        '19597159434', '19628164459', '19637477482', '19650686874', '19655193299',
+        '19687966536', '19738344647', '20009043493', '20149307961', '20149887566',
+        '20195335915', '20215306712', '20242955223', '20256699493', '20264363026',
+        '20269330308', '20396930152', '20481254287', '20497872672', '20511583356',
+        '20532993816', '20588916866', '20628293471', '20677125962', '20698933127',
+        '20769161943', '20785293025', '20801905397', '20865843552', '20875034831',
+        '20888340441', '20898458287', '20901074864', '20907510161', '20913533491',
+        '20917686398', '20923765572', '20954450063', '20963186126', '20965990734',
+        '20973560560', '21009273819', '21010597395', '21013176391', '21016022046',
+        '21026075037', '21039234887', '21054097610', '21063586921'
+      ];
+
+      const res = await getSecretFromSecretManager(process.env.SECRET_NAME);
+      const googleKey = JSON.parse(res).GOOGLE_SERVICE_PRIVATE_KEY.replace(/\\n/g, '\n');
+      const bq = await KF.connectToBQ(process.env.BQ_EMAIL_SERVICE, googleKey, process.env.BQ_PROJECT_NAME);
+      const [job] = await bq.createQueryJob({ query: 'select domain_id,hostname,landing_page from `kidon3_STG.landing_page_performance` group by all', });
+      let [rows] = await job.getQueryResults();
+
+
+
+
+
+
+   return 'mobile and desktop traffic congruence validation finished';
 
      } catch (error) {
       if (error instanceof BadRequestException || error instanceof InternalServerErrorException) {

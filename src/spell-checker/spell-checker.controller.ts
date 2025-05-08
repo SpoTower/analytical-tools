@@ -77,10 +77,10 @@ export class SpellCheckerController {
 
 
 
-  @Get('/mobileAndDesktopTrafficValidation')
-  async MDTrafficValidation(){
+  @Get('/mobileAndDesktopTrafficCongruenceValidation')
+  async mobileAndDesktopTrafficCongruenceValidation(){
     try {
-      return await this.spellCheckerService.MDTrafficValidation();
+      return await this.spellCheckerService.mobileAndDesktopTrafficCongruenceValidation();
     } catch (error) {
       if (error instanceof BadRequestException || error instanceof InternalServerErrorException) {
         throw error;
