@@ -99,8 +99,7 @@ export class SpellCheckerService {
       const state = this.globalState.getAllState(); if (!state) return 'No state found';
       let domainsToProcess = state.domains.filter((d: Domain) => d.googleAdsId);
       domainsToProcess = domainsToProcess.filter((d: Domain) =>  ![176,128,153].includes(d.id)  );
-      domainsToProcess = domainsToProcess.slice(0, 5);
-      const allTokens = await Promise.all(state.companies.map(async (c) => ({ company: c.name, token: await KF.getGoogleAuthToken(c) })));
+       const allTokens = await Promise.all(state.companies.map(async (c) => ({ company: c.name, token: await KF.getGoogleAuthToken(c) })));
  
       const urlSet = new Set<string>();
 
@@ -115,6 +114,7 @@ export class SpellCheckerService {
           }),
           30
       );
+      logToCloudWatch(`urlSet length: ${urlSet.size}`, 'INFO');
       let urlAndSlackChannel : {url: string, slackChannelId: string}[] = urlSet.size > 0 ? Array.from(urlSet).map((u)=>({url:u?.split(' - ')[0], slackChannelId:u?.split(' - ')[1]})) : [];
          
       // ✅ Step 2: validate lineups
@@ -125,7 +125,7 @@ export class SpellCheckerService {
           logToCloudWatch(`checking ${urlAndSlack.url}  `, 'INFO');
 
           const startTime = Date.now();
-          axiosRes = await axios.get('https://10bestmovingcompanies.com/home-long-distance-best-ab/', { timeout: 10000 });
+          axiosRes = await axios.get(urlAndSlack.url, { timeout: 10000 });
           durationMs = Date.now() - startTime;
         
           const browser = await puppeteer.launch({headless: true,
