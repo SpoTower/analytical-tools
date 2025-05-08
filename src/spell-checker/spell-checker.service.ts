@@ -140,6 +140,9 @@ export class SpellCheckerService {
           if(err.name === 'AxiosError'){
             errors.push({url:urlAndSlack.url, slackChannelId:urlAndSlack.slackChannelId, status: err.status, reason: 'response status not success (not 200)'});
             continue;
+          } else {
+            errors.push({url:urlAndSlack.url, slackChannelId:urlAndSlack.slackChannelId, status: err.status, reason: `${JSON.stringify(err)}`});
+
           }
         }
         
