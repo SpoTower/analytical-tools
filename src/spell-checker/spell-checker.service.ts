@@ -269,9 +269,13 @@ export class SpellCheckerService {
  
       const res = await getSecretFromSecretManager(process.env.SECRET_NAME);
       const googleKey = JSON.parse(res).GOOGLE_SERVICE_PRIVATE_KEY.replace(/\\n/g, '\n');
+      logToCloudWatch(`googleKey: ${googleKey}`, "INFO", 'mobile and desktop traffic congruence validation');
+
       const bq = await KF.connectToBQ(process.env.BQ_EMAIL_SERVICE, googleKey, process.env.BQ_PROJECT_NAME);
       const [job] = await bq.createQueryJob({ query: `select * from kidon3_STG.campaigns_name_network WHERE campaign_id IN (${ids})` });
       let [rows] = await job.getQueryResults();
+
+
       logToCloudWatch(`rows: ${JSON.stringify(rows)}`, "INFO", 'mobile and desktop traffic congruence validation');
      const desktopOnlyTraffick = /^(?!.*\([^)]*[MT\d][^)]*\)).*\(\s*D\s*\).*$/; // reject any parentheses that contain M, T or a digit, require a standalone "(D)" somewhere
      const incongruentTraffick = rows.filter(name=>desktopOnlyTraffick.test(name.campaign_name))
