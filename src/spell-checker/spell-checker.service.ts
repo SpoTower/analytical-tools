@@ -262,7 +262,7 @@ export class SpellCheckerService {
       const state =   this.globalState.getAllState(); 
 
        const result = await this.kidonClient.raw('SELECT campaign_id, COUNT(*) AS clicks FROM tracker_visitors WHERE device = "mobile" AND DATE(created_at) = CURDATE() - INTERVAL 1 DAY GROUP BY campaign_id HAVING COUNT(*) > 5' );
-       const ids = result.map(r => `'${r.campaign_id}'`).join(',');  
+       const ids = result[0].map(r => `'${r.campaign_id}'`).join(',');  
 
        logToCloudWatch(`ids: ${ ids}`, "INFO", 'mobile and desktop traffic congruence validation');
  
