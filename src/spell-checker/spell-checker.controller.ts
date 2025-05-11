@@ -37,8 +37,6 @@ export class SpellCheckerController {
 
   @Get('/urlValidation')
   async urlValidation() {
- 
-    
     try {
        return await this.spellCheckerService.urlValidation( );
     } catch (error) {
@@ -63,10 +61,34 @@ export class SpellCheckerController {
     }
   }
  
+// checks whether there is a lineup on the page based on css class and id of lineup wrapper, and also that the status is 200 and the loading time less than 10 seconds
+  @Get('/lineupValidation')
+  async lineupValidation(
+    @Query('batchSize', new DefaultValuePipe(10), ParseIntPipe) batchSize: number,
+    ) {
+      try {
+        return await this.spellCheckerService.lineupValidation( );
+      } catch (error) {
+        if (error instanceof BadRequestException || error instanceof InternalServerErrorException) {
+          throw error;
+        }
+      }
+    }
 
 
-
+// checks whether traffick from tracker visitors that defined as mobile only arrives to desktop only campaigns
+  @Get('/mobileAndDesktopTrafficCongruenceValidation')
+  async mobileAndDesktopTrafficCongruenceValidation(){
+    try {
+      return await this.spellCheckerService.mobileAndDesktopTrafficCongruenceValidation();
+    } catch (error) {
+      if (error instanceof BadRequestException || error instanceof InternalServerErrorException) {
+        throw error;
+      }
+    }
+  }
   
+ 
 
   @Get(':id')
   findOne(@Param('id') id: string) {

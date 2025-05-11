@@ -44,6 +44,7 @@
     "p-limit": "^6.2.0",
     "pg": "^8.13.1",
     "playwright": "^1.50.1",
+    "puppeteer": "^24.8.1",
     "reflect-metadata": "^0.2.0",
     "rxjs": "^7.8.1",
     "spellchecker": "^3.7.1"

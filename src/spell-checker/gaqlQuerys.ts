@@ -15,5 +15,22 @@ export let googleAdsGrammarErrors = `
             AND
                  change_event.change_resource_type IN ('AD' )
              LIMIT 10000
-                `
+`
  
+export let googleAdsLandingPageQuery = `
+SELECT
+  ad_group_ad.ad.id,
+  ad_group_ad.ad.name,
+  ad_group_ad.status,
+  ad_group_ad.ad.final_urls,
+  ad_group.name,
+  campaign.name,
+  campaign.id,
+  metrics.impressions
+FROM ad_group_ad
+WHERE
+  ad_group_ad.status = 'ENABLED'
+  AND campaign.status = 'ENABLED'
+  AND ad_group.status = 'ENABLED'
+  AND metrics.impressions > 1
+`

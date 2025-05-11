@@ -17,7 +17,7 @@ const { Readability } = require('@mozilla/readability');
 const { JSDOM } = require('jsdom');
 import * as KF from '@spotower/my-utils';
 import {slackChannels}  from './consts';
-
+ 
 export async function fetchGoogleAds(domain: Domain, companies: Company[], tokens:any, query:string ) {
     logToCloudWatch(`Entering fetchGoogleAds, fetching google ads for domain ${domain.id}`);
 
@@ -67,6 +67,34 @@ export async function fetchGoogleAds(domain: Domain, companies: Company[], token
         else throw new InternalServerErrorException(msg);
     }
 }
+
+
+
+
+    export async function fetchLineups(domain: Domain, companies: Company[], tokens:any, query:string,urlSet: Set<string> ){
+         const landingPageResult = await axios.post(
+            `https://googleads.googleapis.com/v17/customers/${domain.googleAdsId}/googleAds:searchStream`,
+            {
+                query: query,
+            },
+            {
+                headers: {
+                    'developer-token': companies.find((c)=>c.id == domain.companyId ).googleDeveloperToken,
+                    Authorization: `Bearer ${tokens.find((t) => t.company ==  companies.find((c)=>c.id == domain.companyId ).name ).token}`,
+                    'login-customer-id': companies.find((c)=>c.id == domain.companyId ).googleCustomerId,
+                },
+            }
+        );
+        if(landingPageResult?.data[0]?.results && landingPageResult?.data[0]?.results?.length > 0) {
+              landingPageResult?.data[0]?.results.forEach((r)=>  {
+                const urls = r?.adGroupAd?.ad?.finalUrls;
+                urls.forEach(url => urlSet.add(`${url} - ${domain?.slackChannelId}`));
+
+                })     
+        }
+
+      } 
+
 
 export function filterOutTextlessAds(result: AnyObject[]) {
     return result?.map((r: AnyObject) => ({...r,ads: r.ads?.filter(ad => ad.changeEvent?.newResource?.ad?.responsiveSearchAd) || []}))
@@ -131,25 +159,38 @@ export async function   processInBatches(tasks: (() => Promise<any>)[], batchSiz
     for (const domain of domains) {  
         let domainPagesInnerHtml: websiteText[] = []; // Store results per domain
 
-        for (const path of domain.paths) {
+        for (const path of domain.paths ) {
             const url = `https://${domain.hostname}${path}`;
             try {
+
+                // getting the text of the page
                 const { data: html } = await axios.get(url);
                 const dom = new JSDOM(html, { url });
                 const article = new Readability(dom.window.document).parse();
-                domainPagesInnerHtml.push({ domain: domain.id, fullPath: url, innerHtml: article.textContent });
+
+                // getting the relevant html text
+                const $ = cheerio.load(html);
+                const titles = $('title').map((_, el) => $(el).text()).get();
+
+
+                domainPagesInnerHtml.push({ domain: domain.id, fullPath: url, innerHtml: article.textContent, titleElement: titles.join(' ') });
             } catch (error) {
                 logToCloudWatch(`Failed to fetch ${url}: ${error.message}`);
             }
         }
+        // debug - domainPagesInnerHtml[0].innerHtml = 'Thehre are otgher metfhods to protect devieces '; domainPagesInnerHtml[0].titleElement = '2023'
 
         // Process inner HTML for each domain before moving to the next one. attach detected errors field to each object that represent path in this array
         domainPagesInnerHtml.forEach(webSiteText => {
             webSiteText.detectedErrors = extractMisspelledWords(webSiteText.innerHtml, ignoreList);
+            // Check for outdated years in both title and fullPath
+            const titleYears = extractOutdatedYears(webSiteText.titleElement || '');
+            const pathYears = extractOutdatedYears(webSiteText.fullPath);
+            webSiteText.outdatedYears = [...new Set([...titleYears, ...pathYears])]; // Combine and remove duplicates
         });
 
         // Filter out pages with no detected errors
-        domainPagesInnerHtml = domainPagesInnerHtml.filter(w => w.detectedErrors.length > 0);
+        domainPagesInnerHtml = domainPagesInnerHtml.filter(w => w.detectedErrors.length > 0 || w.outdatedYears.length > 0 );
 
         // Store only relevant results (excluding innerHtml)
         finalDomainData.push(...domainPagesInnerHtml);
@@ -286,22 +327,117 @@ export function saveResults(results: any[]) {
     fs.writeFileSync(filePath, JSON.stringify(newData, null, 2), 'utf-8');
 }
 
-export function createErrorsTable(fileContent): string[] {
+// Generic table formatter
+interface TableColumn {
+    name: string;
+    width: number;
+    getValue: (row: any) => string;
+}
+
+function formatTable(data: any[], columns: TableColumn[]): string {
+    if (!data?.length) return '```\nNo data to display\n```';
+
+    // Generate header
+    const header = columns.map(col => col.name.padEnd(col.width)).join(' | ');
+    const separator = columns.map(col => '-'.repeat(col.width)).join(' | ');
+
+    // Generate rows
+    const rows = data.map(row => 
+        columns.map(col => col.getValue(row).padEnd(col.width)).join(' | ')
+    );
+
+    // Combine all parts
+    return `\`\`\`\n${header}\n${separator}\n${rows.join('\n')}\n\`\`\``;
+}
+
+// Google Ads specific table columns
+const googleAdsColumns: TableColumn[] = [
+    { name: 'resource', width: 38, getValue: (row) => row.resource },
+    { name: 'errors', width: 8, getValue: (row) => row.errors.join(',') },
+    { name: 'domain', width: 30, getValue: (row) => row.domain },
+    { name: 'googleAdsId', width: 12, getValue: (row) => row.googleAdsId.toString() },
+    { name: 'wholeSentence', width: 50, getValue: (row) => row.wholeSentence },
+    { name: 'location', width: 10, getValue: (row) => row.location }
+];
+
+// Website errors specific table columns
+const websiteErrorsColumns: TableColumn[] = [
+    { name: 'Domain', width: 8, getValue: (row) => row.domain.toString() },
+    { name: 'Full Path', width: 48, getValue: (row) => row.fullPath },
+    { name: 'Detected Errors', width: 20, getValue: (row) => row.detectedErrors.join(', ') },
+    { name: 'Outdated Years', width: 4, getValue: (row) => (row.outdatedYears || []).join(', ') }
+];
+
+export function createErrorsTable(fileContent: string): string[] {
     const websiteErrors = JSON.parse(fileContent);
     const domainTables = new Map();
 
     websiteErrors.forEach((error) => {
         const domainId = error.domain;
         if (!domainTables.has(domainId)) {
-            domainTables.set(domainId, [
-                "```",
-                "Domain  | Full Path                                       | Detected Errors ",
-                "--------|------------------------------------------------|----------------"
-            ]);
+            domainTables.set(domainId, []);
         }
-        let errorList = error.detectedErrors.join(", ");
-        domainTables.get(domainId).push(`${error.domain.toString().padEnd(8)} | ${error.fullPath.padEnd(48)} | ${errorList}`);
+        domainTables.get(domainId).push(error);
     });
 
-    return [...domainTables.values()].map(table => table.join("\n") + "```");
+    return [...domainTables.values()].map(errors => 
+        formatTable(errors, websiteErrorsColumns)
+    );
 }
+
+// Update the Google Ads error reporting to use the new table formatter
+export function formatGoogleAdsErrors(errors: any[], type: 'spelling' | 'capitalization' | 'outdatedYears'): string {
+    return formatTable(errors, googleAdsColumns);
+}
+
+// Database utility functions
+export async function fetchIgnoreWords(kidonClient: any, configId: string): Promise<string[]> {
+    const result = await kidonClient.raw('select * from configuration where id = ?', [configId]);
+    if (!result?.[0]?.[0]?.values) {
+        logToCloudWatch(`No ignore words found for config ID ${configId}`, 'WARN');
+        return [];
+    }
+    
+    return result[0][0].values
+        .split(',')
+        .map((word: string) => word.replace(/[\n"']/g, '').trim())
+        .filter(Boolean);
+}
+
+export async function sendGoogleAdsErrorReports(errors: { spelling: any[], capitalization: any[], outdatedYears: any[] }, state: any) {
+    await KF.sendSlackAlert('*🚨 Google Ads Content Errors:*', slackChannels.CONTENT, state.slackToken);
+    
+    if (errors.spelling.length > 0) {
+        await KF.sendSlackAlert(formatGoogleAdsErrors(errors.spelling, 'spelling'), slackChannels.CONTENT, state.slackToken);
+    } else {
+        await KF.sendSlackAlert('🌿 No Spelling Errors Found', slackChannels.CONTENT, state.slackToken);
+    }
+
+    if (errors.capitalization.length > 0) {
+        await KF.sendSlackAlert('*🚨Google Ads non-Capital words Errors:*', slackChannels.CONTENT, state.slackToken);
+        await KF.sendSlackAlert(formatGoogleAdsErrors(errors.capitalization, 'capitalization'), slackChannels.CONTENT, state.slackToken);
+    } else {
+        await KF.sendSlackAlert('*🌿 No Capitalization Errors Found*', slackChannels.CONTENT, state.slackToken);
+    }
+
+    if (errors.outdatedYears.length > 0) {
+        await KF.sendSlackAlert('*🚨Google Ads Outdated Years Errors:*', slackChannels.CONTENT, state.slackToken);
+        await KF.sendSlackAlert(formatGoogleAdsErrors(errors.outdatedYears, 'outdatedYears'), slackChannels.CONTENT, state.slackToken);
+    } else {
+        await KF.sendSlackAlert('*🌿 No Outdated Years Errors Found*', slackChannels.CONTENT, state.slackToken);
+    }
+}
+
+
+export function checkIfLineupExists(html: string): boolean {
+   const  lineupClassNames = ['partnersArea_main-partner-list', 'ConditionalPartnersList', 'test-id-partners-list','homePage_partners-list-section', 'articlesSection_container', 'partnerNode' ];
+
+     if(!lineupClassNames.some(className => html.includes(`class="${className}`) || html.includes(`class='${className}`)))
+       console.log('no lineup found');
+     const $ = cheerio.load(html);
+     const isFound = lineupClassNames.some(className =>
+        $(`[class*="${className}"]`).length > 0
+      );
+    
+     return isFound
+ }

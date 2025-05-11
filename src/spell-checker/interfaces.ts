@@ -5,7 +5,9 @@ export interface websiteText{
     domain:number,
     fullPath:string,
     innerHtml:string,
-    detectedErrors?:string[]
+    detectedErrors?:string[],
+    outdatedYears?:string[],
+    titleElement?:string 
 }
 
 export interface gptProposal{
