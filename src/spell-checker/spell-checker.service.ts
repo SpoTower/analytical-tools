@@ -131,7 +131,7 @@ export class SpellCheckerService {
           durationMs = Date.now() - startTime;
         
           const browser = await puppeteer.launch({headless: true,
-            executablePath: '/root/.cache/puppeteer/chrome/linux-136.0.7103.92/chrome-linux64/chrome'
+            executablePath: '/opt/chrome/chrome-linux64/chrome',
           });
 
           const page = await browser.newPage();
