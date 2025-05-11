@@ -61,7 +61,7 @@ export class SpellCheckerController {
     }
   }
  
-
+// checks whether there is a lineup on the page based on css class and id of lineup wrapper, and also that the status is 200 and the loading time less than 10 seconds
   @Get('/lineupValidation')
   async lineupValidation(
     @Query('batchSize', new DefaultValuePipe(10), ParseIntPipe) batchSize: number,
@@ -76,7 +76,7 @@ export class SpellCheckerController {
     }
 
 
-
+// checks whether traffick from tracker visitors that defined as mobile only arrives to desktop only campaigns
   @Get('/mobileAndDesktopTrafficCongruenceValidation')
   async mobileAndDesktopTrafficCongruenceValidation(){
     try {

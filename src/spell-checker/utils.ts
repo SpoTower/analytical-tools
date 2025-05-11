@@ -159,25 +159,38 @@ export async function   processInBatches(tasks: (() => Promise<any>)[], batchSiz
     for (const domain of domains) {  
         let domainPagesInnerHtml: websiteText[] = []; // Store results per domain
 
-        for (const path of domain.paths) {
+        for (const path of domain.paths ) {
             const url = `https://${domain.hostname}${path}`;
             try {
+
+                // getting the text of the page
                 const { data: html } = await axios.get(url);
                 const dom = new JSDOM(html, { url });
                 const article = new Readability(dom.window.document).parse();
-                domainPagesInnerHtml.push({ domain: domain.id, fullPath: url, innerHtml: article.textContent });
+
+                // getting the relevant html text
+                const $ = cheerio.load(html);
+                const titles = $('title').map((_, el) => $(el).text()).get();
+
+
+                domainPagesInnerHtml.push({ domain: domain.id, fullPath: url, innerHtml: article.textContent, titleElement: titles.join(' ') });
             } catch (error) {
                 logToCloudWatch(`Failed to fetch ${url}: ${error.message}`);
             }
         }
+        // debug - domainPagesInnerHtml[0].innerHtml = 'Thehre are otgher metfhods to protect devieces '; domainPagesInnerHtml[0].titleElement = '2023'
 
         // Process inner HTML for each domain before moving to the next one. attach detected errors field to each object that represent path in this array
         domainPagesInnerHtml.forEach(webSiteText => {
             webSiteText.detectedErrors = extractMisspelledWords(webSiteText.innerHtml, ignoreList);
+            // Check for outdated years in both title and fullPath
+            const titleYears = extractOutdatedYears(webSiteText.titleElement || '');
+            const pathYears = extractOutdatedYears(webSiteText.fullPath);
+            webSiteText.outdatedYears = [...new Set([...titleYears, ...pathYears])]; // Combine and remove duplicates
         });
 
         // Filter out pages with no detected errors
-        domainPagesInnerHtml = domainPagesInnerHtml.filter(w => w.detectedErrors.length > 0);
+        domainPagesInnerHtml = domainPagesInnerHtml.filter(w => w.detectedErrors.length > 0 || w.outdatedYears.length > 0 );
 
         // Store only relevant results (excluding innerHtml)
         finalDomainData.push(...domainPagesInnerHtml);
@@ -351,7 +364,8 @@ const googleAdsColumns: TableColumn[] = [
 const websiteErrorsColumns: TableColumn[] = [
     { name: 'Domain', width: 8, getValue: (row) => row.domain.toString() },
     { name: 'Full Path', width: 48, getValue: (row) => row.fullPath },
-    { name: 'Detected Errors', width: 20, getValue: (row) => row.detectedErrors.join(', ') }
+    { name: 'Detected Errors', width: 20, getValue: (row) => row.detectedErrors.join(', ') },
+    { name: 'Outdated Years', width: 4, getValue: (row) => (row.outdatedYears || []).join(', ') }
 ];
 
 export function createErrorsTable(fileContent: string): string[] {
