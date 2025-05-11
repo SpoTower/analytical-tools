@@ -131,8 +131,8 @@ export class SpellCheckerService {
           durationMs = Date.now() - startTime;
         
           const browser = await puppeteer.launch({headless: true,
-              executablePath: '/home/webapp/.cache/puppeteer/chrome/linux-136.0.7103.49/chrome-linux64/chrome'
-            });
+            executablePath: '/root/.cache/puppeteer/chrome/linux-136.0.7103.92/chrome-linux64/chrome'
+          });
 
           const page = await browser.newPage();
           await page.goto(urlAndSlack.url, { waitUntil: 'networkidle2', timeout: 60000 });
