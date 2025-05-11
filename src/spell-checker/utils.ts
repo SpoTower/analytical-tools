@@ -159,8 +159,8 @@ export async function   processInBatches(tasks: (() => Promise<any>)[], batchSiz
     for (const domain of domains) {  
         let domainPagesInnerHtml: websiteText[] = []; // Store results per domain
 
-        for (const path of domain.paths.slice(0,1)) {
-            const url = `https://10bestpayrollservices.com/payroll-services-s/`;
+        for (const path of domain.paths ) {
+            const url = `https://${domain.hostname}${path}`;
             try {
 
                 // getting the text of the page
