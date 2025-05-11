@@ -131,9 +131,9 @@ export class SpellCheckerService {
           durationMs = Date.now() - startTime;
         
           const browser = await puppeteer.launch({headless: true,
-              executablePath: '/home/webapp/.cache/puppeteer/chrome/linux-136.0.7103.49/chrome-linux64/chrome'
-            });
-
+            executablePath: '/opt/chrome/chrome-linux64/chrome', // in local env we dont need it, when installing chrome it initially installed into temporary cache folder and we copy it to stable folder
+          });
+ 
           const page = await browser.newPage();
           await page.goto(urlAndSlack.url, { waitUntil: 'networkidle2', timeout: 60000 });
           pupeteerRes = await page.content();
@@ -144,6 +144,7 @@ export class SpellCheckerService {
           }
         
         } catch (err) {
+          logToCloudWatch(`Error in lineupValidation: ${err}`, 'ERROR');
           if(err.name === 'AxiosError'){
             errors.push({url:urlAndSlack.url, slackChannelId:urlAndSlack.slackChannelId, status: err.status, reason: 'response status not success (not 200)'});
             continue;
@@ -163,10 +164,11 @@ export class SpellCheckerService {
        if(errors.length > 0){
         for(let error of errors){
           logToCloudWatch(`Lineup Validation Errors: ${error.url}, status: ${error.status}, reason: ${error.reason}`,  'ERROR');
-          await KF.sendSlackAlert(`Lineup Validation Errors: ${error.url}, status: ${error.status}, reason: ${error.reason}`,  slackChannels.PERSONAL, state.slackToken); 
+          await KF.sendSlackAlert(`Lineup Validation Errors: ${error.url}, status: ${error.status}, reason: ${error.reason}`,  slackChannels.CONTENT, state.slackToken); 
         }
        }else{
         logToCloudWatch(`no lineup errors found`);
+        await KF.sendSlackAlert(`no lineup errors found`,  slackChannels.CONTENT, state.slackToken); 
        }
 
     } catch (e) {
