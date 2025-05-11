@@ -115,39 +115,7 @@ export class SpellCheckerService {
           30
       );
       logToCloudWatch(`urlSet length: ${urlSet.size}`, 'INFO');
-   //   let urlAndSlackChannel : {url: string, slackChannelId: string}[] = urlSet.size > 0 ? Array.from(urlSet).map((u)=>({url:u?.split(' - ')[0], slackChannelId:u?.split(' - ')[1]})) : [];
-   const urlAndSlackChannel = [
-    { url: 'https://pawlicypick.com/dogs/', slackChannelId: '' },
-    { url: 'https://pawlicypick.com/cat/', slackChannelId: '' },
-    { url: 'https://pawlicypick.com/spot-alternatives/', slackChannelId: '' },
-    { url: 'https://pawlicypick.com/trupanion-alternatives/', slackChannelId: '' },
-    { url: 'https://top10dogfood.com/dog-food/', slackChannelId: '' },
-    { url: 'https://top10dogfood.com/dog-food-bb/', slackChannelId: '' },
-    { url: 'https://top10dogfood.com/badlands-ranch-comparison/', slackChannelId: '' },
-    { url: 'https://top10dogfood.com/dr-marty-comparison/', slackChannelId: '' },
-    { url: 'https://top10dogfood.com/healthy-dog-food/', slackChannelId: '' },
-    { url: 'https://top10dogfood.com/justfoodfordogs-comparison/', slackChannelId: '' },
-    { url: 'https://top10dogfood.com/open-farm-dog-food-comparison/', slackChannelId: '' },
-    { url: 'https://top10dogfood.com/st-doogfood-comparison/', slackChannelId: '' },
-    { url: 'https://top10dogfood.com/sundays-comparison/', slackChannelId: '' },
-    { url: 'https://top10dogfood.com/maev-comparison/', slackChannelId: '' },
-    { url: 'https://top10dogfood.com/dog-food-for-puppy/', slackChannelId: '' },
-    { url: 'https://top10dogfood.com/dry-dog-food/', slackChannelId: '' },
-    { url: 'https://top10dogfood.com/organic-dog-food/', slackChannelId: '' },
-    { url: 'https://top10dogfood.com/dog-food-for-allergies/', slackChannelId: '' },
-    { url: 'https://top10dogfood.com/raw-dog-food/', slackChannelId: '' },
-    { url: 'https://top10dogfood.com/wet-dog-food/', slackChannelId: '' },
-    { url: 'https://liabilityfreedom.com', slackChannelId: '' },
-    { url: 'https://top10antivirusexperts.com/aw-mac-cleaner/', slackChannelId: '' },
-    { url: 'https://top10antivirusexperts.com/mac-cleaner-m/', slackChannelId: '' },
-    { url: 'https://topfundings.com/land-m/', slackChannelId: '' },
-    { url: 'https://topfundings.com/medical/', slackChannelId: '' },
-    { url: 'https://topfundings.com/military/', slackChannelId: '' },
-    { url: 'https://topfundings.com/motorcycle/', slackChannelId: '' },
-    { url: 'https://topfundings.com/wedding/', slackChannelId: '' },
-    { url: 'https://topfundings.com/land-loans/', slackChannelId: '' },
-    { url: 'https://10bestmovingcompanies.com/home-long-distance-best-ab/', slackChannelId: '' }
-  ];
+     let urlAndSlackChannel : {url: string, slackChannelId: string}[] = urlSet.size > 0 ? Array.from(urlSet).map((u)=>({url:u?.split(' - ')[0], slackChannelId:u?.split(' - ')[1]})) : [];
   
       // ✅ Step 2: validate lineups
       for (let urlAndSlack of urlAndSlackChannel) {
@@ -161,7 +129,7 @@ export class SpellCheckerService {
           durationMs = Date.now() - startTime;
         
           const browser = await puppeteer.launch({headless: true,
-               executablePath: '/home/webapp/.cache/puppeteer/chrome/linux-136.0.7103.49/chrome-linux64/chrome'
+          //     executablePath: '/home/webapp/.cache/puppeteer/chrome/linux-136.0.7103.49/chrome-linux64/chrome'
             });
 
           const page = await browser.newPage();
@@ -170,11 +138,7 @@ export class SpellCheckerService {
           await browser.close();
 
           if(urlAndSlack.url === 'https://10bestmovingcompanies.com/home-long-distance-best-ab/'){
-            logToCloudWatch(`checking  wayward link  `, 'INFO');
-
-            logToCloudWatch(`checking ${pupeteerRes}  `, 'INFO');
-            logToCloudWatch(`finished checking  wayward link  `, 'INFO');
-
+          continue;
           }
         
         } catch (err) {
@@ -229,12 +193,12 @@ export class SpellCheckerService {
         const recentlyVisitedDomains =  await this.kidonClient('tracker_visitors').select('domain_name').where('created_at', '>', weekAgo).whereIn('utm_source', ['GOOGLE', 'BING']).distinct(); 
          if(!recentlyVisitedDomains || recentlyVisitedDomains.length === 0)     logToCloudWatch('no tracker visitors Data!');
 
-        const chosenDomains = domainId ? state.domains.filter((d: Domain) => d.id === domainId) : state.domains.filter(d => recentlyVisitedDomains.some(r => r.domainName === d.hostname));
+        const chosenDomains = domainId ? state.domains.filter((d: Domain) => d.id === domainId) : state.domains.slice(0,2) 
         chosenDomains.forEach((domain: Domain) => {domain.paths = englishPats.filter((p: Paths) => p.domainId === domain.id).map((p: Paths) => p.path).filter((p)=> p); });  // asign paths per domain
          // ✅ Step 3: fetch all paths' text,   check each word for errors and send result to mail
          const detectedErrors =    await fetchWebsitesInnerHtmlAndFindErrors(chosenDomains, ignoredWords,state); //get inner html of websites
          const domainMessages = createErrorsTable(JSON.stringify(detectedErrors));
-         await KF.sendSlackAlert('Web Sites Errors:', slackChannels.CONTENT, state.slackToken);
+          await KF.sendSlackAlert('Web Sites Errors:', slackChannels.CONTENT, state.slackToken);
          
          for (const message of domainMessages) {
              await KF.sendSlackAlert(message, slackChannels.CONTENT, state.slackToken);
@@ -295,24 +259,24 @@ export class SpellCheckerService {
 
   async mobileAndDesktopTrafficCongruenceValidation(){
     try {    
-      
-      //const result = await this.kidonClient.raw('SELECT campaign_id, COUNT(*) AS clicks FROM tracker_visitors WHERE device = "mobile" AND DATE(created_at) = CURDATE() - INTERVAL 1 DAY GROUP BY campaign_id HAVING COUNT(*) > 5' );;
+      const state =   this.globalState.getAllState(); 
 
-      const idList = [10145788963, 10955510778, 11136870413, 16372777859, 16634908692];
-
+       const result = await this.kidonClient.raw('SELECT campaign_id, COUNT(*) AS clicks FROM tracker_visitors WHERE device = "mobile" AND DATE(created_at) = CURDATE() - INTERVAL 1 DAY GROUP BY campaign_id HAVING COUNT(*) > 5' );;
+      logToCloudWatch(`result: ${JSON.stringify(result[0])}`, "INFO", 'mobile and desktop traffic congruence validation');
+ 
  
       const res = await getSecretFromSecretManager(process.env.SECRET_NAME);
       const googleKey = JSON.parse(res).GOOGLE_SERVICE_PRIVATE_KEY.replace(/\\n/g, '\n');
       const bq = await KF.connectToBQ(process.env.BQ_EMAIL_SERVICE, googleKey, process.env.BQ_PROJECT_NAME);
-      const [job] = await bq.createQueryJob({ query: `select * from kidon3_STG.campaigns_name_network WHERE campaign_id IN (${idList})` });
+      const [job] = await bq.createQueryJob({ query: `select * from kidon3_STG.campaigns_name_network WHERE campaign_id IN (${result[0].campaign_id})` });
       let [rows] = await job.getQueryResults();
+ 
+     const desktopOnlyTraffick = /^(?!.*\([^)]*[MT\d][^)]*\)).*\(\s*D\s*\).*$/; // reject any parentheses that contain M, T or a digit, require a standalone "(D)" somewhere
+     const incongruentTraffick = rows.filter(name=>desktopOnlyTraffick.test(name.campaign_name))
+     await KF.sendSlackAlert(`Incongruent Traffick (Mobile -> Desctop) campaigns: `, slackChannels.PERSONAL, state.slackToken);
+      await KF.sendSlackAlert(incongruentTraffick && incongruentTraffick.length > 0 ? `Incongruent Traffick campaign names: ${JSON.stringify(incongruentTraffick)}` : 'No incongruent traffick found', slackChannels.PERSONAL, state.slackToken);
 
-
-
-
-
-
-   return 'mobile and desktop traffic congruence validation finished';
+     return 'mobile and desktop traffic congruence validation finished';
 
      } catch (error) {
       if (error instanceof BadRequestException || error instanceof InternalServerErrorException) {
