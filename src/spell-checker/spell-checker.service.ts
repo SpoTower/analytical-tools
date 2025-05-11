@@ -22,6 +22,8 @@ import { fetchIgnoreWords } from './utils';
 import axios from 'axios';
 import { AnyObject } from './consts';
 import puppeteer from 'puppeteer';
+import { BigQuery } from '@google-cloud/bigquery';
+
 @Injectable()
 export class SpellCheckerService {
 
@@ -256,22 +258,34 @@ export class SpellCheckerService {
    
     }
 
-
+ 
   async mobileAndDesktopTrafficCongruenceValidation(){
     try {    
       const state =   this.globalState.getAllState(); 
 
-       const result = await this.kidonClient.raw('SELECT campaign_id, COUNT(*) AS clicks FROM tracker_visitors WHERE device = "mobile" AND DATE(created_at) = CURDATE() - INTERVAL 1 DAY GROUP BY campaign_id HAVING COUNT(*) > 5' );
-       const ids = result[0].map(r => `'${r.campaign_id}'`).join(',');  
-
-       logToCloudWatch(`ids: ${ ids}`, "INFO", 'mobile and desktop traffic congruence validation');
+      const result = await this.kidonClient.raw('SELECT campaign_id, COUNT(*) AS clicks FROM tracker_visitors WHERE device = "mobile" AND DATE(created_at) = CURDATE() - INTERVAL 1 DAY GROUP BY campaign_id HAVING COUNT(*) > 5' );
+      
+      if (!result?.[0]?.length) {
+        logToCloudWatch('No campaign IDs found in the last 24 hours', "INFO", 'mobile and desktop traffic congruence validation');
+        await KF.sendSlackAlert('No campaign IDs found in the last 24 hours', slackChannels.PERSONAL, state.slackToken);
+        return 'No campaign IDs found in the last 24 hours';
+      }
+ 
+      const ids = result[0].map(r => `'${r.campaign_id}'`).join(',');  
+     // const ids = ['22386145648','21388459597','17268271860']
+      logToCloudWatch(`ids: ${ids}`, "INFO", 'mobile and desktop traffic congruence validation');
  
  
       const res = await getSecretFromSecretManager(process.env.SECRET_NAME);
       const googleKey = JSON.parse(res).GOOGLE_SERVICE_PRIVATE_KEY.replace(/\\n/g, '\n');
       logToCloudWatch(`googleKey: ${googleKey}`, "INFO", 'mobile and desktop traffic congruence validation');
+      logToCloudWatch(`BQ_EMAIL_SERVICE: ${process.env.BQ_EMAIL_SERVICE} BQ_PROJECT_NAME: ${process.env.BQ_PROJECT_NAME}`, "INFO", 'mobile and desktop traffic congruence validation');
 
-      const bq = await KF.connectToBQ(process.env.BQ_EMAIL_SERVICE, googleKey, process.env.BQ_PROJECT_NAME);
+      const credentials = { client_email: process.env.BQ_EMAIL_SERVICE, private_key: googleKey };
+      const bq =   new BigQuery({ credentials, projectId: process.env.BQ_PROJECT_NAME });
+
+
+     // const bq = await KF.connectToBQ(process.env.BQ_EMAIL_SERVICE, googleKey, process.env.BQ_PROJECT_NAME);
       const [job] = await bq.createQueryJob({ query: `select * from kidon3_STG.campaigns_name_network WHERE campaign_id IN (${ids})` });
       let [rows] = await job.getQueryResults();
 
@@ -281,7 +295,7 @@ export class SpellCheckerService {
      const incongruentTraffick = rows.filter(name=>desktopOnlyTraffick.test(name.campaign_name))
      logToCloudWatch(`incongruentTraffick: ${JSON.stringify(incongruentTraffick)}`, "INFO", 'mobile and desktop traffic congruence validation');
      await KF.sendSlackAlert(`Incongruent Traffick (Mobile -> Desctop) campaigns: `, slackChannels.PERSONAL, state.slackToken);
-      await KF.sendSlackAlert(incongruentTraffick && incongruentTraffick.length > 0 ? `Incongruent Traffick campaign names: ${JSON.stringify(incongruentTraffick)}` : 'No incongruent traffick found', slackChannels.PERSONAL, state.slackToken);
+       await KF.sendSlackAlert(incongruentTraffick && incongruentTraffick.length > 0 ? `Incongruent Traffick campaign names: ${JSON.stringify(incongruentTraffick)}` : 'No incongruent traffick found', slackChannels.PERSONAL, state.slackToken);
 
      return 'mobile and desktop traffic congruence validation finished';
 
@@ -289,8 +303,9 @@ export class SpellCheckerService {
       if (error instanceof BadRequestException || error instanceof InternalServerErrorException) {
         logToCloudWatch(`❌ Error in mobileAndDesktopTrafficCongruenceValidation: ${error.message}`, "ERROR", 'mobile and desktop traffic congruence validation');
         throw error;
-        
       }
+      logToCloudWatch(`❌ Error in mobileAndDesktopTrafficCongruenceValidation: ${error.message} |||||| ${JSON.stringify(error)}`, "ERROR", 'mobile and desktop traffic congruence validation');
+      return `Error in mobileAndDesktopTrafficCongruenceValidation: ${error.message}`;
     }
   }
  
