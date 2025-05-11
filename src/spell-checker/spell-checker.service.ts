@@ -144,6 +144,7 @@ export class SpellCheckerService {
           }
         
         } catch (err) {
+          logToCloudWatch(`Error in lineupValidation: ${err}`, 'ERROR');
           if(err.name === 'AxiosError'){
             errors.push({url:urlAndSlack.url, slackChannelId:urlAndSlack.slackChannelId, status: err.status, reason: 'response status not success (not 200)'});
             continue;
