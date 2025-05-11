@@ -271,8 +271,9 @@ export class SpellCheckerService {
         return 'No campaign IDs found in the last 24 hours';
       }
  
-      const ids = result[0].map(r => `'${r.campaign_id}'`).join(',');  
-     // const ids = ['22386145648','21388459597','17268271860']
+      const campaignIds = result[0].map(r => Number(r.campaign_id));
+       const ids = campaignIds.join(',');
+         // const ids = ['22386145648','21388459597','17268271860']
       logToCloudWatch(`ids: ${ids}`, "INFO", 'mobile and desktop traffic congruence validation');
  
  
