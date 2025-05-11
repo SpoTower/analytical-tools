@@ -261,18 +261,21 @@ export class SpellCheckerService {
     try {    
       const state =   this.globalState.getAllState(); 
 
-       const result = await this.kidonClient.raw('SELECT campaign_id, COUNT(*) AS clicks FROM tracker_visitors WHERE device = "mobile" AND DATE(created_at) = CURDATE() - INTERVAL 1 DAY GROUP BY campaign_id HAVING COUNT(*) > 5' );;
-      logToCloudWatch(`result: ${JSON.stringify(result[0])}`, "INFO", 'mobile and desktop traffic congruence validation');
+       const result = await this.kidonClient.raw('SELECT campaign_id, COUNT(*) AS clicks FROM tracker_visitors WHERE device = "mobile" AND DATE(created_at) = CURDATE() - INTERVAL 1 DAY GROUP BY campaign_id HAVING COUNT(*) > 5' );
+       const ids = result.map(r => `'${r.campaign_id}'`).join(',');  
+
+       logToCloudWatch(`ids: ${ ids}`, "INFO", 'mobile and desktop traffic congruence validation');
  
  
       const res = await getSecretFromSecretManager(process.env.SECRET_NAME);
       const googleKey = JSON.parse(res).GOOGLE_SERVICE_PRIVATE_KEY.replace(/\\n/g, '\n');
       const bq = await KF.connectToBQ(process.env.BQ_EMAIL_SERVICE, googleKey, process.env.BQ_PROJECT_NAME);
-      const [job] = await bq.createQueryJob({ query: `select * from kidon3_STG.campaigns_name_network WHERE campaign_id IN (${result[0].campaign_id})` });
+      const [job] = await bq.createQueryJob({ query: `select * from kidon3_STG.campaigns_name_network WHERE campaign_id IN (${ids})` });
       let [rows] = await job.getQueryResults();
- 
+      logToCloudWatch(`rows: ${JSON.stringify(rows)}`, "INFO", 'mobile and desktop traffic congruence validation');
      const desktopOnlyTraffick = /^(?!.*\([^)]*[MT\d][^)]*\)).*\(\s*D\s*\).*$/; // reject any parentheses that contain M, T or a digit, require a standalone "(D)" somewhere
      const incongruentTraffick = rows.filter(name=>desktopOnlyTraffick.test(name.campaign_name))
+     logToCloudWatch(`incongruentTraffick: ${JSON.stringify(incongruentTraffick)}`, "INFO", 'mobile and desktop traffic congruence validation');
      await KF.sendSlackAlert(`Incongruent Traffick (Mobile -> Desctop) campaigns: `, slackChannels.PERSONAL, state.slackToken);
       await KF.sendSlackAlert(incongruentTraffick && incongruentTraffick.length > 0 ? `Incongruent Traffick campaign names: ${JSON.stringify(incongruentTraffick)}` : 'No incongruent traffick found', slackChannels.PERSONAL, state.slackToken);
 
@@ -280,7 +283,9 @@ export class SpellCheckerService {
 
      } catch (error) {
       if (error instanceof BadRequestException || error instanceof InternalServerErrorException) {
+        logToCloudWatch(`❌ Error in mobileAndDesktopTrafficCongruenceValidation: ${error.message}`, "ERROR", 'mobile and desktop traffic congruence validation');
         throw error;
+        
       }
     }
   }
