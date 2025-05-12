@@ -430,31 +430,15 @@ export async function sendGoogleAdsErrorReports(errors: { spelling: any[], capit
 
 
 export function checkIfLineupExists(html: string): boolean {
-  const lineupClassNames = [
-    'partnersArea_main-partner-list',
-    'ConditionalPartnersList',
-    'test-id-partners-list',
-    'homePage_partners-list-section',
-    'articlesSection_container',
-    'partnerNode'
-  ];
+   const  lineupClassNames = ['partnersArea_main-partner-list', 'ConditionalPartnersList', 'test-id-partners-list','homePage_partners-list-section', 'articlesSection_container', 'partnerNode' ];
 
-  const lowerClassNames = lineupClassNames.map(name => name.toLowerCase());
-  const $ = cheerio.load(html);
-
-  let found = false;
-  $('[class]').each((_, el) => {
-    const classList = ($(el).attr('class') || '').split(/\s+/).map(cls => cls.toLowerCase());
-    if (lowerClassNames.some(name => classList.includes(name))) {
-      found = true;
-      return false; // break out of .each
-    }
-  });
-
-  if (found) {
-    // Print the HTML if a lineup class is found
-    logToCloudWatch(`Lineup class found. HTML: ${html}`);
-   }
-
-  return found;
-}
+     if(!lineupClassNames.some(className => html.includes(`${className}`) || html.includes(`${className}`)))
+       logToCloudWatch(`no lineup found in ${html}`, 'INFO');
+    
+     const $ = cheerio.load(html);
+     const isFound = lineupClassNames.some(className =>
+        $(`[class*="${className}"], [id*="${className}"]`).length > 0
+      );
+      
+     return isFound
+ }
