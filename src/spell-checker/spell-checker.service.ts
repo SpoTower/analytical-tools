@@ -219,11 +219,11 @@ export class SpellCheckerService {
       if(doubleFailed.length > 0){
         for(let error of filteredErrors){
           logToCloudWatch(`Lineup Validation Errors: ${error.url}, status: ${error.status}, reason: ${error.reason}`,  'ERROR');
-          await KF.sendSlackAlert(`Lineup Validation Errors: ${error.url}, status: ${error.status}, reason: ${error.reason}`,  slackChannels.PERSONAL, state.slackToken); 
+          await KF.sendSlackAlert(`Lineup Validation Errors: ${error.url}, status: ${error.status}, reason: ${error.reason}`,  slackChannels.CONTENT, state.slackToken); 
         }
       }else{
         logToCloudWatch(`no lineup errors found`);
-        await KF.sendSlackAlert(`no lineup errors found`,  slackChannels.PERSONAL, state.slackToken); 
+        await KF.sendSlackAlert(`no lineup errors found`,  slackChannels.CONTENT, state.slackToken); 
       }
   
     } catch (e) {
@@ -319,17 +319,11 @@ export class SpellCheckerService {
     try {    
       const state =   this.globalState.getAllState(); 
 
-      const result = await this.kidonClient.raw('SELECT campaign_id, domain_name, COUNT(*) AS clicks FROM tracker_visitors WHERE device = "mobile" AND DATE(created_at) = CURDATE() - INTERVAL 1 DAY GROUP BY campaign_id, domain_name HAVING COUNT(*) > 5' );
-      
-      if (!result?.[0]?.length) {
-        logToCloudWatch('No campaign IDs found in the last 24 hours', "INFO", 'mobile and desktop traffic congruence validation');
-        await KF.sendSlackAlert('No campaign IDs found in the last 24 hours', slackChannels.PERSONAL, state.slackToken);
-        return 'No campaign IDs found in the last 24 hours';
-      }
- 
+      const result = await this.kidonClient.raw('SELECT campaign_id, domain_name, COUNT(*) AS clicks FROM tracker_visitors WHERE device = "mobile" AND DATE(created_at) = CURDATE() - INTERVAL 1 DAY GROUP BY campaign_id, domain_name HAVING COUNT(*) > 5' );   
+      logToCloudWatch(`result: ${JSON.stringify(result)}`, "INFO", 'mobile and desktop traffic congruence validation');
       const campaignIds = result[0].map(r => Number(r.campaign_id));
        const ids = campaignIds.join(',');
-         // const ids = ['22386145648','21388459597','17268271860']
+       //   const ids = ['22386145648','21388459597','17268271860']
       logToCloudWatch(`ids: ${ids}`, "INFO", 'mobile and desktop traffic congruence validation');
  
  
@@ -346,6 +340,10 @@ export class SpellCheckerService {
       const [job] = await bq.createQueryJob({ query: `select * from kidon3_STG.campaigns_name_network WHERE campaign_id IN (${ids})` });
       let [rows] = await job.getQueryResults();
 
+      rows.forEach(r => {
+        const match = result[0].find(re => Number(re.campaign_id) === Number(r.campaign_id));
+        r.domain_name = match ? match.domain_name : '';
+      });
 
       logToCloudWatch(`rows: ${JSON.stringify(rows)}`, "INFO", 'mobile and desktop traffic congruence validation');
      const desktopOnlyTraffick = /^(?!.*\([^)]*[MT\d][^)]*\)).*\(\s*D\s*\).*$/; // reject any parentheses that contain M, T or a digit, require a standalone "(D)" somewhere
@@ -368,9 +366,9 @@ export class SpellCheckerService {
       const formatted = uniqueErrors.map(c =>
         `• *Campaign:* ${c.campaign_name}\n  *Campaign ID:* ${c.campaign_id}\n  *Domain:* ${c.domain_name}\n  *Device:* ${c.device}\n  *Date:* ${c.date?.value}\n  *Source:* ${c.media_source}\n  *Network:* ${c.network_type}\n`
       ).join('\n');
-      await KF.sendSlackAlert(`*Incongruent Traffick campaign names:*\n${formatted}`, slackChannels.PERSONAL, state.slackToken);
+      await KF.sendSlackAlert(`*Incongruent Traffick campaign names:*\n${formatted}`, slackChannels.CONTENT, state.slackToken);
     } else {
-      await KF.sendSlackAlert('No incongruent traffick found', slackChannels.PERSONAL, state.slackToken);
+      await KF.sendSlackAlert('No incongruent traffick found', slackChannels.CONTENT, state.slackToken);
     }
 
      return 'mobile and desktop traffic congruence validation finished';
