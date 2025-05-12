@@ -431,13 +431,18 @@ export async function sendGoogleAdsErrorReports(errors: { spelling: any[], capit
 
 
 export function checkIfLineupExists(html: string): boolean {
-   const  lineupClassNames = ['PartnerLists_container__hmkhb PartnerLists_open__WAh6E PartnerList_list__5eMzn','partnersArea_main-partner-list', 'ConditionalPartnersList', 'test-id-partners-list','homePage_partners-list-section', 'articlesSection_container', 'partnerNode' ];
+   //const  lineupClassNames = ['PartnerLists_container__hmkhb PartnerLists_open__WAh6E PartnerList_list__5eMzn','partnersArea_main-partner-list', 'ConditionalPartnersList', 'test-id-partners-list','homePage_partners-list-section', 'articlesSection_container', 'partnerNode' ];
+   const  lineupClassNames = [ 'partnersArea_main-partner-list', 'ConditionalPartnersList', 'test-id-partners-list'  ];
 
-logToCloudWatch(`html: ${html}`, 'INFO');
-     const $ = cheerio.load(html);
-     const isFound = lineupClassNames.some(className =>
-        $(`[class*="${className}"], [id*="${className}"]`).length > 0
-      );
-      
-     return isFound
+   const $ = cheerio.load(html);
+
+   const isFound = $('*').toArray().some(el => {
+     const classAttr = $(el).attr('class') || '';
+     const idAttr = $(el).attr('id') || '';
+     return lineupClassNames.some(name =>
+       classAttr.includes(name) || idAttr.includes(name)
+     );
+   });
+ 
+   return isFound;
  }
