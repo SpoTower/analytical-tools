@@ -121,6 +121,7 @@ export class SpellCheckerService {
       if (hostname) {
         urlAndSlackChannel = urlAndSlackChannel.filter((u) => u.url.includes(hostname));
       }
+      urlAndSlackChannel = urlAndSlackChannel.filter((u)=>!u.url.includes('topsportbetting'))
       // ✅ Step 2: validate lineups (🔧 CHANGED to use processInBatches)
       const validationResults = await processInBatches( // 🔧 ADDED
         urlAndSlackChannel.map((urlAndSlack) => async () => { // 🔧 ADDED
@@ -135,7 +136,7 @@ export class SpellCheckerService {
           
             const browser = await puppeteer.launch({
               headless: true,
-             executablePath: '/opt/chrome/chrome-linux64/chrome',
+              executablePath: '/opt/chrome/chrome-linux64/chrome',
               protocolTimeout: 60000, // 🔧 ADDED
             });
   
