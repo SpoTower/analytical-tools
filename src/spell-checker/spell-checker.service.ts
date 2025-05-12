@@ -136,13 +136,17 @@ export class SpellCheckerService {
  
           const page = await browser.newPage();
           await page.goto(urlAndSlack.url, { waitUntil: 'networkidle2', timeout: 60000 });
+
+          await page.waitForSelector(
+            '[class*="partnersArea_main-partner-list"], [class*="ConditionalPartnersList"], [class*="homePage_partners-list-section"], [class*="articlesSection_container"], [class*="partnerNode"], [id*="test-id-partners-list"]',
+            { timeout: 5000 }
+          ).catch(() => {});
+          
+
           pupeteerRes = await page.content();
           await browser.close();
 
-          if(urlAndSlack.url === 'https://10bestmovingcompanies.com/home-long-distance-best-ab/'){
-          continue;
-          }
-        
+         
         } catch (err) {
           logToCloudWatch(`Error in lineupValidation: ${err}`, 'ERROR');
           if(err.name === 'AxiosError'){
@@ -164,11 +168,11 @@ export class SpellCheckerService {
        if(errors.length > 0){
         for(let error of errors){
           logToCloudWatch(`Lineup Validation Errors: ${error.url}, status: ${error.status}, reason: ${error.reason}`,  'ERROR');
-          await KF.sendSlackAlert(`Lineup Validation Errors: ${error.url}, status: ${error.status}, reason: ${error.reason}`,  slackChannels.CONTENT, state.slackToken); 
+          await KF.sendSlackAlert(`Lineup Validation Errors: ${error.url}, status: ${error.status}, reason: ${error.reason}`,  slackChannels.PERSONAL, state.slackToken); 
         }
        }else{
         logToCloudWatch(`no lineup errors found`);
-        await KF.sendSlackAlert(`no lineup errors found`,  slackChannels.CONTENT, state.slackToken); 
+        await KF.sendSlackAlert(`no lineup errors found`,  slackChannels.PERSONAL, state.slackToken); 
        }
 
     } catch (e) {
@@ -297,16 +301,18 @@ export class SpellCheckerService {
      const desktopOnlyTraffick = /^(?!.*\([^)]*[MT\d][^)]*\)).*\(\s*D\s*\).*$/; // reject any parentheses that contain M, T or a digit, require a standalone "(D)" somewhere
      const incongruentTraffick = rows.filter(name=>desktopOnlyTraffick.test(name.campaign_name))
      logToCloudWatch(`incongruentTraffick: ${JSON.stringify(incongruentTraffick)}`, "INFO", 'mobile and desktop traffic congruence validation');
-     await KF.sendSlackAlert(`Incongruent Traffick (Mobile -> Desctop) campaigns: `, slackChannels.PERSONAL, state.slackToken);
-       await KF.sendSlackAlert(incongruentTraffick && incongruentTraffick.length > 0 ? `Incongruent Traffick campaign names: ${JSON.stringify(incongruentTraffick)}` : 'No incongruent traffick found', slackChannels.PERSONAL, state.slackToken);
-
+     if (incongruentTraffick && incongruentTraffick.length > 0) {
+      const formatted = incongruentTraffick.map(c =>
+        `• *Campaign:* ${c.campaign_name}\n  *ID:* ${c.campaign_id}\n  *Device:* ${c.device}\n  *Date:* ${c.date?.value}\n  *Source:* ${c.media_source}\n  *Network:* ${c.network_type}\n`
+      ).join('\n');
+      await KF.sendSlackAlert(`*Incongruent Traffick campaign names:*\n${formatted}`, slackChannels.PERSONAL, state.slackToken);
+    } else {
+      await KF.sendSlackAlert('No incongruent traffick found', slackChannels.PERSONAL, state.slackToken);
+    }
      return 'mobile and desktop traffic congruence validation finished';
 
      } catch (error) {
-      if (error instanceof BadRequestException || error instanceof InternalServerErrorException) {
-        logToCloudWatch(`❌ Error in mobileAndDesktopTrafficCongruenceValidation: ${error.message}`, "ERROR", 'mobile and desktop traffic congruence validation');
-        throw error;
-      }
+ 
       logToCloudWatch(`❌ Error in mobileAndDesktopTrafficCongruenceValidation: ${error.message} |||||| ${JSON.stringify(error)}`, "ERROR", 'mobile and desktop traffic congruence validation');
       return `Error in mobileAndDesktopTrafficCongruenceValidation: ${error.message}`;
     }

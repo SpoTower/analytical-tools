@@ -432,12 +432,13 @@ export async function sendGoogleAdsErrorReports(errors: { spelling: any[], capit
 export function checkIfLineupExists(html: string): boolean {
    const  lineupClassNames = ['partnersArea_main-partner-list', 'ConditionalPartnersList', 'test-id-partners-list','homePage_partners-list-section', 'articlesSection_container', 'partnerNode' ];
 
-     if(!lineupClassNames.some(className => html.includes(`class="${className}`) || html.includes(`class='${className}`)))
-       console.log('no lineup found');
+     if(!lineupClassNames.some(className => html.includes(`${className}`) || html.includes(`${className}`)))
+       logToCloudWatch(`no lineup found in ${html}`, 'INFO');
+    
      const $ = cheerio.load(html);
      const isFound = lineupClassNames.some(className =>
-        $(`[class*="${className}"]`).length > 0
+        $(`[class*="${className}"], [id*="${className}"]`).length > 0
       );
-    
+      
      return isFound
  }
