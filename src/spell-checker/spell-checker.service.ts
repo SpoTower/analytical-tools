@@ -135,7 +135,7 @@ export class SpellCheckerService {
           
             const browser = await puppeteer.launch({
               headless: true,
-              executablePath: '/opt/chrome/chrome-linux64/chrome',
+             executablePath: '/opt/chrome/chrome-linux64/chrome',
               protocolTimeout: 60000, // 🔧 ADDED
             });
   
