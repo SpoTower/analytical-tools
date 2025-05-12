@@ -171,7 +171,52 @@ export class SpellCheckerService {
   
       const filteredErrors = validationResults.filter(Boolean); // 🔧 ADDED
   
-      if(filteredErrors.length > 0){
+
+      const secondCheckResults = await processInBatches(
+        filteredErrors
+          .filter(e => e.reason === 'no lineup found')
+          .map(error => async () => {
+            // Re-fetch the page content
+            let pupeteerRes;
+            try {
+              const browser = await puppeteer.launch({
+                headless: true,
+                executablePath: '/opt/chrome/chrome-linux64/chrome',
+                protocolTimeout: 60000,
+              });
+              const page = await browser.newPage();
+              await page.goto(error.url, { waitUntil: 'networkidle2', timeout: 60000 });
+              pupeteerRes = await page.content();
+              await browser.close();
+            } catch (err) {
+              logToCloudWatch(`[SECOND TRY] Puppeteer error for ${error.url}: ${err}`, 'ERROR');
+              // If puppeteer fails, treat as still error
+              return error;
+            }
+            // Only return error if checkIfLineupExists still fails
+            const exists = checkIfLineupExists(pupeteerRes);
+            logToCloudWatch(`[SECOND TRY] checkIfLineupExists for ${error.url}: ${exists}`, 'INFO');
+            if (!exists) {
+              return error;
+            }
+            logToCloudWatch(`[SECOND TRY] Lineup found on retry for ${error.url}, overriding previous error.`, 'INFO');
+            return null;
+          }),
+        3
+      );
+      
+      const doubleFailed = [
+        ...filteredErrors.filter(e => e.reason !== 'no lineup found'),
+        ...secondCheckResults.filter(Boolean)
+      ];
+      
+
+
+
+
+
+
+      if(doubleFailed.length > 0){
         for(let error of filteredErrors){
           logToCloudWatch(`Lineup Validation Errors: ${error.url}, status: ${error.status}, reason: ${error.reason}`,  'ERROR');
           await KF.sendSlackAlert(`Lineup Validation Errors: ${error.url}, status: ${error.status}, reason: ${error.reason}`,  slackChannels.PERSONAL, state.slackToken); 
