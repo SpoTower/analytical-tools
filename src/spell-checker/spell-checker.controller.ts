@@ -64,10 +64,10 @@ export class SpellCheckerController {
 // checks whether there is a lineup on the page based on css class and id of lineup wrapper, and also that the status is 200 and the loading time less than 10 seconds
   @Get('/lineupValidation')
   async lineupValidation(
-    @Query('batchSize', new DefaultValuePipe(10), ParseIntPipe) batchSize: number,
+    @Query('hostname', ) hostname: string,
     ) {
       try {
-        return await this.spellCheckerService.lineupValidation( );
+        return await this.spellCheckerService.lineupValidation(hostname );
       } catch (error) {
         if (error instanceof BadRequestException || error instanceof InternalServerErrorException) {
           throw error;

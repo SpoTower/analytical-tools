@@ -92,19 +92,19 @@ export class SpellCheckerService {
 
  
  
-  async lineupValidation() {
+  async lineupValidation(hostname: string) {
     logToCloudWatch('entering lineupValidation');
-
+  
     try {
       let errors = []
-       
+      
       const state = this.globalState.getAllState(); if (!state) return 'No state found';
       let domainsToProcess = state.domains.filter((d: Domain) => d.googleAdsId);
       domainsToProcess = domainsToProcess.filter((d: Domain) =>  ![176,128,153].includes(d.id)  );
-       const allTokens = await Promise.all(state.companies.map(async (c) => ({ company: c.name, token: await KF.getGoogleAuthToken(c) })));
- 
+      const allTokens = await Promise.all(state.companies.map(async (c) => ({ company: c.name, token: await KF.getGoogleAuthToken(c) })));
+  
       const urlSet = new Set<string>();
-
+  
       // ✅ Step 1: fetch lineups
       await processInBatches(
           domainsToProcess.map((domain: Domain) => async () => {
@@ -117,71 +117,121 @@ export class SpellCheckerService {
           30
       );
       logToCloudWatch(`urlSet length: ${urlSet.size}`, 'INFO');
-     let urlAndSlackChannel : {url: string, slackChannelId: string}[] = urlSet.size > 0 ? Array.from(urlSet).map((u)=>({url:u?.split(' - ')[0], slackChannelId:u?.split(' - ')[1]})) : [];
+      let urlAndSlackChannel : {url: string, slackChannelId: string}[] = urlSet.size > 0 ? Array.from(urlSet).map((u)=>({url:u?.split(' - ')[0], slackChannelId:u?.split(' - ')[1]})) : [];
+      if (hostname) {
+        urlAndSlackChannel = urlAndSlackChannel.filter((u) => u.url.includes(hostname));
+      }
+      urlAndSlackChannel = urlAndSlackChannel.filter((u)=>!u.url.includes('topsportbetting'))
+      // ✅ Step 2: validate lineups (🔧 CHANGED to use processInBatches)
+      const validationResults = await processInBatches( // 🔧 ADDED
+        urlAndSlackChannel.map((urlAndSlack) => async () => { // 🔧 ADDED
+          let axiosRes, pupeteerRes, durationMs; // 🔧 ADDED
   
-      // ✅ Step 2: validate lineups
-      for (let urlAndSlack of urlAndSlackChannel) {
-        let axiosRes, pupeteerRes, durationMs;
-
-        try {
-          logToCloudWatch(`checking ${urlAndSlack.url}  `, 'INFO');
-
-          const startTime = Date.now();
-          axiosRes = await axios.get(urlAndSlack.url, { timeout: 10000 });
-          durationMs = Date.now() - startTime;
-        
-          const browser = await puppeteer.launch({headless: true,
-            executablePath: '/opt/chrome/chrome-linux64/chrome', // in local env we dont need it, when installing chrome it initially installed into temporary cache folder and we copy it to stable folder
-          });
- 
-          const page = await browser.newPage();
-          await page.goto(urlAndSlack.url, { waitUntil: 'networkidle2', timeout: 60000 });
-
-          await page.waitForSelector(
-            '[class*="partnersArea_main-partner-list"], [class*="ConditionalPartnersList"], [class*="homePage_partners-list-section"], [class*="articlesSection_container"], [class*="partnerNode"], [id*="test-id-partners-list"]',
-            { timeout: 5000 }
-          ).catch(() => {});
+          try { // 🔧 ADDED
+            logToCloudWatch(`checking ${urlAndSlack.url}  `, 'INFO');
+  
+            const startTime = Date.now();
+            axiosRes = await axios.get(urlAndSlack.url, { timeout: 10000 });
+            durationMs = Date.now() - startTime;
           
-
-          pupeteerRes = await page.content();
-          await browser.close();
-
-         
-        } catch (err) {
-          logToCloudWatch(`Error in lineupValidation: ${err}`, 'ERROR');
-          if(err.name === 'AxiosError'){
-            errors.push({url:urlAndSlack.url, slackChannelId:urlAndSlack.slackChannelId, status: err.status, reason: 'response status not success (not 200)'});
-            continue;
-          } else {
-            errors.push({url:urlAndSlack.url, slackChannelId:urlAndSlack.slackChannelId, status: err.status, reason: `${JSON.stringify(err)}`});
-
+            const browser = await puppeteer.launch({
+              headless: true,
+              executablePath: '/opt/chrome/chrome-linux64/chrome',
+              protocolTimeout: 60000, // 🔧 ADDED
+            });
+  
+            const page = await browser.newPage();
+            await page.goto(urlAndSlack.url, { waitUntil: 'networkidle2', timeout: 60000 });
+  
+            await page.waitForSelector(
+              '[class*="partnersArea_main-partner-list"], [class*="ConditionalPartnersList"], [class*="homePage_partners-list-section"], [class*="articlesSection_container"], [class*="partnerNode"], [id*="test-id-partners-list"]',
+              { timeout: 5000 }
+            ).catch(() => {});
+            
+            pupeteerRes = await page.content();
+            await browser.close();
+  
+          } catch (err) {
+            logToCloudWatch(`Error in lineupValidation: ${err}`, 'ERROR');
+            if(err.name === 'AxiosError'){
+              return {url:urlAndSlack.url, slackChannelId:urlAndSlack.slackChannelId,status: err.status,reason: 'response status not success (not 200)' }; 
+            } else {
+              return { url:urlAndSlack.url,slackChannelId:urlAndSlack.slackChannelId, status: err.status,reason: `${JSON.stringify(err)}`};  }
           }
-        }
-        
-        if(durationMs > 10000) {
-          errors.push({url:urlAndSlack.url, slackChannelId:urlAndSlack.slackChannelId, status: axiosRes.status, reason: 'timeout'});
-        }else if(!checkIfLineupExists(pupeteerRes)){
-          errors.push({url:urlAndSlack.url, slackChannelId:urlAndSlack.slackChannelId, status: '-', reason: 'no lineup found'});
-        }
-       }
+  
+          if(durationMs > 10000) {
+            return { url:urlAndSlack.url, slackChannelId:urlAndSlack.slackChannelId,status: axiosRes.status,  reason: 'timeout'};
+          }else if(!checkIfLineupExists(pupeteerRes)){
+            return {url:urlAndSlack.url,slackChannelId:urlAndSlack.slackChannelId,status: '-',reason: 'no lineup found'}; 
+          }
+          return null; 
+        }),
+        3 
+      ); 
+  
+      const filteredErrors = validationResults.filter(Boolean); // 🔧 ADDED
+  
 
-       if(errors.length > 0){
-        for(let error of errors){
+      const secondCheckResults = await processInBatches(
+        filteredErrors
+          .filter(e => e.reason === 'no lineup found')
+          .map(error => async () => {
+            // Re-fetch the page content
+            let pupeteerRes;
+            try {
+              const browser = await puppeteer.launch({
+                headless: true,
+                executablePath: '/opt/chrome/chrome-linux64/chrome',
+                protocolTimeout: 60000,
+              });
+              const page = await browser.newPage();
+              await page.goto(error.url, { waitUntil: 'networkidle2', timeout: 60000 });
+              pupeteerRes = await page.content();
+              await browser.close();
+            } catch (err) {
+              logToCloudWatch(`[SECOND TRY] Puppeteer error for ${error.url}: ${err}`, 'ERROR');
+              // If puppeteer fails, treat as still error
+              return error;
+            }
+            // Only return error if checkIfLineupExists still fails
+            const exists = checkIfLineupExists(pupeteerRes);
+            logToCloudWatch(`[SECOND TRY] checkIfLineupExists for ${error.url}: ${exists}`, 'INFO');
+            if (!exists) {
+              return error;
+            }
+            logToCloudWatch(`[SECOND TRY] Lineup found on retry for ${error.url}, overriding previous error.`, 'INFO');
+            return null;
+          }),
+        3
+      );
+      
+      const doubleFailed = [
+        ...filteredErrors.filter(e => e.reason !== 'no lineup found'),
+        ...secondCheckResults.filter(Boolean)
+      ];
+      
+
+
+
+
+
+
+      if(doubleFailed.length > 0){
+        for(let error of filteredErrors){
           logToCloudWatch(`Lineup Validation Errors: ${error.url}, status: ${error.status}, reason: ${error.reason}`,  'ERROR');
           await KF.sendSlackAlert(`Lineup Validation Errors: ${error.url}, status: ${error.status}, reason: ${error.reason}`,  slackChannels.PERSONAL, state.slackToken); 
         }
-       }else{
+      }else{
         logToCloudWatch(`no lineup errors found`);
         await KF.sendSlackAlert(`no lineup errors found`,  slackChannels.PERSONAL, state.slackToken); 
-       }
-
+      }
+  
     } catch (e) {
       logToCloudWatch(`Error during lineupValidation: ${e}`, 'ERROR');
       return `Error during lineupValidation ${JSON.stringify(e)}`;
-
     }
   }
-
+  
 
   async findAndFixWebsitesGrammaticalErrors(domainId?: number, batchSize?: number) {
     const state = this.globalState.getAllState();
@@ -269,7 +319,7 @@ export class SpellCheckerService {
     try {    
       const state =   this.globalState.getAllState(); 
 
-      const result = await this.kidonClient.raw('SELECT campaign_id, COUNT(*) AS clicks FROM tracker_visitors WHERE device = "mobile" AND DATE(created_at) = CURDATE() - INTERVAL 1 DAY GROUP BY campaign_id HAVING COUNT(*) > 5' );
+      const result = await this.kidonClient.raw('SELECT campaign_id, domain_name, COUNT(*) AS clicks FROM tracker_visitors WHERE device = "mobile" AND DATE(created_at) = CURDATE() - INTERVAL 1 DAY GROUP BY campaign_id, domain_name HAVING COUNT(*) > 5' );
       
       if (!result?.[0]?.length) {
         logToCloudWatch('No campaign IDs found in the last 24 hours', "INFO", 'mobile and desktop traffic congruence validation');
@@ -301,16 +351,29 @@ export class SpellCheckerService {
      const desktopOnlyTraffick = /^(?!.*\([^)]*[MT\d][^)]*\)).*\(\s*D\s*\).*$/; // reject any parentheses that contain M, T or a digit, require a standalone "(D)" somewhere
      const incongruentTraffick = rows.filter(name=>desktopOnlyTraffick.test(name.campaign_name))
      logToCloudWatch(`incongruentTraffick: ${JSON.stringify(incongruentTraffick)}`, "INFO", 'mobile and desktop traffic congruence validation');
-     if (incongruentTraffick && incongruentTraffick.length > 0) {
-      const formatted = incongruentTraffick.map(c =>
-        `• *Campaign:* ${c.campaign_name}\n  *ID:* ${c.campaign_id}\n  *Device:* ${c.device}\n  *Date:* ${c.date?.value}\n  *Source:* ${c.media_source}\n  *Network:* ${c.network_type}\n`
+
+      // Deduplicate by campaign_id and campaign_name
+      const uniqueErrors = [];
+      const seen = new Set();
+      for (const c of incongruentTraffick) {
+        const key = `${c.campaign_id}||${c.campaign_name}`;
+        if (!seen.has(key)) {
+          seen.add(key);
+          uniqueErrors.push(c);
+        }
+      }
+
+
+     if (uniqueErrors.length > 0) {
+      const formatted = uniqueErrors.map(c =>
+        `• *Campaign:* ${c.campaign_name}\n  *Campaign ID:* ${c.campaign_id}\n  *Domain:* ${c.domain_name}\n  *Device:* ${c.device}\n  *Date:* ${c.date?.value}\n  *Source:* ${c.media_source}\n  *Network:* ${c.network_type}\n`
       ).join('\n');
       await KF.sendSlackAlert(`*Incongruent Traffick campaign names:*\n${formatted}`, slackChannels.PERSONAL, state.slackToken);
     } else {
       await KF.sendSlackAlert('No incongruent traffick found', slackChannels.PERSONAL, state.slackToken);
     }
-     return 'mobile and desktop traffic congruence validation finished';
 
+     return 'mobile and desktop traffic congruence validation finished';
      } catch (error) {
  
       logToCloudWatch(`❌ Error in mobileAndDesktopTrafficCongruenceValidation: ${error.message} |||||| ${JSON.stringify(error)}`, "ERROR", 'mobile and desktop traffic congruence validation');

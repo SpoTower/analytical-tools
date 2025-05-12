@@ -17,6 +17,7 @@ const { Readability } = require('@mozilla/readability');
 const { JSDOM } = require('jsdom');
 import * as KF from '@spotower/my-utils';
 import {slackChannels}  from './consts';
+import { log } from 'console';
  
 export async function fetchGoogleAds(domain: Domain, companies: Company[], tokens:any, query:string ) {
     logToCloudWatch(`Entering fetchGoogleAds, fetching google ads for domain ${domain.id}`);
@@ -429,16 +430,26 @@ export async function sendGoogleAdsErrorReports(errors: { spelling: any[], capit
 }
 
 
-export function checkIfLineupExists(html: string): boolean {
-   const  lineupClassNames = ['partnersArea_main-partner-list', 'ConditionalPartnersList', 'test-id-partners-list','homePage_partners-list-section', 'articlesSection_container', 'partnerNode' ];
+export   function checkIfLineupExists(html: string): boolean {
+    const  lineupClassNames = ['PartnerLists_container__hmkhb PartnerLists_open__WAh6E PartnerList_list__5eMzn',
+        'partnersArea_main-partner-list', 'ConditionalPartnersList', 'test-id-partners-list',
+        'homePage_partners-list-section', 'articlesSection_container', 'partnerNode', 'Partner', 'partner' ];
+  // const  lineupClassNames = [ 'partnersArea_main-partner-list', 'ConditionalPartnersList', 'test-id-partners-list'  ];
 
-     if(!lineupClassNames.some(className => html.includes(`${className}`) || html.includes(`${className}`)))
-       logToCloudWatch(`no lineup found in ${html}`, 'INFO');
-    
-     const $ = cheerio.load(html);
-     const isFound = lineupClassNames.some(className =>
-        $(`[class*="${className}"], [id*="${className}"]`).length > 0
-      );
-      
-     return isFound
+  const $ = cheerio.load(html);
+
+  // 🔍 Check via cheerio DOM
+  const foundInDOM = $('*').toArray().some(el => {
+    const classAttr = $(el).attr('class') || '';
+    const idAttr = $(el).attr('id') || '';
+    return lineupClassNames.some(name =>
+      classAttr.includes(name) || idAttr.includes(name)
+    );
+  });
+
+  // 🧪 Fallback check via raw HTML
+  const foundInRawHtml = lineupClassNames.some(name => html.includes(name));
+ 
+  // ✅ Return true if either found
+  return foundInDOM || foundInRawHtml;
  }
