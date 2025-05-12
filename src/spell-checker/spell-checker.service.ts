@@ -319,7 +319,7 @@ export class SpellCheckerService {
     try {    
       const state =   this.globalState.getAllState(); 
 
-      const result = await this.kidonClient.raw('SELECT campaign_id, COUNT(*) AS clicks FROM tracker_visitors WHERE device = "mobile" AND DATE(created_at) = CURDATE() - INTERVAL 1 DAY GROUP BY campaign_id HAVING COUNT(*) > 5' );
+      const result = await this.kidonClient.raw('SELECT campaign_id, domain_name, COUNT(*) AS clicks FROM tracker_visitors WHERE device = "mobile" AND DATE(created_at) = CURDATE() - INTERVAL 1 DAY GROUP BY campaign_id, domain_name HAVING COUNT(*) > 5' );
       
       if (!result?.[0]?.length) {
         logToCloudWatch('No campaign IDs found in the last 24 hours', "INFO", 'mobile and desktop traffic congruence validation');
@@ -351,16 +351,29 @@ export class SpellCheckerService {
      const desktopOnlyTraffick = /^(?!.*\([^)]*[MT\d][^)]*\)).*\(\s*D\s*\).*$/; // reject any parentheses that contain M, T or a digit, require a standalone "(D)" somewhere
      const incongruentTraffick = rows.filter(name=>desktopOnlyTraffick.test(name.campaign_name))
      logToCloudWatch(`incongruentTraffick: ${JSON.stringify(incongruentTraffick)}`, "INFO", 'mobile and desktop traffic congruence validation');
-     if (incongruentTraffick && incongruentTraffick.length > 0) {
-      const formatted = incongruentTraffick.map(c =>
-        `• *Campaign:* ${c.campaign_name}\n  *ID:* ${c.campaign_id}\n  *Device:* ${c.device}\n  *Date:* ${c.date?.value}\n  *Source:* ${c.media_source}\n  *Network:* ${c.network_type}\n`
+
+      // Deduplicate by campaign_id and campaign_name
+      const uniqueErrors = [];
+      const seen = new Set();
+      for (const c of incongruentTraffick) {
+        const key = `${c.campaign_id}||${c.campaign_name}`;
+        if (!seen.has(key)) {
+          seen.add(key);
+          uniqueErrors.push(c);
+        }
+      }
+
+
+     if (uniqueErrors.length > 0) {
+      const formatted = uniqueErrors.map(c =>
+        `• *Campaign:* ${c.campaign_name}\n  *Campaign ID:* ${c.campaign_id}\n  *Domain:* ${c.domain_name}\n  *Device:* ${c.device}\n  *Date:* ${c.date?.value}\n  *Source:* ${c.media_source}\n  *Network:* ${c.network_type}\n`
       ).join('\n');
       await KF.sendSlackAlert(`*Incongruent Traffick campaign names:*\n${formatted}`, slackChannels.PERSONAL, state.slackToken);
     } else {
       await KF.sendSlackAlert('No incongruent traffick found', slackChannels.PERSONAL, state.slackToken);
     }
-     return 'mobile and desktop traffic congruence validation finished';
 
+     return 'mobile and desktop traffic congruence validation finished';
      } catch (error) {
  
       logToCloudWatch(`❌ Error in mobileAndDesktopTrafficCongruenceValidation: ${error.message} |||||| ${JSON.stringify(error)}`, "ERROR", 'mobile and desktop traffic congruence validation');
