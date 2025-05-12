@@ -118,7 +118,9 @@ export class SpellCheckerService {
       );
       logToCloudWatch(`urlSet length: ${urlSet.size}`, 'INFO');
       let urlAndSlackChannel : {url: string, slackChannelId: string}[] = urlSet.size > 0 ? Array.from(urlSet).map((u)=>({url:u?.split(' - ')[0], slackChannelId:u?.split(' - ')[1]})) : [];
-      urlAndSlackChannel = urlAndSlackChannel.filter((u)=>u.url.includes(`${hostname}`))
+      if (hostname) {
+        urlAndSlackChannel = urlAndSlackChannel.filter((u) => u.url.includes(hostname));
+      }
       // ✅ Step 2: validate lineups (🔧 CHANGED to use processInBatches)
       const validationResults = await processInBatches( // 🔧 ADDED
         urlAndSlackChannel.map((urlAndSlack) => async () => { // 🔧 ADDED
