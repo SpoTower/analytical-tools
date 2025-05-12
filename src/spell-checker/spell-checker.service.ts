@@ -94,17 +94,17 @@ export class SpellCheckerService {
  
   async lineupValidation() {
     logToCloudWatch('entering lineupValidation');
-
+  
     try {
       let errors = []
-       
+      
       const state = this.globalState.getAllState(); if (!state) return 'No state found';
       let domainsToProcess = state.domains.filter((d: Domain) => d.googleAdsId);
       domainsToProcess = domainsToProcess.filter((d: Domain) =>  ![176,128,153].includes(d.id)  );
-       const allTokens = await Promise.all(state.companies.map(async (c) => ({ company: c.name, token: await KF.getGoogleAuthToken(c) })));
- 
+      const allTokens = await Promise.all(state.companies.map(async (c) => ({ company: c.name, token: await KF.getGoogleAuthToken(c) })));
+  
       const urlSet = new Set<string>();
-
+  
       // ✅ Step 1: fetch lineups
       await processInBatches(
           domainsToProcess.map((domain: Domain) => async () => {
@@ -117,71 +117,73 @@ export class SpellCheckerService {
           30
       );
       logToCloudWatch(`urlSet length: ${urlSet.size}`, 'INFO');
-     let urlAndSlackChannel : {url: string, slackChannelId: string}[] = urlSet.size > 0 ? Array.from(urlSet).map((u)=>({url:u?.split(' - ')[0], slackChannelId:u?.split(' - ')[1]})) : [];
+      let urlAndSlackChannel : {url: string, slackChannelId: string}[] = urlSet.size > 0 ? Array.from(urlSet).map((u)=>({url:u?.split(' - ')[0], slackChannelId:u?.split(' - ')[1]})) : [];
   
-      // ✅ Step 2: validate lineups
-      for (let urlAndSlack of urlAndSlackChannel) {
-        let axiosRes, pupeteerRes, durationMs;
-
-        try {
-          logToCloudWatch(`checking ${urlAndSlack.url}  `, 'INFO');
-
-          const startTime = Date.now();
-          axiosRes = await axios.get(urlAndSlack.url, { timeout: 10000 });
-          durationMs = Date.now() - startTime;
-        
-          const browser = await puppeteer.launch({headless: true,
-            executablePath: '/opt/chrome/chrome-linux64/chrome', // in local env we dont need it, when installing chrome it initially installed into temporary cache folder and we copy it to stable folder
-          });
- 
-          const page = await browser.newPage();
-          await page.goto(urlAndSlack.url, { waitUntil: 'networkidle2', timeout: 60000 });
-
-          await page.waitForSelector(
-            '[class*="partnersArea_main-partner-list"], [class*="ConditionalPartnersList"], [class*="homePage_partners-list-section"], [class*="articlesSection_container"], [class*="partnerNode"], [id*="test-id-partners-list"]',
-            { timeout: 5000 }
-          ).catch(() => {});
+      // ✅ Step 2: validate lineups (🔧 CHANGED to use processInBatches)
+      const validationResults = await processInBatches( // 🔧 ADDED
+        urlAndSlackChannel.map((urlAndSlack) => async () => { // 🔧 ADDED
+          let axiosRes, pupeteerRes, durationMs; // 🔧 ADDED
+  
+          try { // 🔧 ADDED
+            logToCloudWatch(`checking ${urlAndSlack.url}  `, 'INFO');
+  
+            const startTime = Date.now();
+            axiosRes = await axios.get(urlAndSlack.url, { timeout: 10000 });
+            durationMs = Date.now() - startTime;
           
-
-          pupeteerRes = await page.content();
-          await browser.close();
-
-         
-        } catch (err) {
-          logToCloudWatch(`Error in lineupValidation: ${err}`, 'ERROR');
-          if(err.name === 'AxiosError'){
-            errors.push({url:urlAndSlack.url, slackChannelId:urlAndSlack.slackChannelId, status: err.status, reason: 'response status not success (not 200)'});
-            continue;
-          } else {
-            errors.push({url:urlAndSlack.url, slackChannelId:urlAndSlack.slackChannelId, status: err.status, reason: `${JSON.stringify(err)}`});
-
+            const browser = await puppeteer.launch({
+              headless: true,
+              executablePath: '/opt/chrome/chrome-linux64/chrome',
+              protocolTimeout: 60000, // 🔧 ADDED
+            });
+  
+            const page = await browser.newPage();
+            await page.goto(urlAndSlack.url, { waitUntil: 'networkidle2', timeout: 60000 });
+  
+            await page.waitForSelector(
+              '[class*="partnersArea_main-partner-list"], [class*="ConditionalPartnersList"], [class*="homePage_partners-list-section"], [class*="articlesSection_container"], [class*="partnerNode"], [id*="test-id-partners-list"]',
+              { timeout: 5000 }
+            ).catch(() => {});
+            
+            pupeteerRes = await page.content();
+            await browser.close();
+  
+          } catch (err) {
+            logToCloudWatch(`Error in lineupValidation: ${err}`, 'ERROR');
+            if(err.name === 'AxiosError'){
+              return {url:urlAndSlack.url, slackChannelId:urlAndSlack.slackChannelId,status: err.status,reason: 'response status not success (not 200)' }; 
+            } else {
+              return { url:urlAndSlack.url,slackChannelId:urlAndSlack.slackChannelId, status: err.status,reason: `${JSON.stringify(err)}`};  }
           }
-        }
-        
-        if(durationMs > 10000) {
-          errors.push({url:urlAndSlack.url, slackChannelId:urlAndSlack.slackChannelId, status: axiosRes.status, reason: 'timeout'});
-        }else if(!checkIfLineupExists(pupeteerRes)){
-          errors.push({url:urlAndSlack.url, slackChannelId:urlAndSlack.slackChannelId, status: '-', reason: 'no lineup found'});
-        }
-       }
-
-       if(errors.length > 0){
-        for(let error of errors){
+  
+          if(durationMs > 10000) {
+            return { url:urlAndSlack.url, slackChannelId:urlAndSlack.slackChannelId,status: axiosRes.status,  reason: 'timeout'};
+          }else if(!checkIfLineupExists(pupeteerRes)){
+            return {url:urlAndSlack.url,slackChannelId:urlAndSlack.slackChannelId,status: '-',reason: 'no lineup found'}; 
+          }
+          return null; 
+        }),
+        3 
+      ); 
+  
+      const filteredErrors = validationResults.filter(Boolean); // 🔧 ADDED
+  
+      if(filteredErrors.length > 0){
+        for(let error of filteredErrors){
           logToCloudWatch(`Lineup Validation Errors: ${error.url}, status: ${error.status}, reason: ${error.reason}`,  'ERROR');
           await KF.sendSlackAlert(`Lineup Validation Errors: ${error.url}, status: ${error.status}, reason: ${error.reason}`,  slackChannels.PERSONAL, state.slackToken); 
         }
-       }else{
+      }else{
         logToCloudWatch(`no lineup errors found`);
         await KF.sendSlackAlert(`no lineup errors found`,  slackChannels.PERSONAL, state.slackToken); 
-       }
-
+      }
+  
     } catch (e) {
       logToCloudWatch(`Error during lineupValidation: ${e}`, 'ERROR');
       return `Error during lineupValidation ${JSON.stringify(e)}`;
-
     }
   }
-
+  
 
   async findAndFixWebsitesGrammaticalErrors(domainId?: number, batchSize?: number) {
     const state = this.globalState.getAllState();
