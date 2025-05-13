@@ -1,7 +1,7 @@
 import { Injectable,Logger,Inject,HttpException, BadRequestException, InternalServerErrorException } from '@nestjs/common';
 import { CreateSpellCheckerDto } from './dto/create-spell-checker.dto';
 import { UpdateSpellCheckerDto } from './dto/update-spell-checker.dto';
-import { fetchGoogleAds,fetchLineups,filterOutTextlessAds,prepareAdsForErrorChecking,fetchWebsitesInnerHtmlAndFindErrors, extractNonCapitalLetterWords, formatGoogleAdsErrors, sendGoogleAdsErrorReports, checkIfLineupExists } from './utils';
+import { fetchGoogleAds,fetchLineups,filterOutTextlessAds,prepareAdsForErrorChecking,fetchWebsitesInnerHtmlAndFindErrors, extractNonCapitalLetterWords, formatGoogleAdsErrors, sendGoogleAdsErrorReports, checkIfLineupExists, processLineupResults } from './utils';
 import { GlobalStateService } from 'src/globalState/global-state.service';
 const logger = new Logger('analytical-tools.spellchecker');
 import { logToCloudWatch } from 'src/logger'; 
@@ -106,22 +106,25 @@ export class SpellCheckerService {
       const urlSet = new Set<string>();
   
       // ✅ Step 1: fetch lineups
-      await processInBatches(
+      const rawLineupResults = await processInBatches(
           domainsToProcess.map((domain: Domain) => async () => {
               try {
-                  await fetchLineups(domain, state.companies, allTokens, googleAdsLandingPageQuery, urlSet);
+                  return await fetchLineups(domain, state.companies, allTokens, googleAdsLandingPageQuery);
               } catch (error) {
                   logToCloudWatch(`❌ Error fetching Google Ads for domain ${domain.id}: ${error.message}`, "ERROR");
+                  return { domain, results: [] };
               }
           }),
           30
       );
-      logToCloudWatch(`urlSet length: ${urlSet.size}`, 'INFO');
-      let urlAndSlackChannel : {url: string, slackChannelId: string}[] = urlSet.size > 0 ? Array.from(urlSet).map((u)=>({url:u?.split(' - ')[0], slackChannelId:u?.split(' - ')[1]})) : [];
+      
+      let urlAndSlackChannel = processLineupResults(rawLineupResults);
+      logToCloudWatch(`Found ${urlAndSlackChannel.length} lineups`, 'INFO');
+      
       if (hostname) {
-        urlAndSlackChannel = urlAndSlackChannel.filter((u) => u.url.includes(hostname));
+          urlAndSlackChannel = urlAndSlackChannel.filter((u) => u.url.includes(hostname));
       }
-      urlAndSlackChannel = urlAndSlackChannel.filter((u)=>!u.url.includes('topsportbetting'))
+ 
       // ✅ Step 2: validate lineups (🔧 CHANGED to use processInBatches)
       const validationResults = await processInBatches( // 🔧 ADDED
         urlAndSlackChannel.map((urlAndSlack) => async () => { // 🔧 ADDED
@@ -136,7 +139,7 @@ export class SpellCheckerService {
           
             const browser = await puppeteer.launch({
               headless: true,
-              executablePath: '/opt/chrome/chrome-linux64/chrome',
+         //     executablePath: '/opt/chrome/chrome-linux64/chrome',
               protocolTimeout: 60000, // 🔧 ADDED
             });
   
@@ -154,15 +157,16 @@ export class SpellCheckerService {
           } catch (err) {
             logToCloudWatch(`Error in lineupValidation: ${err}`, 'ERROR');
             if(err.name === 'AxiosError'){
-              return {url:urlAndSlack.url, slackChannelId:urlAndSlack.slackChannelId,status: err.status,reason: 'response status not success (not 200)' }; 
+              return { url: urlAndSlack.url, slackChannelId: urlAndSlack.slackChannelId, campaignName: urlAndSlack.campaignName, status: err.status, reason: 'response status not success (not 200)' }; 
             } else {
-              return { url:urlAndSlack.url,slackChannelId:urlAndSlack.slackChannelId, status: err.status,reason: `${JSON.stringify(err)}`};  }
+              return { url: urlAndSlack.url, slackChannelId: urlAndSlack.slackChannelId, campaignName: urlAndSlack.campaignName, status: err.status, reason: `${JSON.stringify(err)}` };  
+            }
           }
   
           if(durationMs > 10000) {
-            return { url:urlAndSlack.url, slackChannelId:urlAndSlack.slackChannelId,status: axiosRes.status,  reason: 'timeout'};
+            return { url: urlAndSlack.url, slackChannelId: urlAndSlack.slackChannelId, campaignName: urlAndSlack.campaignName, status: axiosRes.status, reason: 'timeout' };
           }else if(!checkIfLineupExists(pupeteerRes)){
-            return {url:urlAndSlack.url,slackChannelId:urlAndSlack.slackChannelId,status: '-',reason: 'no lineup found'}; 
+            return { url: urlAndSlack.url, slackChannelId: urlAndSlack.slackChannelId, campaignName: urlAndSlack.campaignName, status: '-', reason: 'no lineup found' }; 
           }
           return null; 
         }),
@@ -218,12 +222,13 @@ export class SpellCheckerService {
 
       if(doubleFailed.length > 0){
         for(let error of filteredErrors){
-          logToCloudWatch(`Lineup Validation Errors: ${error.url}, status: ${error.status}, reason: ${error.reason}`,  'ERROR');
-          await KF.sendSlackAlert(`Lineup Validation Errors: ${error.url}, status: ${error.status}, reason: ${error.reason}`,  slackChannels.CONTENT, state.slackToken); 
+          const errorMessage = [  '*Lineup Validation Error:*',  `*URL:* ${error.url}`,`*Campaign:* ${error.campaignName}`,`*Status:* ${error.status}`,`*Reason:* ${error.reason}` ].join('\n');
+          logToCloudWatch(`Lineup Validation Errors: ${errorMessage}`, 'ERROR');
+          await KF.sendSlackAlert(errorMessage, slackChannels.PERSONAL, state.slackToken); 
         }
       }else{
         logToCloudWatch(`no lineup errors found`);
-        await KF.sendSlackAlert(`no lineup errors found`,  slackChannels.CONTENT, state.slackToken); 
+        await KF.sendSlackAlert(`no lineup errors found`,  slackChannels.PERSONAL, state.slackToken); 
       }
   
     } catch (e) {
