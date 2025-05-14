@@ -42,7 +42,7 @@ export class GoogleService {
    const token = allTokens.find((t) => t.company === company.name)?.token
    const results = [];
 
-   for (const action of conversionActions) {
+   for (const action of conversionActions ) {
     const operations = createObcConfigParams([{ name: action['Conversions Name Action'], category: action['Conversion Category'], attributionModel: action['Attribution'],countingType: action['Type']  },]); //Attribution
       
     logToCloudWatch(`uploading to google: ${operations.map((op)=>JSON.stringify(op))}, length: ${operations.length}`,  'INFO', 'UPLOAD_CONVERSIONS');
@@ -60,9 +60,10 @@ export class GoogleService {
       logToCloudWatch(error.response?.data?.error?.message ||   error.response?.data?.error?.details?.[0]?.errors?.[0]?.message || error.response?.data?.error?.message)
       if (error.response?.data?.error?.message) {
         const errorMessage = error.response?.data?.error?.details?.[0]?.errors?.[0]?.message;
-        if(errorMessage)     
-            throw new Error(`Error for action "${action['Conversions Name Action']}": ${errorMessage}. remove the duplicate name from the csv file and try again`)
-        else
+        if(errorMessage && errorMessage == 'The enum value is not permitted.'){
+          throw new Error(`Error for action "${action['Conversions Name Action']}": ${errorMessage}. \n Reason: The reason may be incongruence between the conversion category and the conversion type or the conversion attribution.`)
+        }
+          else
          throw new Error(error.response?.data?.error?.message)
        }
     }
