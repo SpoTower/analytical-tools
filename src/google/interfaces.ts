@@ -7,7 +7,7 @@ export interface googleAdsSourceData {
     industryKeyword: string[]   // corresponds to textarea 1
     paretoKeywords: string[]    // corresponds to textarea 2
     genericKeywords: string[]   // corresponds to textarea 3
-    campaignCount: string       // number input from frontend
+    hostname: string       // number input from frontend
   }
 
   export interface CampaignTemplate {
@@ -145,4 +145,10 @@ export interface googleAdsSourceData {
     name: string;
     words: string[];
   }
-  
+  export interface ConstantHeadersAndDescriptions {
+    /** Array of headlines to use in ads */
+    headlines: string[];
+    
+    /** Array of descriptions to use in ads */
+    descriptions: string[];
+  }

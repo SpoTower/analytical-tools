@@ -1,4 +1,5 @@
-import { Controller, Get,Put, Post, Body, Patch, Param, Delete,Query} from '@nestjs/common';
+ import { Controller, Get, Post, Body, Patch, Param, Delete, Put,Query } from '@nestjs/common';
+ 
 import { GptService } from './gpt.service';
 import { CreateGptDto } from './dto/create-gpt.dto';
 import { UpdateGptDto } from './dto/update-gpt.dto';
@@ -22,7 +23,8 @@ export class GptController {
   }
 
   @Put()
-  async updatePrompt(@Body() updatePromptDto: UpdatePromptDto) {
+  async updatePrompt(@Body() updatePromptDto: any) {
+
     return this.gptService.updateConfigurationPrompt(updatePromptDto[0]);
   }
   @Get(':id')

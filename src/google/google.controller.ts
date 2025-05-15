@@ -35,6 +35,7 @@ export class GoogleController {
     logger.log(' Entering generateAds endpoint. ');
     try {
        const creationResult = await this.googleService.generateAds(sourceData);
+       return { status: 'ok', data: creationResult };
     } catch (error) {
       return { status: 'error', count: '', message: error.message };
     }
