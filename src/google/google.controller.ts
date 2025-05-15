@@ -25,6 +25,7 @@ export class GoogleController {
       return { status: 'error', count: '', message: error.message };
     }
   }
+  //
  
   //generating ads using gpt
   @Post('generateAds')
