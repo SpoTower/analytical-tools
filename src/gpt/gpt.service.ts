@@ -1,4 +1,4 @@
-import { Injectable, Inject } from '@nestjs/common';
+import { Injectable, Inject  } from '@nestjs/common';
 import { CreateGptDto } from './dto/create-gpt.dto';
 import { Knex } from 'knex';
 
@@ -9,7 +9,7 @@ import { logToCloudWatch } from 'src/logger';
 import { adsForGpt } from 'src/spell-checker/interfaces';
 import { ANALYTICS_CONNECTION  } from 'src/knex/knex.module';
 import { CONFIGURATION } from 'src/knex/tableNames';
-import { UpdatePromptDto } from './dto/update-prompts.dto';
+//import { UpdatePromptDto } from './dto/update-prompts.dto';
 
 
 @Injectable()
@@ -22,17 +22,18 @@ export class GptService {
   create(createGptDto: CreateGptDto) {
     return 'This action adds a new gpt';
   }
-
   async findAll() {
     try {
-      let a = await this.analyticsDb(CONFIGURATION).select('*');
-      return 'All configuration keys: ' + JSON.stringify(a.map(item => item.key));
+      const configs = await this.analyticsDb(CONFIGURATION).select('*');
+      return configs.map(item => ({ key: item.key, values: item.values }));
+
+ 
+     
     } catch (error) {
       logToCloudWatch(`Error in findAll: ${error}`);
       throw error;
     }
   }
-
 
   async findConfigurationByKeys(keys: string[]) {
     try {
@@ -44,7 +45,7 @@ export class GptService {
     }
   }
 
-  async updateConfigurationPrompt({ key, value }: UpdatePromptDto) {
+  async updateConfigurationPrompt({ key, value }: any) {
     try {
      let res =  await this.analyticsDb(CONFIGURATION).where('key', key).update({ values: value });
       const updated = await this.analyticsDb(CONFIGURATION).where('key', key).first();
