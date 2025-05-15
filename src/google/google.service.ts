@@ -103,7 +103,7 @@ async updateConversionNamesKidonTable(conversionActions?:any[],creationResult?:a
 
  
   async generateAds(sourceData:googleAdsSourceData){
-console.log('entering generateAds');
+logger.log('entering generateAds');
     const gptResponse = await this.gptService.askGpt01(process.env.GPT_KEY, addLevelSystemMessage, addLevelPromptBoxA);
     let constantheadersAndDescriptions = generateConstantHeadersAndDescriptions(gptResponse.choices[0].message.content, adsTemplateDefaults, sourceData.hostname);
    

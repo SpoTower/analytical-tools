@@ -238,6 +238,37 @@ export class SpellCheckerService {
   }
   
 
+
+  async googleBasedActiveUrls(hostname: string) {
+    const state = this.globalState.getAllState(); if (!state) return 'No state found';
+    let domainsToProcess = state.domains.filter((d: Domain) => d.googleAdsId);
+     const allTokens = await Promise.all(state.companies.map(async (c) => ({ company: c.name, token: await KF.getGoogleAuthToken(c) })));
+
+ 
+    // ✅ Step 1: fetch lineups
+    const rawLineupResults = await processInBatches(
+        domainsToProcess.map((domain: Domain) => async () => {
+            try {
+                return await fetchLineups(domain, state.companies, allTokens, googleAdsLandingPageQuery);
+            } catch (error) {
+                logToCloudWatch(`❌ Error fetching Google Ads for domain ${domain.id}: ${error.message}`, "ERROR");
+                return { domain, results: [] };
+            }
+        }),
+        30
+    );
+    let urlAndSlackChannel = processLineupResults(rawLineupResults);
+    const baseUrlSet = new Set<string>();
+    for (const obj of urlAndSlackChannel) {
+       const match = obj.url.match(/^(https:\/\/[^\/]+\.com\/)/);
+      if (match) {
+        baseUrlSet.add(match[1]);
+      }
+    }
+    return Array.from(baseUrlSet) ;
+   }
+  
+
   async findAndFixWebsitesGrammaticalErrors(domainId?: number, batchSize?: number) {
     const state = this.globalState.getAllState();
     const ignoredWords = await fetchIgnoreWords(this.kidonClient, '56');
@@ -281,6 +312,7 @@ export class SpellCheckerService {
     const googleKey = JSON.parse(res).GOOGLE_SERVICE_PRIVATE_KEY.replace(/\\n/g, '\n');
     const bq = await KF.connectToBQ(process.env.BQ_EMAIL_SERVICE, googleKey, process.env.BQ_PROJECT_NAME);
     const [job] = await bq.createQueryJob({ query: 'select domain_id,hostname,landing_page from `kidon3_STG.landing_page_performance` group by all', });
+    
     let [rows] = await job.getQueryResults();
 
     rows = rows.filter(r => r.domain_id !== 188); // test domain
