@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Body, Patch, Param, Delete } from '@nestjs/common';
+import { Controller, Get, Post, Body, Patch, Param, Delete, Put } from '@nestjs/common';
 import { GptService } from './gpt.service';
 import { CreateGptDto } from './dto/create-gpt.dto';
 import { UpdateGptDto } from './dto/update-gpt.dto';
@@ -17,6 +17,10 @@ export class GptController {
     return this.gptService.findAll();
   }
 
+  @Put()
+  async updatePrompt(@Body() updatePromptDto: any) {
+    return this.gptService.updateConfigurationPrompt(updatePromptDto[0]);
+  }
   @Get(':id')
   findOne(@Param('id') id: string) {
     return this.gptService.findOne(+id);

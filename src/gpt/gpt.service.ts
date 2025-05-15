@@ -1,18 +1,59 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Inject  } from '@nestjs/common';
 import { CreateGptDto } from './dto/create-gpt.dto';
+import { Knex } from 'knex';
+
 import { UpdateGptDto } from './dto/update-gpt.dto';
 const OpenAI = require('openai').OpenAI;
-import {fixingGrammErrorsPrompt2,locatingWebSitesErrors,locatingWebSitesErrors2} from '../spell-checker/consts';
+import { locatingWebSitesErrors} from '../spell-checker/consts';
 import { logToCloudWatch } from 'src/logger';
 import { adsForGpt } from 'src/spell-checker/interfaces';
+import { ANALYTICS_CONNECTION  } from 'src/knex/knex.module';
+import { CONFIGURATION } from 'src/knex/tableNames';
+//import { UpdatePromptDto } from './dto/update-prompts.dto';
+
+
 @Injectable()
 export class GptService {
+  constructor(
+    @Inject(ANALYTICS_CONNECTION) private readonly analyticsDb: Knex,
+  ) {}
+
+
   create(createGptDto: CreateGptDto) {
     return 'This action adds a new gpt';
   }
+  async findAll() {
+    try {
+      const configs = await this.analyticsDb(CONFIGURATION).select('*');
+      return configs.map(item => ({ key: item.key, values: item.values }));
 
-  findAll() {
-    return `This action returns allw gpt`;
+ 
+     
+    } catch (error) {
+      logToCloudWatch(`Error in findAll: ${error}`);
+      throw error;
+    }
+  }
+
+  async findConfigurationByKeys(keys: string[]) {
+    try {
+      const result = await this.analyticsDb(CONFIGURATION).select('*').whereIn('key', keys);
+      return result;
+    } catch (error) {
+      logToCloudWatch(`Error in findConfigurationByKeys: ${error}`);
+      throw error;
+    }
+  }
+
+  async updateConfigurationPrompt({ key, value }: any) {
+    try {
+     let res =  await this.analyticsDb(CONFIGURATION).where('key', key).update({ values: value });
+      const updated = await this.analyticsDb(CONFIGURATION).where('key', key).first();
+      return updated;
+    } catch (error) {
+      logToCloudWatch(`Error in updateConfigurationPrompt: ${error}`);
+      throw error;
+    }
   }
 
   async askGpt(gptKey:string, extractedAds: adsForGpt ) {
