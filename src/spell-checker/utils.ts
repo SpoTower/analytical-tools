@@ -21,7 +21,7 @@ import { log } from 'console';
  
 export async function fetchGoogleAds(domain: Domain, companies: Company[], tokens:any, query:string ) {
     logToCloudWatch(`Entering fetchGoogleAds, fetching google ads for domain ${domain.id}`);
-
+    console.log(companies.find((c)=>c.id == domain.companyId ).name);
     const date = getDateRange(1, 'YYYY-MM-DD');
     if(query.includes('<startDate>') && query.includes('<endDate>')) {
         query = query.replace('<startDate>', date.startDate).replace('<endDate>', date.endDate);
