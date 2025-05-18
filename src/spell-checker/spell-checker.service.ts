@@ -127,7 +127,7 @@ export class SpellCheckerService {
  
       // ✅ Step 2: validate lineups (sequential, not in batches)
       const validationResults = [];
-      for (const urlAndSlack of urlAndSlackChannel.slice(0, 3)) {
+      for (const urlAndSlack of urlAndSlackChannel) {
         let axiosRes, pupeteerRes, durationMs;
         try {
           logToCloudWatch(`checking ${urlAndSlack.url}  `, 'INFO');
