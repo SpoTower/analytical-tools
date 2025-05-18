@@ -136,7 +136,7 @@ export class SpellCheckerService {
           durationMs = Date.now() - startTime;
           const browser = await puppeteer.launch({
             headless: true,
-             executablePath: '/opt/chrome/chrome-linux64/chrome', // the location of chrome on the ec2
+             executablePath: '/usr/local/bin/chrome', // the location of chrome on the ec2
             protocolTimeout: 60000,
           });
           const page = await browser.newPage();
@@ -177,7 +177,7 @@ export class SpellCheckerService {
             try {
               const browser = await puppeteer.launch({
                 headless: true,
-                 executablePath: '/opt/chrome/chrome-linux64/chrome',
+                 executablePath: '/usr/local/bin/chrome', // the location of chrome on the ec2
                 protocolTimeout: 60000,
               });
               const page = await browser.newPage();
