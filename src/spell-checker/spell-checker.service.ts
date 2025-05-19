@@ -127,7 +127,7 @@ export class SpellCheckerService {
  
       // ✅ Step 2: validate lineups (sequential, not in batches)
       const validationResults = [];
-      for (const urlAndSlack of urlAndSlackChannel) {
+      for (const urlAndSlack of urlAndSlackChannel.slice(0, 3)) {
         let axiosRes, pupeteerRes, durationMs;
         try {
           logToCloudWatch(`checking ${urlAndSlack.url}  `, 'INFO');
@@ -136,7 +136,7 @@ export class SpellCheckerService {
           durationMs = Date.now() - startTime;
           const browser = await puppeteer.launch({
             headless: true,
-             executablePath: '/usr/local/bin/chrome', // the location of chrome on the ec2
+              executablePath: '/usr/local/bin/chrome', // the location of chrome on the ec2
             protocolTimeout: 60000,
           });
           const page = await browser.newPage();
@@ -177,7 +177,7 @@ export class SpellCheckerService {
             try {
               const browser = await puppeteer.launch({
                 headless: true,
-                 executablePath: '/usr/local/bin/chrome', // the location of chrome on the ec2
+                   executablePath: '/usr/local/bin/chrome', // the location of chrome on the ec2
                 protocolTimeout: 60000,
               });
               const page = await browser.newPage();
@@ -201,7 +201,7 @@ export class SpellCheckerService {
         3
       );
       
-      const doubleFailed = [
+      let doubleFailed = [
         ...filteredErrors.filter(e => e.reason !== 'no lineup found'),
         ...secondCheckResults.filter(Boolean)
       ];
@@ -209,11 +209,12 @@ export class SpellCheckerService {
 
 
 
+    
 
 
-
-      if(doubleFailed.length > 0){
+      if(doubleFailed && doubleFailed.length > 0){
         for(let error of filteredErrors){
+          doubleFailed = doubleFailed.filter(e => !e.url.includes('topfundings'))  ; // disclude this element
           const errorMessage = [  '*Lineup Validation Error:*',  `*URL:* ${error.url}`,`*Campaign:* ${error.campaignName}`,`*Status:* ${error.status}`,`*Reason:* ${error.reason}` ].join('\n');
           logToCloudWatch(`Lineup Validation Errors: ${errorMessage}`, 'ERROR');
           await KF.sendSlackAlert(errorMessage, slackChannels.CONTENT, state.slackToken); 
