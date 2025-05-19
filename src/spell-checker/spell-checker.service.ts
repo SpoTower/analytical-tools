@@ -100,7 +100,7 @@ export class SpellCheckerService {
       
       const state = this.globalState.getAllState(); if (!state) return 'No state found';
       let domainsToProcess = state.domains.filter((d: Domain) => d.googleAdsId);
-      domainsToProcess = domainsToProcess.filter((d: Domain) =>  ![176,128,153].includes(d.id)  );
+      domainsToProcess = domainsToProcess.filter((d: Domain) =>  ![20,176,128,153].includes(d.id)  );
       const allTokens = await Promise.all(state.companies.map(async (c) => ({ company: c.name, token: await KF.getGoogleAuthToken(c) })));
   
       const urlSet = new Set<string>();
@@ -214,14 +214,13 @@ export class SpellCheckerService {
 
       if(doubleFailed && doubleFailed.length > 0){
         for(let error of filteredErrors){
-          doubleFailed = doubleFailed.filter(e => !e.url.includes('topfundings'))  ; // disclude this element
-          const errorMessage = [  '*Lineup Validation Error:*',  `*URL:* ${error.url}`,`*Campaign:* ${error.campaignName}`,`*Status:* ${error.status}`,`*Reason:* ${error.reason}` ].join('\n');
+           const errorMessage = [  '*Lineup Validation Error:*',  `*URL:* ${error.url}`,`*Campaign:* ${error.campaignName}`,`*Status:* ${error.status}`,`*Reason:* ${error.reason}` ].join('\n');
           logToCloudWatch(`Lineup Validation Errors: ${errorMessage}`, 'ERROR');
-          await KF.sendSlackAlert(errorMessage, slackChannels.CONTENT, state.slackToken); 
+          await KF.sendSlackAlert(errorMessage, slackChannels.PERSONAL, state.slackToken); 
         }
       }else{
         logToCloudWatch(`No Lineup errors found`);
-        await KF.sendSlackAlert(`no lineup errors found`,  slackChannels.CONTENT, state.slackToken); 
+        await KF.sendSlackAlert(`no lineup errors found`,  slackChannels.PERSONAL, state.slackToken); 
       }
   
     } catch (e) {
