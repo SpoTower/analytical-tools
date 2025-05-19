@@ -489,72 +489,90 @@ export   function checkIfLineupExists(html: string): boolean {
 
  export async function getActiveBingUrls(state) {
     const results = [];
-    const bingDomains = state.domains.filter((d) => d.bingAdsId);
-  
+    const bingDomains = state.domains.filter((d)=>d.bingAdsId)
+
     for (const domain of bingDomains) {
-      const company = state.companies.find((c) => c.id === domain.companyId);
-      if (!company) {
-        console.warn(`No company found for domain ${domain.hostname}`);
-        continue;
-      }
-  
-      const accessToken = await KF.getBingAccessTokenFromRefreshToken(company);
-      const customAccountId = domain.bingAdsId;
-      const customerId = company.bingAccountId;
-      const developerToken = company.bingDeveloperToken;
-  
-      if (!customAccountId || !customerId || !developerToken || !accessToken) {
-        console.warn(`Missing Bing credentials for domain ${domain.hostname}`);
-        continue;
-      }
-  
-      const sharedParams = {
-        accessToken,
-        customAccountId,
-        customerId,
-        developerToken,
-      };
-  
-      const allUrls = [];
-  
-      try {
-        const campaigns = await getBingCampaigns(sharedParams);
-  
-        for (const campaign of campaigns) {
-          const adGroups = await getBingAdGroups({
-            ...sharedParams,
-            campaignId: campaign.Id,
-          });
-  
-          // Use processInBatches to fetch ads for ad groups in parallel batches
-          const adGroupTasks = adGroups.map((adGroup) => async () => {
-            return await getBingAds({
-              ...sharedParams,
-              adGroupId: adGroup.Id,
-            });
-          });
-          const adGroupResults = await processInBatches(adGroupTasks, 20); // batch size 5, adjust as needed
-          adGroupResults.forEach((urls) => {
-            allUrls.push(...urls);
-          });
+        // Find the company for this domain
+        const company = state.companies.find(c => c.id === domain.companyId);
+        if (!company) {
+            console.warn(`No company found for domain ${domain.hostname}`);
+            continue;
         }
-  
-        const uniqueUrls = [...new Set(allUrls)];
-        uniqueUrls.forEach((url) => {
-          results.push({
-            url,
-            slackChannelId: domain.slackChannelId,
-            campaignName: domain.hostname,
-          });
-        });
-      } catch (err) {
-        console.error(`Error while processing domain ${domain.hostname}:`, err.message);
-      }
+
+        // Get the Bing access token for this company
+        const accessToken = await KF.getBingAccessTokenFromRefreshToken(company);
+
+        // Get Bing account/customer IDs from the domain or company object
+        const customAccountId = domain.bingAdsId 
+        const customerId = company.bingAccountId
+        const developerToken = company.bingDeveloperToken
+
+        // Skip if any required Bing info is missing
+        if (!customAccountId || !customerId || !developerToken || !accessToken) {
+            console.warn(`Missing Bing credentials for domain ${domain.hostname}`);
+            continue;
+        }
+
+        const soap = `
+  <s:Envelope xmlns:i="http://www.w3.org/2001/XMLSchema-instance" xmlns:s="http://schemas.xmlsoap.org/soap/envelope/">
+  <s:Header xmlns="https://bingads.microsoft.com/Reporting/v13">
+    <AuthenticationToken>${accessToken}</AuthenticationToken>
+    <CustomerAccountId>${customAccountId}</CustomerAccountId>
+    <CustomerId>${customerId}</CustomerId>
+    <DeveloperToken>${developerToken}</DeveloperToken>
+  </s:Header>
+  <s:Body>
+    <SubmitGenerateReportRequest xmlns="https://bingads.microsoft.com/Reporting/v13">
+      <ReportRequest xmlns:i="http://www.w3.org/2001/XMLSchema-instance" i:type="AdPerformanceReportRequest">
+        <Format>Csv</Format>
+        <ReportName>ActiveUrlsReport</ReportName>
+        <ReturnOnlyCompleteData>true</ReturnOnlyCompleteData>
+        <Aggregation>Daily</Aggregation>
+        <Columns>
+          <string>TimePeriod</string>
+          <string>CampaignName</string>
+          <string>AdGroupName</string>
+          <string>AdId</string>
+          <string>FinalURL</string>
+        </Columns>
+        <Scope>
+          <AccountIds xmlns:a="http://schemas.microsoft.com/2003/10/Serialization/Arrays">
+            <a:long>${customAccountId}</a:long>
+          </AccountIds>
+          <Scope>Account</Scope>
+        </Scope>
+        <Time>
+          <PredefinedTime>LastSevenDays</PredefinedTime>
+        </Time>
+      </ReportRequest>
+    </SubmitGenerateReportRequest>
+  </s:Body>
+</s:Envelope>
+      `
+        
+          const response = await axios.post(
+            'https://reporting.api.bingads.microsoft.com/Api/Advertiser/Reporting/v13/ReportingService.svc',
+            soap,
+            {
+              headers: {
+                'Content-Type': 'text/xml; charset=utf-8',
+                'SOAPAction': 'SubmitGenerateReport',
+              },
+              timeout: 60000,
+            }
+          );
+        
+          const parser = new XMLParser();
+          const json = parser.parse(response.data);
+          results.push(json?.['s:Envelope']?.['s:Body']?.SubmitGenerateReportResponse?.ReportRequestId) 
+        
+
+    
     }
-  
+
     return results;
-  }
-  
+}
+
 
 
  export async function getActiveGooglUrls(state: any){
