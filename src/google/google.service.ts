@@ -62,7 +62,7 @@ export class GoogleService {
       if (error.response?.data?.error?.message) {
         const errorMessage = error.response?.data?.error?.details?.[0]?.errors?.[0]?.message;
         if(errorMessage && errorMessage == 'The enum value is not permitted.'){
-          throw new Error(`Error for action "${action['Conversions Name Action']}": ${errorMessage}. \n Reason: The reason may be incongruence between the conversion category and the conversion type or the conversion attribution.`)
+          throw new Error(`Error for action "${action['Conversions Name Action']}"  -  Probably invalid category or invalid combination of parameters`)
         }
           else
          throw new Error(error.response?.data?.error?.message)
