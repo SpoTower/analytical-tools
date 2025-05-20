@@ -9,13 +9,14 @@ import { GlobalStateService } from 'src/globalState/global-state.service';
  import { Knex } from 'knex';
  import {   KIDON_CONNECTION } from 'src/knex/knex.module';
  const logger = new Logger('google-service');
-import {googleAdsSourceData,CampaignWordsChunk} from './interfaces'
+import {googleAdsSourceData,CampaignWordsChunk,ConstantHeadersAndDescriptions} from './interfaces'
 import { GptService } from 'src/gpt/gpt.service';
 import {campaignLevelSystemMessage,campaignLevelPrompt,exampleResponseCampaigns,addGroupLevelSystemMessage,addGroupLevelPrompt,addLevelSystemMessage,addLevelPrompt} from './prompts'
 import {generateRowsUsinObjectTemplate,extractHeadlinesAndDescriptions,exportToCsv,generateFullAddObject,extractCampaignChunks,parseAdGroupBlocks,generateDualCampaignRows} from './utils/generateAds'
 import { keywordTemplateDefaults,adsTemplateDefaults,adGroupTemplateDefaults,campaignTemplateDefaults } from './adsConsts';
 import { logToCloudWatch }  from 'src/logger';
-
+import {addLevelPrompt as addLevelPromptBoxA} from './prompts'
+import {harvestSpecificContentFromFirstAd,generateConstantHeadersAndDescriptions} from './utils/generateAds'
 @Injectable()
 export class GoogleService {
 
@@ -42,7 +43,7 @@ export class GoogleService {
    const token = allTokens.find((t) => t.company === company.name)?.token
    const results = [];
 
-   for (const action of conversionActions) {
+   for (const action of conversionActions ) {
     const operations = createObcConfigParams([{ name: action['Conversions Name Action'], category: action['Conversion Category'], attributionModel: action['Attribution'],countingType: action['Type']  },]); //Attribution
       
     logToCloudWatch(`uploading to google: ${operations.map((op)=>JSON.stringify(op))}, length: ${operations.length}`,  'INFO', 'UPLOAD_CONVERSIONS');
@@ -60,9 +61,10 @@ export class GoogleService {
       logToCloudWatch(error.response?.data?.error?.message ||   error.response?.data?.error?.details?.[0]?.errors?.[0]?.message || error.response?.data?.error?.message)
       if (error.response?.data?.error?.message) {
         const errorMessage = error.response?.data?.error?.details?.[0]?.errors?.[0]?.message;
-        if(errorMessage)     
-            throw new Error(`Error for action "${action['Conversions Name Action']}": ${errorMessage}. remove the duplicate name from the csv file and try again`)
-        else
+        if(errorMessage && errorMessage == 'The enum value is not permitted.'){
+          throw new Error(`Error for action "${action['Conversions Name Action']}"  -  Probably invalid category or invalid combination of parameters`)
+        }
+          else
          throw new Error(error.response?.data?.error?.message)
        }
     }
@@ -95,13 +97,22 @@ async updateConversionNamesKidonTable(conversionActions?:any[],creationResult?:a
   }
 }
     
+
+
+
+
  
   async generateAds(sourceData:googleAdsSourceData){
+logger.log('entering generateAds');
+    const gptResponse = await this.gptService.askGpt01(process.env.GPT_KEY, addLevelSystemMessage, addLevelPromptBoxA);
+    let constantheadersAndDescriptions = generateConstantHeadersAndDescriptions(gptResponse.choices[0].message.content, adsTemplateDefaults, sourceData.hostname);
+   
+
     try {
           const [boxA, boxB, boxC] = await Promise.all([
-      this.processBoxA(sourceData),
-      this.processBoxB(sourceData),
-      this.processBoxC(sourceData)
+      this.processBoxA(sourceData, constantheadersAndDescriptions),
+      this.processBoxB(sourceData, constantheadersAndDescriptions),
+      this.processBoxC(sourceData, constantheadersAndDescriptions)
     ]);
   
     const campaigns1 = [...boxA.campaigns, ...boxB.campaigns, ...boxC.campaigns];
@@ -109,22 +120,22 @@ async updateConversionNamesKidonTable(conversionActions?:any[],creationResult?:a
     const keywords1 = [...boxA.keywords, ...boxB.keywords, ...boxC.keywords];
     const ads1 = [...boxA.ads, ...boxB.ads, ...boxC.ads];
   
-    console.log('ads:');
+  
  
-    await exportToCsv(campaigns1, 'campaigns.csv');
-    await exportToCsv(adGroups1, 'ad-groups.csv');
-    await exportToCsv(keywords1, 'keywords.csv');
-    await exportToCsv(ads1, 'ads.csv');
-
-    } catch (error) {
-      console.log(error)
+   const campaignsCsv = await exportToCsv(campaigns1, 'campaigns.csv');
+    const adGroupsCsv = await exportToCsv(adGroups1, 'ad-groups.csv');
+    const keywordsCsv = await exportToCsv(keywords1, 'keywords.csv');
+    const adsCsv = await exportToCsv(ads1, 'ads.csv');
+logToCloudWatch('finishing generateAds', 'INFO', 'GENERATE_ADS');
+    return {
+      campaignsCsv,
+      adGroupsCsv,
+      keywordsCsv,
+      adsCsv
     }
-
-
-
-
-
- 
+    } catch (error) {
+      logToCloudWatch(error.message, 'ERROR', 'GENERATE_ADS');
+    }
    }
 
 
@@ -149,7 +160,7 @@ async updateConversionNamesKidonTable(conversionActions?:any[],creationResult?:a
     return `This action removes a #${id} google`;
   }
 
-  async processBoxA(sourceData: googleAdsSourceData) {
+  async processBoxA(sourceData: googleAdsSourceData, constantheadersAndDescriptions: ConstantHeadersAndDescriptions) {
     const campaigns = [];
     const adGroups = [];
     const ads = [];
@@ -172,7 +183,7 @@ async updateConversionNamesKidonTable(conversionActions?:any[],creationResult?:a
   
     const fullPrompt = `${addLevelPrompt}. the word that should be used for this task is ${JSON.stringify(sourceData.industryKeyword[0])}`;
     const gptResponse = await this.gptService.askGpt01(process.env.GPT_KEY, addLevelSystemMessage, fullPrompt);
-    const [ad1, ad2] = extractHeadlinesAndDescriptions(gptResponse.choices[0].message.content, adsTemplateDefaults);
+    const [ad1, ad2] = extractHeadlinesAndDescriptions(gptResponse.choices[0].message.content, adsTemplateDefaults, sourceData.hostname, constantheadersAndDescriptions );
     ads.push(...generateFullAddObject([ad1, ad2], sourceData));
   
     keywords.push(
@@ -187,7 +198,8 @@ async updateConversionNamesKidonTable(conversionActions?:any[],creationResult?:a
         Keyword: [sourceData.industryKeyword[0]]
       })[0]
     );
-  console.log('finishing biox a');
+  console.log('finishing box a');
+  logToCloudWatch('finishing box a', 'INFO', 'GENERATE_ADS');
     //return { campaigns, adGroups, ads, keywords };
     return {
       campaigns: campaigns.map(c => ({ ...c, box: 'a' })),
@@ -196,7 +208,7 @@ async updateConversionNamesKidonTable(conversionActions?:any[],creationResult?:a
       keywords: keywords.map(k => ({ ...k, box: 'a' }))
     };
   }
-  async processBoxB(sourceData: googleAdsSourceData) {
+  async processBoxB(sourceData: googleAdsSourceData, constantheadersAndDescriptions: ConstantHeadersAndDescriptions) {
     const campaigns = [];
     const adGroups = [];
     const ads = [];
@@ -221,7 +233,7 @@ async updateConversionNamesKidonTable(conversionActions?:any[],creationResult?:a
   
       const fullPrompt = `${addLevelPrompt}. the word that should be used for this task is ${JSON.stringify(word)}`;
       const gptResponse = await this.gptService.askGpt01(process.env.GPT_KEY, addLevelSystemMessage, fullPrompt);
-      const [ad1, ad2] = extractHeadlinesAndDescriptions(gptResponse.choices[0].message.content, adsTemplateDefaults);
+      const [ad1, ad2] = extractHeadlinesAndDescriptions(gptResponse.choices[0].message.content, adsTemplateDefaults, sourceData.hostname, constantheadersAndDescriptions);
       ads.push(...generateFullAddObject([ad1, ad2], { industryKeyword: [word] }));
   
       keywords.push(
@@ -237,7 +249,8 @@ async updateConversionNamesKidonTable(conversionActions?:any[],creationResult?:a
         })[0]
       );
     }
-    console.log('finishing biox b');
+    console.log('finishing box b');
+    logToCloudWatch('finishing box b', 'INFO', 'GENERATE_ADS');
 
    // return { campaigns, adGroups, ads, keywords };
    return {
@@ -247,7 +260,14 @@ async updateConversionNamesKidonTable(conversionActions?:any[],creationResult?:a
     keywords: keywords.map(k => ({ ...k, box: 'b' }))
   };
   }
-  async processBoxC(sourceData: googleAdsSourceData) {
+
+
+
+
+  async processBoxC(sourceData: googleAdsSourceData, constantheadersAndDescriptions: ConstantHeadersAndDescriptions) {
+
+    try {
+         
     const campaigns: any[] = [];
     const adGroups: any[] = [];
     const keywords: any[] = [];
@@ -272,13 +292,16 @@ async updateConversionNamesKidonTable(conversionActions?:any[],creationResult?:a
     });
   
     // Step 3: Generate campaign rows
-    for (let campaign of campaignNamesAndWords) {
-      const [row1, row2] = generateDualCampaignRows(campaign.name, campaignTemplateDefaults);
+    for (let campaign of campaignNamesAndWords ) { // 6
+
+       const [row1, row2] = generateDualCampaignRows(campaign.name, campaignTemplateDefaults);
       campaigns.push(row1, row2);
     }
    
     // Step 4: For each campaign, get ad group and ad level data
-    for (const wordsSet of campaignNamesAndWords) {
+    for (const wordsSet of campaignNamesAndWords  ) { //6
+      logToCloudWatch(`generating ad group rows for ${wordsSet.name} box c`, 'INFO', 'GENERATE_ADS');
+      await new Promise(resolve => setTimeout(resolve, 1000));
       const keywordList = wordsSet.words.map(w => `"${w}"`).join(', ');
       const fullPrompt = `${addGroupLevelPrompt}\n\nHere is the list of keywords to use:\n${keywordList}`;
       const gptResponse = await this.gptService.askGpt01(process.env.GPT_KEY, addGroupLevelSystemMessage, fullPrompt);
@@ -289,9 +312,10 @@ async updateConversionNamesKidonTable(conversionActions?:any[],creationResult?:a
   
       const adLevelResults = await Promise.all(
         addGroupsWithWords.map(async ({ adGroup, keywords: kws }) => {
+          logToCloudWatch(`generating ad level rows for ${adGroup} inner promise all  box c`, 'INFO', 'GENERATE_ADS');
           const fullPrompt = `${addLevelPrompt}. the words that should be used for this task is ${JSON.stringify(kws)}`;
           const gptResponse = await this.gptService.askGpt01(process.env.GPT_KEY, addLevelSystemMessage, fullPrompt);
-          const [ad1, ad2] = extractHeadlinesAndDescriptions(gptResponse.choices[0].message.content, adsTemplateDefaults);
+          const [ad1, ad2] = extractHeadlinesAndDescriptions(gptResponse.choices[0].message.content, adsTemplateDefaults, sourceData.hostname, constantheadersAndDescriptions);
           const preparedAds = generateFullAddObject([ad1, ad2], { industryKeyword: [wordsSet.name] });
   
           const adGroupRows = [
@@ -303,8 +327,7 @@ async updateConversionNamesKidonTable(conversionActions?:any[],creationResult?:a
             generateRowsUsinObjectTemplate(keywordTemplateDefaults, 1, { Campaign: [campaignM], 'Ad Group': [adGroup], Keyword: [keyword] })[0],
             generateRowsUsinObjectTemplate(keywordTemplateDefaults, 1, { Campaign: [campaignD], 'Ad Group': [adGroup], Keyword: [keyword] })[0]
           ]);
-  console.log(`finishing ${wordsSet.name} from box c`);
-          return { adGroupRows, keywordRows, preparedAds };
+           return { adGroupRows, keywordRows, preparedAds };
         })
       );
   
@@ -315,8 +338,7 @@ async updateConversionNamesKidonTable(conversionActions?:any[],creationResult?:a
         ads.push(...result.preparedAds);
       }
     }
-    console.log('finishing biox c');
-
+    logToCloudWatch('finishing box c', 'INFO', 'GENERATE_ADS');
    // return { campaigns, adGroups, keywords, ads };
    return {
     campaigns: campaigns.map(c => ({ ...c, box: 'c' })),
@@ -324,6 +346,16 @@ async updateConversionNamesKidonTable(conversionActions?:any[],creationResult?:a
     ads: ads.map(ad => ({ ...ad, box: 'c' })),
     keywords: keywords.map(k => ({ ...k, box: 'c' }))
   };
+    }
+    catch (error) {
+      if (error.message.includes('429')) {
+      await new Promise(resolve => setTimeout(resolve, 60000));
+      }
+      else {
+        throw new Error(error.message);
+      }
+    }
+  
   }
   
   

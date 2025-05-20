@@ -21,7 +21,7 @@ import { log } from 'console';
  
 export async function fetchGoogleAds(domain: Domain, companies: Company[], tokens:any, query:string ) {
     logToCloudWatch(`Entering fetchGoogleAds, fetching google ads for domain ${domain.id}`);
-
+    console.log(companies.find((c)=>c.id == domain.companyId ).name);
     const date = getDateRange(1, 'YYYY-MM-DD');
     if(query.includes('<startDate>') && query.includes('<endDate>')) {
         query = query.replace('<startDate>', date.startDate).replace('<endDate>', date.endDate);
@@ -72,8 +72,8 @@ export async function fetchGoogleAds(domain: Domain, companies: Company[], token
 
 
 
-    export async function fetchLineups(domain: Domain, companies: Company[], tokens:any, query:string,urlSet: Set<string> ){
-         const landingPageResult = await axios.post(
+    export async function fetchLineups(domain: Domain, companies: Company[], tokens:any, query:string): Promise<any> {
+        const landingPageResult = await axios.post(
             `https://googleads.googleapis.com/v17/customers/${domain.googleAdsId}/googleAds:searchStream`,
             {
                 query: query,
@@ -86,15 +86,38 @@ export async function fetchGoogleAds(domain: Domain, companies: Company[], token
                 },
             }
         );
-        if(landingPageResult?.data[0]?.results && landingPageResult?.data[0]?.results?.length > 0) {
-              landingPageResult?.data[0]?.results.forEach((r)=>  {
-                const urls = r?.adGroupAd?.ad?.finalUrls;
-                urls.forEach(url => urlSet.add(`${url} - ${domain?.slackChannelId}`));
+        
+        return {
+            domain,
+            results: landingPageResult?.data[0]?.results || []
+        };
+    }
 
-                })     
-        }
-
-      } 
+    export function processLineupResults(rawResults: {domain: Domain, results: any[]}[]): {url: string, slackChannelId: string, campaignName: string}[] {
+        const urlSet = new Set<string>();
+        const processedResults: {url: string, slackChannelId: string, campaignName: string}[] = [];
+        
+        rawResults.forEach(({domain, results}) => {
+            if (results && results.length > 0) {
+                results.forEach((r) => {
+                    const urls = r?.adGroupAd?.ad?.finalUrls;
+                    const campaignName = r?.campaign?.name || 'Unknown Campaign';
+                    urls?.forEach(url => {
+                        if (!urlSet.has(url)) {
+                            urlSet.add(url);
+                            processedResults.push({
+                                url: url,
+                                slackChannelId: domain?.slackChannelId,
+                                campaignName: campaignName
+                            });
+                        }
+                    });
+                });
+            }
+        });
+        
+        return processedResults;
+    }
 
 
 export function filterOutTextlessAds(result: AnyObject[]) {

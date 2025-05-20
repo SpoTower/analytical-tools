@@ -3,6 +3,7 @@ import { SpellCheckerService } from './spell-checker.service';
 import { CreateSpellCheckerDto } from './dto/create-spell-checker.dto';
 import { UpdateSpellCheckerDto } from './dto/update-spell-checker.dto';
 import { BadRequestException, InternalServerErrorException } from '@nestjs/common';
+import { logToCloudWatch } from 'src/logger';
 
 
 
@@ -74,6 +75,20 @@ export class SpellCheckerController {
         }
       }
     }
+    // used by front end team to get active urls from google ads
+    @Get('/googleBasedActiveUrls')
+    async googleBasedActiveUrls(
+      @Query('hostname', ) hostname: string,
+      ) {
+        try {
+          const urls = await this.spellCheckerService.googleBasedActiveUrls(hostname );
+          return urls;
+        } catch (error) {
+          logToCloudWatch(`❌ Error fetching Google Ads for domain ${hostname}: ${error.message}`, "ERROR");
+          return [];
+        }
+      }
+
 
 
 // checks whether traffick from tracker visitors that defined as mobile only arrives to desktop only campaigns

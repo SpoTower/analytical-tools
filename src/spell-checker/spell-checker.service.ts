@@ -1,7 +1,7 @@
 import { Injectable,Logger,Inject,HttpException, BadRequestException, InternalServerErrorException } from '@nestjs/common';
 import { CreateSpellCheckerDto } from './dto/create-spell-checker.dto';
 import { UpdateSpellCheckerDto } from './dto/update-spell-checker.dto';
-import { fetchGoogleAds,fetchLineups,filterOutTextlessAds,prepareAdsForErrorChecking,fetchWebsitesInnerHtmlAndFindErrors, extractNonCapitalLetterWords, formatGoogleAdsErrors, sendGoogleAdsErrorReports, checkIfLineupExists } from './utils';
+import { fetchGoogleAds,fetchLineups,filterOutTextlessAds,prepareAdsForErrorChecking,fetchWebsitesInnerHtmlAndFindErrors, extractNonCapitalLetterWords, formatGoogleAdsErrors, sendGoogleAdsErrorReports, checkIfLineupExists, processLineupResults } from './utils';
 import { GlobalStateService } from 'src/globalState/global-state.service';
 const logger = new Logger('analytical-tools.spellchecker');
 import { logToCloudWatch } from 'src/logger'; 
@@ -100,76 +100,72 @@ export class SpellCheckerService {
       
       const state = this.globalState.getAllState(); if (!state) return 'No state found';
       let domainsToProcess = state.domains.filter((d: Domain) => d.googleAdsId);
-      domainsToProcess = domainsToProcess.filter((d: Domain) =>  ![176,128,153].includes(d.id)  );
+      domainsToProcess = domainsToProcess.filter((d: Domain) =>  ![20,176,128,153].includes(d.id)  );
       const allTokens = await Promise.all(state.companies.map(async (c) => ({ company: c.name, token: await KF.getGoogleAuthToken(c) })));
   
       const urlSet = new Set<string>();
   
       // ✅ Step 1: fetch lineups
-      await processInBatches(
+      const rawLineupResults = await processInBatches(
           domainsToProcess.map((domain: Domain) => async () => {
               try {
-                  await fetchLineups(domain, state.companies, allTokens, googleAdsLandingPageQuery, urlSet);
+                  return await fetchLineups(domain, state.companies, allTokens, googleAdsLandingPageQuery);
               } catch (error) {
                   logToCloudWatch(`❌ Error fetching Google Ads for domain ${domain.id}: ${error.message}`, "ERROR");
+                  return { domain, results: [] };
               }
           }),
           30
       );
-      logToCloudWatch(`urlSet length: ${urlSet.size}`, 'INFO');
-      let urlAndSlackChannel : {url: string, slackChannelId: string}[] = urlSet.size > 0 ? Array.from(urlSet).map((u)=>({url:u?.split(' - ')[0], slackChannelId:u?.split(' - ')[1]})) : [];
+      
+      let urlAndSlackChannel = processLineupResults(rawLineupResults);
+      logToCloudWatch(`Found ${urlAndSlackChannel.length} lineups`, 'INFO');
+      
       if (hostname) {
-        urlAndSlackChannel = urlAndSlackChannel.filter((u) => u.url.includes(hostname));
+          urlAndSlackChannel = urlAndSlackChannel.filter((u) => u.url.includes(hostname));
       }
-      urlAndSlackChannel = urlAndSlackChannel.filter((u)=>!u.url.includes('topsportbetting'))
-      // ✅ Step 2: validate lineups (🔧 CHANGED to use processInBatches)
-      const validationResults = await processInBatches( // 🔧 ADDED
-        urlAndSlackChannel.map((urlAndSlack) => async () => { // 🔧 ADDED
-          let axiosRes, pupeteerRes, durationMs; // 🔧 ADDED
-  
-          try { // 🔧 ADDED
-            logToCloudWatch(`checking ${urlAndSlack.url}  `, 'INFO');
-  
-            const startTime = Date.now();
-            axiosRes = await axios.get(urlAndSlack.url, { timeout: 10000 });
-            durationMs = Date.now() - startTime;
-          
-            const browser = await puppeteer.launch({
-              headless: true,
-              executablePath: '/opt/chrome/chrome-linux64/chrome',
-              protocolTimeout: 60000, // 🔧 ADDED
-            });
-  
-            const page = await browser.newPage();
-            await page.goto(urlAndSlack.url, { waitUntil: 'networkidle2', timeout: 60000 });
-  
-            await page.waitForSelector(
-              '[class*="partnersArea_main-partner-list"], [class*="ConditionalPartnersList"], [class*="homePage_partners-list-section"], [class*="articlesSection_container"], [class*="partnerNode"], [id*="test-id-partners-list"]',
-              { timeout: 5000 }
-            ).catch(() => {});
-            
-            pupeteerRes = await page.content();
-            await browser.close();
-  
-          } catch (err) {
-            logToCloudWatch(`Error in lineupValidation: ${err}`, 'ERROR');
-            if(err.name === 'AxiosError'){
-              return {url:urlAndSlack.url, slackChannelId:urlAndSlack.slackChannelId,status: err.status,reason: 'response status not success (not 200)' }; 
-            } else {
-              return { url:urlAndSlack.url,slackChannelId:urlAndSlack.slackChannelId, status: err.status,reason: `${JSON.stringify(err)}`};  }
+ 
+      // ✅ Step 2: validate lineups (sequential, not in batches)
+      const validationResults = [];
+      for (const urlAndSlack of urlAndSlackChannel) {
+        let axiosRes, pupeteerRes, durationMs;
+        try {
+          logToCloudWatch(`checking ${urlAndSlack.url}  `, 'INFO');
+          const startTime = Date.now();
+          axiosRes = await axios.get(urlAndSlack.url, { timeout: 10000 });
+          durationMs = Date.now() - startTime;
+          const browser = await puppeteer.launch({
+            headless: true,
+              executablePath: '/usr/local/bin/chrome', // the location of chrome on the ec2
+            protocolTimeout: 60000,
+          });
+          const page = await browser.newPage();
+          await page.goto(urlAndSlack.url, { waitUntil: 'networkidle2', timeout: 60000 });
+          await new Promise(resolve => setTimeout(resolve, 2000));
+          await page.waitForSelector(
+            '[class*="partnersArea_main-partner-list"], [class*="ConditionalPartnersList"], [class*="homePage_partners-list-section"], [class*="articlesSection_container"], [class*="partnerNode"], [id*="test-id-partners-list"]',
+            { timeout: 5000 }
+          ).catch(() => {});
+          pupeteerRes = await page.content();
+          await browser.close();
+        } catch (err) {
+          logToCloudWatch(`Error in lineupValidation: ${err}`, 'ERROR');
+          if (err.name === 'AxiosError'  && err.status != undefined) {
+            validationResults.push({ url: urlAndSlack.url, slackChannelId: urlAndSlack.slackChannelId, campaignName: urlAndSlack.campaignName, status: err.status, reason: `${JSON.stringify(err)}` });
+            continue;
+          } else {
+            //validationResults.push({ url: urlAndSlack.url, slackChannelId: urlAndSlack.slackChannelId, campaignName: urlAndSlack.campaignName, status: err.status, reason: `${JSON.stringify(err)}` });
+            continue;
           }
+        }
+        if (durationMs > 10000) {
+          validationResults.push({ url: urlAndSlack.url, slackChannelId: urlAndSlack.slackChannelId, campaignName: urlAndSlack.campaignName, status: axiosRes.status, reason: 'timeout' });
+        } else if (!checkIfLineupExists(pupeteerRes)) {
+          validationResults.push({ url: urlAndSlack.url, slackChannelId: urlAndSlack.slackChannelId, campaignName: urlAndSlack.campaignName, status: '-', reason: 'no lineup found' });
+        }
+      }
   
-          if(durationMs > 10000) {
-            return { url:urlAndSlack.url, slackChannelId:urlAndSlack.slackChannelId,status: axiosRes.status,  reason: 'timeout'};
-          }else if(!checkIfLineupExists(pupeteerRes)){
-            return {url:urlAndSlack.url,slackChannelId:urlAndSlack.slackChannelId,status: '-',reason: 'no lineup found'}; 
-          }
-          return null; 
-        }),
-        3 
-      ); 
-  
-      const filteredErrors = validationResults.filter(Boolean); // 🔧 ADDED
+      const filteredErrors = validationResults.filter(Boolean);
   
 
       const secondCheckResults = await processInBatches(
@@ -181,7 +177,7 @@ export class SpellCheckerService {
             try {
               const browser = await puppeteer.launch({
                 headless: true,
-                executablePath: '/opt/chrome/chrome-linux64/chrome',
+                   executablePath: '/usr/local/bin/chrome', // the location of chrome on the ec2
                 protocolTimeout: 60000,
               });
               const page = await browser.newPage();
@@ -205,7 +201,7 @@ export class SpellCheckerService {
         3
       );
       
-      const doubleFailed = [
+      let doubleFailed = [
         ...filteredErrors.filter(e => e.reason !== 'no lineup found'),
         ...secondCheckResults.filter(Boolean)
       ];
@@ -213,16 +209,17 @@ export class SpellCheckerService {
 
 
 
+    
 
 
-
-      if(doubleFailed.length > 0){
+      if(doubleFailed && doubleFailed.length > 0){
         for(let error of filteredErrors){
-          logToCloudWatch(`Lineup Validation Errors: ${error.url}, status: ${error.status}, reason: ${error.reason}`,  'ERROR');
-          await KF.sendSlackAlert(`Lineup Validation Errors: ${error.url}, status: ${error.status}, reason: ${error.reason}`,  slackChannels.CONTENT, state.slackToken); 
+           const errorMessage = [  '*Lineup Validation Error:*',  `*URL:* ${error.url}`,`*Campaign:* ${error.campaignName}`,`*Status:* ${error.status}`,`*Reason:* ${error.reason}` ].join('\n');
+          logToCloudWatch(`Lineup Validation Errors: ${errorMessage}`, 'ERROR');
+          await KF.sendSlackAlert(errorMessage, slackChannels.CONTENT, state.slackToken); 
         }
       }else{
-        logToCloudWatch(`no lineup errors found`);
+        logToCloudWatch(`No Lineup errors found`);
         await KF.sendSlackAlert(`no lineup errors found`,  slackChannels.CONTENT, state.slackToken); 
       }
   
@@ -231,6 +228,37 @@ export class SpellCheckerService {
       return `Error during lineupValidation ${JSON.stringify(e)}`;
     }
   }
+  
+
+
+  async googleBasedActiveUrls(hostname: string) {
+    const state = this.globalState.getAllState(); if (!state) return 'No state found';
+    let domainsToProcess = state.domains.filter((d: Domain) => d.googleAdsId);
+     const allTokens = await Promise.all(state.companies.map(async (c) => ({ company: c.name, token: await KF.getGoogleAuthToken(c) })));
+
+ 
+    // ✅ Step 1: fetch lineups
+    const rawLineupResults = await processInBatches(
+        domainsToProcess.map((domain: Domain) => async () => {
+            try {
+                return await fetchLineups(domain, state.companies, allTokens, googleAdsLandingPageQuery);
+            } catch (error) {
+                logToCloudWatch(`❌ Error fetching Google Ads for domain ${domain.id}: ${error.message}`, "ERROR");
+                return { domain, results: [] };
+            }
+        }),
+        30
+    );
+    let urlAndSlackChannel = processLineupResults(rawLineupResults);
+    const baseUrlSet = new Set<string>();
+    for (const obj of urlAndSlackChannel) {
+       const match = obj.url.match(/^(https:\/\/[^\/]+\.com\/)/);
+      if (match) {
+        baseUrlSet.add(match[1]);
+      }
+    }
+    return Array.from(baseUrlSet) ;
+   }
   
 
   async findAndFixWebsitesGrammaticalErrors(domainId?: number, batchSize?: number) {
@@ -276,6 +304,7 @@ export class SpellCheckerService {
     const googleKey = JSON.parse(res).GOOGLE_SERVICE_PRIVATE_KEY.replace(/\\n/g, '\n');
     const bq = await KF.connectToBQ(process.env.BQ_EMAIL_SERVICE, googleKey, process.env.BQ_PROJECT_NAME);
     const [job] = await bq.createQueryJob({ query: 'select domain_id,hostname,landing_page from `kidon3_STG.landing_page_performance` group by all', });
+    
     let [rows] = await job.getQueryResults();
 
     rows = rows.filter(r => r.domain_id !== 188); // test domain

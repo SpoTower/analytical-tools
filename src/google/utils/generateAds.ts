@@ -1,5 +1,6 @@
 import { promises as fs } from 'fs'
 import * as path from 'path'
+import { ConstantHeadersAndDescriptions } from '../interfaces'
 
 type FieldInstructions = {
     [fieldName: string]: string[] // array of values per row
@@ -22,35 +23,77 @@ type FieldInstructions = {
     return rows
 }
 
-export function extractHeadlinesAndDescriptions(raw: string, baseTemplate: Record<string, string>): any[] {
-    const adTemplates = []
+export function extractHeadlinesAndDescriptions(
+  raw: string, 
+  baseTemplate: Record<string, string>, 
+  hostname: string,
+  constantContent: ConstantHeadersAndDescriptions
+): any[] {
+  const adTemplates = []
   
-    const concepts = raw.split(/\*\*Ad Concept \d+:.*?\*\*/).filter(Boolean)
-    for (const concept of concepts) {
+  const concepts = raw.split(/\*\*Ad Concept \d+:.*?\*\*/).filter(Boolean)
+  for (const concept of concepts) {
+    const lines = concept.split('\n').map(line => line.trim()).filter(line => /^\d+\.\s+/.test(line)) // lines starting with numbers
+    
+    // Extract and clean headlines 1-6 from GPT response
+    const headlines = lines.slice(0, 6).map(line => {
+      // Remove both the leading number and the trailing character count
+      return line
+        .replace(/^\d+\.\s*/, '')      
+        .replace(/\s*-\s*\d+\s*characters$/, '')  
+        .replace(/\s*-\s*\d+$/, '');   
+    });
+    
+    // Extract and clean descriptions 1-2 from GPT response
+    const descriptions = lines.slice(15, 17).map(line => {
+      // Remove both the leading number and the trailing character count
+      return line
+        .replace(/^\d+\.\s*/, '')      // Remove leading number with dot
+        .replace(/\s*-\s*\d+\s*characters$/, '')  // Remove trailing " - XX characters"
+        .replace(/\s*-\s*\d+$/, '');   // Remove trailing " - XX"
+    });
+      
+    // Clone base template
+    const adTemplate = { ...baseTemplate }
 
-      const lines = concept.split('\n').map(line => line.trim()).filter(line => /^\d+\.\s+/.test(line)) // lines starting with numbers
-      const headlines = lines.slice(0, 15).map(line =>line.replace(/^\d+\.\s*/, '').replace(/\s*-\s*\d+\s*characters$/, '')) // 0-15 lines 
-      const descriptions = lines.slice(15, 19).map(line =>line.replace(/^\d+\.\s*/, '').replace(/\s*-\s*\d+\s*characters$/, '')) // 15-19 lines
-        
-      // Clone base template
-      const adTemplate = { ...baseTemplate }
-  
-      // Fill headlines
-      for (let i = 0; i < headlines.length; i++) {
-        adTemplate[`Headline ${i + 1}`] = headlines[i]
+    // Fill headlines 1-6 from GPT response
+    for (let i = 0; i < headlines.length; i++) {
+      adTemplate[`Headline ${i + 1}`] = headlines[i]
+    }
+
+    // Fill headlines 7-15 from constant content
+    for (let i = 7; i <= 15; i++) {
+      const value = constantContent.headlines[i - 7];
+      if (!value) {
+        console.warn(`[HEADLINE] Filling Headline ${i} with empty value! Index in constantContent.headlines: ${i - 7}`);
       }
-  
-      // Fill descriptions
-      for (let i = 0; i < descriptions.length; i++) {
-        adTemplate[`Description ${i + 1}`] = descriptions[i]
+      adTemplate[`Headline ${i}`] = value || '';
+    }
+
+    // Fill descriptions 1-2 from GPT response
+    for (let i = 0; i < descriptions.length; i++) {
+      adTemplate[`Description ${i + 1}`] = descriptions[i]
+    }
+
+    // Fill descriptions 3-4 from constant content
+    for (let i = 3; i <= 4; i++) {
+      const value = constantContent.descriptions[i - 3];
+      if (!value) {
+        console.warn(`[DESCRIPTION] Filling Description ${i} with empty value! Index in constantContent.descriptions: ${i - 3}`);
       }
-  
-      adTemplates.push(adTemplate)
+      adTemplate[`Description ${i}`] = value || '';
+    }
+
+    // Add the Final URL using hostname
+    if (hostname) {
+      adTemplate['Final URL'] = hostname
     }
   
-    return adTemplates
+    adTemplates.push(adTemplate)
   }
 
+  return adTemplates
+}
 
 // box A Tommy copy paste trick
   export function generateFullAddObject(adsArray, sourceData) {
@@ -78,6 +121,40 @@ export function extractHeadlinesAndDescriptions(raw: string, baseTemplate: Recor
   }
   
 
+  export function harvestSpecificContentFromFirstAd(adTemplates: Record<string, string>[]): ConstantHeadersAndDescriptions {
+    // Check if we have ads to harvest from
+    if (!adTemplates || adTemplates.length === 0) {
+      return {
+        headlines: [],
+        descriptions: []
+      };
+    }
+  
+    const ad1 = adTemplates[0];
+    const headlines: string[] = [];
+    const descriptions: string[] = [];
+  
+    // Harvest headlines 7 to 15
+    for (let i = 7; i <= 15; i++) {
+      const headline = ad1[`Headline ${i}`];
+      if (headline) {
+        headlines.push(headline);
+      }
+    }
+  
+    // Harvest descriptions 2 to 3
+    for (let i = 2; i <= 3; i++) {
+      const description = ad1[`Description ${i}`];
+      if (description) {
+        descriptions.push(description);
+      }
+    }
+  
+    return {
+      headlines,
+      descriptions
+    };
+  }
 
 
   export async function exportToCsv(data: any[], filename: string, outputDir = 'exports') {
@@ -93,15 +170,45 @@ export function extractHeadlinesAndDescriptions(raw: string, baseTemplate: Recor
       })
       csvRows.push(values.join(','))
     }
-  
-    const outputPath = path.resolve(__dirname, '..', outputDir)
-    const fullFilePath = path.join(outputPath, filename) //'/Users/dimitriyglefa/analyticalTools4/analytical-tools/dist/google/exports/campaigns.csv'
-  
-    await fs.mkdir(outputPath, { recursive: true }) // Ensure folder exists
-    await fs.writeFile(fullFilePath, csvRows.join('\n'), 'utf8')
-  
-    return fullFilePath
+    return { key: filename,values: csvRows.join('\n') }
+     
+      
+ 
   }
+
+
+
+  export function generateConstantHeadersAndDescriptions(raw: string, baseTemplate: Record<string, string>, hostname?: string): ConstantHeadersAndDescriptions {
+    // Initialize empty arrays for headlines and descriptions
+    const headlines: string[] = [];
+    const descriptions: string[] = [];
+    
+    // Clean up the raw content to get only the lines with numbers
+    const lines = raw.split('\n').map(line => line.trim()).filter(line => /^\d+\.\s+/.test(line));
+    
+    // Get all headlines (assuming first 15 lines are headlines)
+    const allHeadlines = lines.slice(0, 15).map(line => 
+      line.replace(/^\d+\.\s*/, '').replace(/\s*-\s*\d+\s*characters$/, '')
+    );
+    
+    // Get all descriptions (assuming lines 16-19 are descriptions)
+    const allDescriptions = lines.slice(15, 19).map(line => 
+      line.replace(/^\d+\.\s*/, '').replace(/\s*-\s*\d+\s*characters$/, '')
+    );
+    
+    // Extract only headlines 7-15 (indices 6-14)
+    for (let i = 6; i < 15 && i < allHeadlines.length; i++) {
+      headlines.push(allHeadlines[i]);
+    }
+    
+    // Extract only descriptions 3-4 (indices 2-3)
+    for (let i = 2; i < 4 && i < allDescriptions.length; i++) {
+      descriptions.push(allDescriptions[i]);
+    }
+    
+    return { headlines, descriptions };
+  }
+
 
 
 // recieves string that contains chunk of 4-6 campaign name + keywords , should extract from the string the campaign names and the relevant words per campaign
