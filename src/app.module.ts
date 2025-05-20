@@ -9,6 +9,7 @@ import { GptModule } from './gpt/gpt.module';
 import { KnexModule } from './knex/knex.module';
 import { AbTestManagementModule } from './ab-test-management/ab-test-management.module';
 import { GoogleModule } from './google/google.module';
+import { BingModule } from './bing/bing.module';
 
 @Module({
   imports: [
@@ -20,6 +21,7 @@ import { GoogleModule } from './google/google.module';
   KnexModule,
   AbTestManagementModule,
   GoogleModule,
+  BingModule,
     ],
   controllers: [AppController],
   providers: [
