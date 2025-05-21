@@ -9,6 +9,7 @@ import { GlobalStateService } from 'src/globalState/global-state.service';
 import {   KIDON_CONNECTION } from 'src/knex/knex.module';
 import { Knex } from 'knex';
 import { BingConversionAction } from './interfaces';
+import { logToCloudWatch } from 'src/logger';
  @Injectable()
 export class BingService {
 
@@ -17,6 +18,7 @@ export class BingService {
   ) {}
 
   async createConversionGoals(conversionActions: BingConversionAction[],   domainId: number) {
+    logToCloudWatch('Entering createConversionGoals endpoint. '    );
     const state = this.globalState.getAllState();
     const domain = state.domains.filter((d)=>d.id == domainId)[0]
     let results = []
@@ -31,6 +33,7 @@ export class BingService {
         const developerToken = company.bingDeveloperToken
 
         for (const action of conversionActions) {
+          logToCloudWatch(`Creating conversion goal for ${action["Conversion Name Action"]} in for loop`, 'INFO', 'bing');
 
           const  xmlBody = generateBingCreateOfflineConversionXml(accessToken, customAccountId, customerId, developerToken, action);
           const response = await axios.post(`https://campaign.api.bingads.microsoft.com/Api/Advertiser/CampaignManagement/v13/CampaignManagementService.svc`, xmlBody, {
@@ -46,7 +49,7 @@ export class BingService {
         if (isDuplicate == 5317) throw  new Error(`Duplicate conversion goal name ${action["Conversion Name Action"]}`);
 
         const conversionGoalId = result?.['s:Envelope']?.['s:Body']?.['AddConversionGoalsResponse']?.['ConversionGoalIds']['a:long'];
-
+        logToCloudWatch(`Conversion goal created for ${action["Conversion Name Action"]} with ID: ${conversionGoalId}`, 'INFO', 'bing');
         results.push(conversionGoalId)
 
         }
@@ -58,6 +61,11 @@ export class BingService {
 
 
   async updateConversionNamesKidonTable(conversionActions: BingConversionAction[],  domainId: number) {
+    logToCloudWatch('Entering updateConversionNamesKidonTable endpoint. '    );
+    if(conversionActions.length == 0) {
+      logToCloudWatch('No conversion actions to update', 'INFO', 'bing');
+      return;
+    }
     const transformed = conversionActions.map((action) => ({
       name: action["Conversion Name Action"],
       goal: 'primary', // or use logic to determine this
@@ -67,7 +75,7 @@ export class BingService {
     }));
     
     let res =  await this.kidonClient('conversion_names_bing').insert(transformed);
- 
+    logToCloudWatch(`Conversion names updated for ${conversionActions.length} conversion goals`, 'INFO', 'bing');
   }
 
 
