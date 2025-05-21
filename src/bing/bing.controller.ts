@@ -2,18 +2,27 @@ import { Controller, Get, Post, Body, Patch, Param, Delete } from '@nestjs/commo
 import { BingService } from './bing.service';
 import { CreateBingDto } from './dto/create-bing.dto';
 import { UpdateBingDto } from './dto/update-bing.dto';
-
-@Controller('bing')
+import { logToCloudWatch } from 'src/logger';
+ @Controller('bing')
 export class BingController {
   constructor(private readonly bingService: BingService) {}
 
   @Post('/generateConversions')
   async generateConversions(@Body() body: any) {
-    const { conversionActions, hostname, domainId } = body;
-    this.bingService.createConversionGoals(conversionActions, hostname, domainId);
+
+    try {
+      const { conversionActions, hostname, domainId } = body;
+      const res = await this.bingService.createConversionGoals(conversionActions, domainId);
+      await this.bingService.updateConversionNamesKidonTable(conversionActions,domainId);
+      return { status: 'ok', count: res.length };
+    }catch(e){
+      logToCloudWatch(e.message, 'ERROR', 'bing');
+      return { status: 'error', count: '', message: e.message };
+    }      
+
+     
   
- console.log(conversionActions, hostname, domainId)
-  }
+   }
   
 
   @Get()

@@ -1,4 +1,7 @@
-export const generateBingCreateOfflineConversionXml = (token: string, customerAccountId: string, customerId: string, developerToken: string, conversionName: string) => `
+import { BingConversionAction } from "./interfaces";
+
+export const generateBingCreateOfflineConversionXml = (token: string, customerAccountId: string, 
+   customerId: string, developerToken: string, conversion: BingConversionAction) => `
  <s:Envelope xmlns:i="http://www.w3.org/2001/XMLSchema-instance" xmlns:s="http://schemas.xmlsoap.org/soap/envelope/">
    <s:Header xmlns="https://bingads.microsoft.com/CampaignManagement/v13">
     <Action mustUnderstand="1">UpdateConversionGoals</Action>
@@ -8,15 +11,15 @@ export const generateBingCreateOfflineConversionXml = (token: string, customerAc
       <DeveloperToken i:nil="false">${developerToken}</DeveloperToken>
    </s:Header>
    <s:Body>
-      <AddConversionGoalsRequest xmlns="https://bingads.microsoft.com/CampaignManagement/v13">
+       <AddConversionGoalsRequest xmlns="https://bingads.microsoft.com/CampaignManagement/v13">
          <ConversionGoals i:nil="false">
             <ConversionGoal i:type="OfflineConversionGoal">
                <ConversionWindowInMinutes i:nil="false">129600</ConversionWindowInMinutes>
-               <CountType i:nil="false">Unique</CountType>
+               <CountType i:nil="false">${conversion["Count Type"]}</CountType>
                <ExcludeFromBidding i:nil="false">true</ExcludeFromBidding>
-               <GoalCategory i:nil="false">OutboundClick</GoalCategory>
+               <GoalCategory i:nil="false">${conversion["Goal Category"]}</GoalCategory>
                <IsEnhancedConversionsEnabled i:nil="false">false</IsEnhancedConversionsEnabled>
-               <Name i:nil="false">${conversionName}</Name>
+               <Name i:nil="false">${conversion["Conversion Name Action"]}</Name>
                <Revenue i:nil="false">
                   <CurrencyCode i:nil="false">USD</CurrencyCode>
                   <Type i:nil="false">FixedValue</Type>
