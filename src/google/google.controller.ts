@@ -41,10 +41,15 @@ export class GoogleController {
   
     // Run in background without blocking the HTTP response
     (async () => {
+      const CLEANUP_TIMEOUT = 3 * 60 * 1000; // 5 minutes
+
       try {
         const result = await this.googleService.generateAds(sourceData);
         logToCloudWatch(`Ads generated successfully for task ${taskId}.`, 'INFO', 'google');
         this.generateAdsTaskMap.set(taskId, { status: 'done', result });
+        setTimeout(() => {
+          this.generateAdsTaskMap.delete(taskId);
+        }, CLEANUP_TIMEOUT);
       } catch (error) {
         logToCloudWatch(`Error generating ads for task ${taskId}: ${error.message}`, 'ERROR', 'google');
         this.generateAdsTaskMap.set(taskId, { status: 'error', error: error.message });
@@ -64,6 +69,8 @@ export class GoogleController {
   }
 
   return task;
+
+  
 }
 
 
