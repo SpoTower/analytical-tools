@@ -67,8 +67,7 @@ export class BingService {
     }));
     
     let res =  await this.kidonClient('conversion_names_bing').insert(transformed);
-    console.log(res)
-
+ 
   }
 
 
