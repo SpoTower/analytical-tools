@@ -1,7 +1,7 @@
 import { Injectable,Logger,Inject,HttpException, BadRequestException, InternalServerErrorException } from '@nestjs/common';
 import { CreateSpellCheckerDto } from './dto/create-spell-checker.dto';
 import { UpdateSpellCheckerDto } from './dto/update-spell-checker.dto';
-import { fetchGoogleAds,fetchLineups,filterOutTextlessAds,prepareAdsForErrorChecking,fetchWebsitesInnerHtmlAndFindErrors, extractNonCapitalLetterWords, formatGoogleAdsErrors, sendGoogleAdsErrorReports, checkIfLineupExists, processLineupResults, getActiveBingUrls } from './utils';
+import { fetchGoogleAds,fetchLineups,filterOutTextlessAds,prepareAdsForErrorChecking,fetchWebsitesInnerHtmlAndFindErrors, extractNonCapitalLetterWords, formatGoogleAdsErrors, sendGoogleAdsErrorReports, checkIfLineupExists, processLineupResults, getActiveBingUrls, fetchAllTransactions, establishInvocaConnection,   isLocal, generateBrowser } from './utils';
 import { GlobalStateService } from 'src/globalState/global-state.service';
 const logger = new Logger('analytical-tools.spellchecker');
 import { logToCloudWatch } from 'src/logger'; 
@@ -23,6 +23,8 @@ import axios from 'axios';
 import { AnyObject } from './consts';
 import puppeteer from 'puppeteer';
 import { BigQuery } from '@google-cloud/bigquery';
+import dayjs from 'dayjs';
+import { invocaColumns } from './consts';
 
 @Injectable()
 export class SpellCheckerService {
@@ -134,11 +136,7 @@ export class SpellCheckerService {
           const startTime = Date.now();
           axiosRes = await axios.get(urlAndSlack.url, { timeout: 10000 });
           durationMs = Date.now() - startTime;
-          const browser = await puppeteer.launch({
-            headless: true,
-              executablePath: '/usr/local/bin/chrome', // the location of chrome on the ec2
-            protocolTimeout: 60000,
-          });
+          const browser = await generateBrowser()
           const page = await browser.newPage();
           await page.goto(urlAndSlack.url, { waitUntil: 'networkidle2', timeout: 60000 });
           await new Promise(resolve => setTimeout(resolve, 2000));
@@ -413,13 +411,44 @@ export class SpellCheckerService {
       return `Error in mobileAndDesktopTrafficCongruenceValidation: ${error.message}`;
     }
   }
+
+
+
+  async invocaLineupValidation(hostname: string) {
+        logToCloudWatch(`entering invoca lineup validation`, "INFO", 'invoca lineup validation');
+        const state =   this.globalState.getAllState(); 
+        await establishInvocaConnection();
+        const transactions = await  fetchAllTransactions();
+       const landingpages = isLocal() ? new Set(transactions.filter((tr)=>tr.landing_page).map((trl)=>trl.landing_page)) : new Set(transactions.filter((tr)=>tr.landing_page).slice(0,5).map((trl)=>trl.landing_page) );
+    let invoclessPages = [];
+       for(const landingpage of Array.from(landingpages)){
+        logToCloudWatch(` processing landingpage: ${landingpage}`, "INFO", 'invoca lineup validation');
+            const browser =  await generateBrowser()
+            const page = await browser.newPage();
+            await page.goto(landingpage, { waitUntil: 'networkidle2', timeout: 60000 });
+
+            const isInvoca = await page.evaluate(() => {return Array.from(document.scripts).filter(script => script.src.toLowerCase().includes('invoca')).map(script => script.src);  }  );
+    
+            if(isInvoca && isInvoca.length == 0){
+              invoclessPages.push(landingpage);
+            } 
+       }
+       logToCloudWatch(`invoclesspages: ${invoclessPages}`, "INFO", 'invoca lineup validation');
+
+       if(invoclessPages.length > 0){
+        await KF.sendSlackAlert(`*Invoca Lineup Validation:*\n${invoclessPages.join('\n')}`, slackChannels.PERSONAL, state.slackToken);
+       }else{
+        await KF.sendSlackAlert('*Invoca Lineup Validation:*\nNo invoca pages found', slackChannels.PERSONAL, state.slackToken);
+       }
+
+       return 'invoca lineup validation finished';
+   }
  
   create(createSpellCheckerDto: CreateSpellCheckerDto) {
     return 'This action adds a new spellChecker';
   }
 
- 
-
+     
   findOne(id: number) {
     return `This action returns a #${id} spellChecker`;
   }

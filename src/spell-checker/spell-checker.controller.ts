@@ -113,6 +113,13 @@ export class SpellCheckerController {
     return { message: 'Waited 200 seconds, check logs for progress.' };
   }
 
+
+// fetching data from invoca transactions repor, iterates over them with pupeteer and searchinf if there is invoca tag in the dom and script sections
+  @Get('/invocaLineupValidation')
+  async invocaLineupValidation(@Query('hostname') hostname: string) {
+    return this.spellCheckerService.invocaLineupValidation(hostname);
+  }
+
   @Get(':id')
   findOne(@Param('id') id: string) {
     return this.spellCheckerService.findOne(+id);

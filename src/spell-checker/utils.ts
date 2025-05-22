@@ -20,7 +20,9 @@ import {slackChannels}  from './consts';
 import { log } from 'console';
 import { XMLParser } from 'fast-xml-parser';
 import { googleAdsLandingPageQuery } from './gaqlQuerys';
-
+import dayjs from 'dayjs';
+import { invocaColumns } from './consts';
+import puppeteer from 'puppeteer';
 export async function fetchGoogleAds(domain: Domain, companies: Company[], tokens:any, query:string ) {
     logToCloudWatch(`Entering fetchGoogleAds, fetching google ads for domain ${domain.id}`);
     console.log(companies.find((c)=>c.id == domain.companyId ).name);
@@ -613,116 +615,63 @@ export   function checkIfLineupExists(html: string): boolean {
   }
  
 
+export async function establishInvocaConnection(){
+    const loginPage = await axios.get(`https://kolimnd.invoca.net/login`); //"https://<domain>/login"
+    const tokenMatch = loginPage.data.match(/<input[^>]+name="authenticity_token"[^>]+value="([^"]+)"/)[1];
+    const setCookieHeader = loginPage.headers['set-cookie'];
+    const cookies = setCookieHeader.map((cookie) => cookie.split(';')[0]).join('; ');
 
+    const myHeaders = new Headers();
+    myHeaders.append('Authorization', `Bearer ${tokenMatch}`);
+    myHeaders.append('Content-Type', 'application/x-www-form-urlencoded');
+    myHeaders.append('Referer', `https://kolimnd.invoca.net/login`);
+    myHeaders.append('Cookie', `${cookies}`);
 
-  export async function getBingCampaigns({ accessToken, customAccountId, customerId, developerToken }) {
-    const soap = `
-  <s:Envelope xmlns:i="http://www.w3.org/2001/XMLSchema-instance" xmlns:s="http://schemas.xmlsoap.org/soap/envelope/">
-    <s:Header xmlns="https://bingads.microsoft.com/CampaignManagement/v13">
-      <AuthenticationToken>${accessToken}</AuthenticationToken>
-      <CustomerAccountId>${customAccountId}</CustomerAccountId>
-      <CustomerId>${customerId}</CustomerId>
-      <DeveloperToken>${developerToken}</DeveloperToken>
-    </s:Header>
-    <s:Body>
-      <GetCampaignsByAccountIdRequest xmlns="https://bingads.microsoft.com/CampaignManagement/v13">
-        <AccountId>${customAccountId}</AccountId>
-        <CampaignType>Search</CampaignType>
-      </GetCampaignsByAccountIdRequest>
-    </s:Body>
-  </s:Envelope>`;
-  
-    const response = await axios.post(
-      'https://campaign.api.bingads.microsoft.com/Api/Advertiser/CampaignManagement/v13/CampaignManagementService.svc',
-      soap,
-      {
-        headers: {
-          'Content-Type': 'text/xml; charset=utf-8',
-          'SOAPAction': 'GetCampaignsByAccountId',
-        },
-      }
-    );
-  
-    const parser = new XMLParser();
-    const json = parser.parse(response.data);
-    const campaigns = json?.['s:Envelope']?.['s:Body']?.GetCampaignsByAccountIdResponse?.Campaigns?.Campaign || [];
-  
-    return Array.isArray(campaigns) ? campaigns : [campaigns];
-  }
-  export async function getBingAdGroups({ campaignId, accessToken, customAccountId, customerId, developerToken }) {
-    const soap = `
-  <s:Envelope xmlns:i="http://www.w3.org/2001/XMLSchema-instance" xmlns:s="http://schemas.xmlsoap.org/soap/envelope/">
-    <s:Header xmlns="https://bingads.microsoft.com/CampaignManagement/v13">
-      <AuthenticationToken>${accessToken}</AuthenticationToken>
-      <CustomerAccountId>${customAccountId}</CustomerAccountId>
-      <CustomerId>${customerId}</CustomerId>
-      <DeveloperToken>${developerToken}</DeveloperToken>
-    </s:Header>
-    <s:Body>
-      <GetAdGroupsByCampaignIdRequest xmlns="https://bingads.microsoft.com/CampaignManagement/v13">
-        <CampaignId>${campaignId}</CampaignId>
-      </GetAdGroupsByCampaignIdRequest>
-    </s:Body>
-  </s:Envelope>`;
-  
-    const response = await axios.post(
-      'https://campaign.api.bingads.microsoft.com/Api/Advertiser/CampaignManagement/v13/CampaignManagementService.svc',
-      soap,
-      {
-        headers: {
-          'Content-Type': 'text/xml; charset=utf-8',
-          'SOAPAction': 'GetAdGroupsByCampaignId',
-        },
-      }
-    );
-  
-    const parser = new XMLParser();
-    const json = parser.parse(response.data);
-    const adGroups = json?.['s:Envelope']?.['s:Body']?.GetAdGroupsByCampaignIdResponse?.AdGroups?.AdGroup || [];
-  
-    return Array.isArray(adGroups) ? adGroups : [adGroups];
-  }
-  export async function getBingAds({ adGroupId, accessToken, customAccountId, customerId, developerToken }) {
-    const soap = `
-  <s:Envelope xmlns:i="http://www.w3.org/2001/XMLSchema-instance" xmlns:s="http://schemas.xmlsoap.org/soap/envelope/">
-    <s:Header xmlns="https://bingads.microsoft.com/CampaignManagement/v13">
-      <AuthenticationToken>${accessToken}</AuthenticationToken>
-      <CustomerAccountId>${customAccountId}</CustomerAccountId>
-      <CustomerId>${customerId}</CustomerId>
-      <DeveloperToken>${developerToken}</DeveloperToken>
-    </s:Header>
-    <s:Body>
-      <GetAdsByAdGroupIdRequest xmlns="https://bingads.microsoft.com/CampaignManagement/v13">
-        <AdGroupId>${adGroupId}</AdGroupId>
-      </GetAdsByAdGroupIdRequest>
-    </s:Body>
-  </s:Envelope>`;
-  
-    const response = await axios.post(
-      'https://campaign.api.bingads.microsoft.com/Api/Advertiser/CampaignManagement/v13/CampaignManagementService.svc',
-      soap,
-      {
-        headers: {
-          'Content-Type': 'text/xml; charset=utf-8',
-          'SOAPAction': 'GetAdsByAdGroupId',
-        },
-      }
-    );
-  
-    const parser = new XMLParser();
-    const json = parser.parse(response.data);
-    const ads = json?.['s:Envelope']?.['s:Body']?.GetAdsByAdGroupIdResponse?.Ads?.Ad || [];
-  
-    const adsArray = Array.isArray(ads) ? ads : [ads];
-    const finalUrls = [];
-  
-    for (const ad of adsArray) {
-      const url = ad?.FinalUrls?.['a:string'];
-      if (url) {
-        finalUrls.push(typeof url === 'string' ? url : url[0]);
-      }
+    const urlencoded = new URLSearchParams();
+    urlencoded.append('utf8', '✓');
+    urlencoded.append('authenticity_token', `${tokenMatch}`);
+    urlencoded.append('username', '^!&@(SPoToWER123@#');
+    urlencoded.append('password', 'talso@spotower.com');
+    urlencoded.append('commit', 'Log in');
+    urlencoded.append('submit_type', '');
+
+    const requestOptions: RequestInit = {
+        method: 'POST',
+        headers: myHeaders,
+        body: urlencoded,
+        redirect: 'follow' as RequestRedirect,
+    };
+
+    const res = await fetch(`https://kolimnd.invoca.net/login`, requestOptions);
+}
+
+  export async function fetchAllTransactions() {
+    const limit = 4000; // Maximum rows per invoca API request
+    let lastId = ''; // To track pagination (start_after_transaction_id)
+    let totalResults = [];
+    let hasMore = true;
+    const endDate = new Date();
+    const startDate = dayjs(endDate).subtract(1, 'day') 
+
+    while (hasMore) {
+        const url = `https://kolimnd.invoca.net/api/2022-09-29/affiliates/transactions/2054.json?from=${dayjs(startDate).format('YYYY-MM-DD')}&to=${dayjs(endDate).format('YYYY-MM-DD')}&oauth_token=3IqceMPe879Sk90AhFg9u7rNcqBjIan1tCzMIezOOBE&include_columns=${invocaColumns.join(',')}&limit=4000
+        ${lastId ? `&start_after_transaction_id=${lastId}` : ''}`;
+        const response = await axios.get(url);
+        const transactions = response.data;
+        totalResults = [...totalResults, ...transactions];
+        if (transactions.length === limit) {
+            lastId = transactions[transactions.length - 1].complete_call_id;
+        } else {
+            hasMore = false;
+        }
     }
-  
-    return finalUrls;
-  }
-  
+    return totalResults;
+};
+
+export function isLocal(){
+    return process.env.ENVIRONMENT == 'local';
+}
+
+export async function generateBrowser(){
+    return process.env.ENVIRONMENT == 'local' ? await puppeteer.launch({ headless: true,   protocolTimeout: 60000,}) : await puppeteer.launch({ headless: false,  executablePath: '/usr/local/bin/chrome', protocolTimeout: 60000,});
+}
