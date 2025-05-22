@@ -48,7 +48,8 @@
     "puppeteer": "^24.8.1",
     "reflect-metadata": "^0.2.0",
     "rxjs": "^7.8.1",
-    "spellchecker": "^3.7.1"
+    "spellchecker": "^3.7.1",
+    "uuid": "^11.1.0"
   },
   "devDependencies": {
     "@nestjs/cli": "^10.0.0",

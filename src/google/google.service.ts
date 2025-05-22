@@ -62,7 +62,7 @@ export class GoogleService {
       if (error.response?.data?.error?.message) {
         const errorMessage = error.response?.data?.error?.details?.[0]?.errors?.[0]?.message;
         if(errorMessage && errorMessage == 'The enum value is not permitted.'){
-          throw new Error(`Error for action "${action['Conversions Name Action']}": ${errorMessage}. \n Reason: The reason may be incongruence between the conversion category and the conversion type or the conversion attribution.`)
+          throw new Error(`Error for action "${action['Conversions Name Action']}"  -  Probably invalid category or invalid combination of parameters`)
         }
           else
          throw new Error(error.response?.data?.error?.message)
@@ -103,7 +103,7 @@ async updateConversionNamesKidonTable(conversionActions?:any[],creationResult?:a
 
  
   async generateAds(sourceData:googleAdsSourceData){
-logger.log('entering generateAds');
+logToCloudWatch('Entering generateAds endpoint. ', 'INFO', 'google');
     const gptResponse = await this.gptService.askGpt01(process.env.GPT_KEY, addLevelSystemMessage, addLevelPromptBoxA);
     let constantheadersAndDescriptions = generateConstantHeadersAndDescriptions(gptResponse.choices[0].message.content, adsTemplateDefaults, sourceData.hostname);
    
@@ -122,7 +122,7 @@ logger.log('entering generateAds');
   
   
  
-   const campaignsCsv = await exportToCsv(campaigns1, 'campaigns.csv');
+   const campaignsCsv =  await exportToCsv(campaigns1, 'campaigns.csv');
     const adGroupsCsv = await exportToCsv(adGroups1, 'ad-groups.csv');
     const keywordsCsv = await exportToCsv(keywords1, 'keywords.csv');
     const adsCsv = await exportToCsv(ads1, 'ads.csv');
@@ -292,14 +292,14 @@ logToCloudWatch('finishing generateAds', 'INFO', 'GENERATE_ADS');
     });
   
     // Step 3: Generate campaign rows
-    for (let campaign of campaignNamesAndWords ) { // 6
+    for (let campaign of campaignNamesAndWords  ) { // 6
 
        const [row1, row2] = generateDualCampaignRows(campaign.name, campaignTemplateDefaults);
       campaigns.push(row1, row2);
     }
    
     // Step 4: For each campaign, get ad group and ad level data
-    for (const wordsSet of campaignNamesAndWords  ) { //6
+    for (const wordsSet of campaignNamesAndWords   ) { //6
       logToCloudWatch(`generating ad group rows for ${wordsSet.name} box c`, 'INFO', 'GENERATE_ADS');
       await new Promise(resolve => setTimeout(resolve, 1000));
       const keywordList = wordsSet.words.map(w => `"${w}"`).join(', ');

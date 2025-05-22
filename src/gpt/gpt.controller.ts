@@ -1,8 +1,9 @@
-import { Controller, Get, Post, Body, Patch, Param, Delete, Put } from '@nestjs/common';
+ import { Controller, Get, Post, Body, Patch, Param, Delete, Put,Query } from '@nestjs/common';
+ 
 import { GptService } from './gpt.service';
 import { CreateGptDto } from './dto/create-gpt.dto';
 import { UpdateGptDto } from './dto/update-gpt.dto';
-
+import { UpdatePromptDto } from './dto/update-prompts.dto';
 @Controller('gpt')
 export class GptController {
   constructor(private readonly gptService: GptService) {}
@@ -13,12 +14,17 @@ export class GptController {
   }
 
   @Get()
-  findAll() {
+  async findAll(@Query('prompts') prompts?: string) {
+    if (prompts) {
+      const promptArray = prompts.split(',').map(prompt => prompt.trim());
+      return this.gptService.findConfigurationByKeys(promptArray);
+    }
     return this.gptService.findAll();
   }
 
   @Put()
   async updatePrompt(@Body() updatePromptDto: any) {
+
     return this.gptService.updateConfigurationPrompt(updatePromptDto[0]);
   }
   @Get(':id')
