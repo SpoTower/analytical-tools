@@ -1,7 +1,7 @@
 import { Injectable,Logger,Inject,HttpException, BadRequestException, InternalServerErrorException } from '@nestjs/common';
 import { CreateSpellCheckerDto } from './dto/create-spell-checker.dto';
 import { UpdateSpellCheckerDto } from './dto/update-spell-checker.dto';
-import { fetchGoogleAds,fetchLineups,filterOutTextlessAds,prepareAdsForErrorChecking,fetchWebsitesInnerHtmlAndFindErrors, extractNonCapitalLetterWords, formatGoogleAdsErrors, sendGoogleAdsErrorReports, checkIfLineupExists, processLineupResults, getActiveGooglUrls } from './utils';
+import { fetchGoogleAds,fetchLineups,filterOutTextlessAds,prepareAdsForErrorChecking,fetchWebsitesInnerHtmlAndFindErrors, extractNonCapitalLetterWords, formatGoogleAdsErrors, sendGoogleAdsErrorReports, checkIfLineupExists, processLineupResults, getActiveBingUrls } from './utils';
 import { GlobalStateService } from 'src/globalState/global-state.service';
 const logger = new Logger('analytical-tools.spellchecker');
 import { logToCloudWatch } from 'src/logger'; 
@@ -23,7 +23,7 @@ import axios from 'axios';
 import { AnyObject } from './consts';
 import puppeteer from 'puppeteer';
 import { BigQuery } from '@google-cloud/bigquery';
-import { getActiveBingUrls } from './utils';
+
 @Injectable()
 export class SpellCheckerService {
 
@@ -100,7 +100,7 @@ export class SpellCheckerService {
       
       const state = this.globalState.getAllState(); if (!state) return 'No state found';
       let domainsToProcess = state.domains.filter((d: Domain) => d.googleAdsId);
-      domainsToProcess = domainsToProcess.filter((d: Domain) =>  ![176,128,153].includes(d.id)  );
+      domainsToProcess = domainsToProcess.filter((d: Domain) =>  ![20,176,128,153].includes(d.id)  );
       const allTokens = await Promise.all(state.companies.map(async (c) => ({ company: c.name, token: await KF.getGoogleAuthToken(c) })));
   
       const urlSet = new Set<string>();
@@ -150,11 +150,11 @@ export class SpellCheckerService {
           await browser.close();
         } catch (err) {
           logToCloudWatch(`Error in lineupValidation: ${err}`, 'ERROR');
-          if (err.name === 'AxiosError') {
-            validationResults.push({ url: urlAndSlack.url, slackChannelId: urlAndSlack.slackChannelId, campaignName: urlAndSlack.campaignName, status: err.status, reason: 'response status not success (not 200)' });
+          if (err.name === 'AxiosError'  && err.status != undefined) {
+            validationResults.push({ url: urlAndSlack.url, slackChannelId: urlAndSlack.slackChannelId, campaignName: urlAndSlack.campaignName, status: err.status, reason: `${JSON.stringify(err)}` });
             continue;
           } else {
-            validationResults.push({ url: urlAndSlack.url, slackChannelId: urlAndSlack.slackChannelId, campaignName: urlAndSlack.campaignName, status: err.status, reason: `${JSON.stringify(err)}` });
+            //validationResults.push({ url: urlAndSlack.url, slackChannelId: urlAndSlack.slackChannelId, campaignName: urlAndSlack.campaignName, status: err.status, reason: `${JSON.stringify(err)}` });
             continue;
           }
         }
@@ -214,8 +214,7 @@ export class SpellCheckerService {
 
       if(doubleFailed && doubleFailed.length > 0){
         for(let error of filteredErrors){
-          doubleFailed = doubleFailed.filter(e => !e.url.includes('topfundings'))  ; // disclude this element
-          const errorMessage = [  '*Lineup Validation Error:*',  `*URL:* ${error.url}`,`*Campaign:* ${error.campaignName}`,`*Status:* ${error.status}`,`*Reason:* ${error.reason}` ].join('\n');
+           const errorMessage = [  '*Lineup Validation Error:*',  `*URL:* ${error.url}`,`*Campaign:* ${error.campaignName}`,`*Status:* ${error.status}`,`*Reason:* ${error.reason}` ].join('\n');
           logToCloudWatch(`Lineup Validation Errors: ${errorMessage}`, 'ERROR');
           await KF.sendSlackAlert(errorMessage, slackChannels.CONTENT, state.slackToken); 
         }
@@ -232,16 +231,41 @@ export class SpellCheckerService {
   
 
 
-  async googleBasedActiveUrls(hostname: string) {
+  async activeUrls(hostname: string) {
     const state = this.globalState.getAllState(); if (!state) return 'No state found';
+
+
     const activeBingUrls = await getActiveBingUrls(state);
-    const activeGoogleUrls = await getActiveGooglUrls(state);
-    const activeUrls = [...activeBingUrls, ...activeGoogleUrls];
-    return activeUrls;
-  }
+    logToCloudWatch(`Active Bing URLs: ${JSON.stringify(activeBingUrls)}`, 'INFO');
 
 
+    let domainsToProcess = state.domains.filter((d: Domain) => d.googleAdsId);
+     const allTokens = await Promise.all(state.companies.map(async (c) => ({ company: c.name, token: await KF.getGoogleAuthToken(c) })));
 
+ 
+    // ✅ Step 1: fetch lineups
+    const rawLineupResults = await processInBatches(
+        domainsToProcess.map((domain: Domain) => async () => {
+            try {
+                return await fetchLineups(domain, state.companies, allTokens, googleAdsLandingPageQuery);
+            } catch (error) {
+                logToCloudWatch(`❌ Error fetching Google Ads for domain ${domain.id}: ${error.message}`, "ERROR");
+                return { domain, results: [] };
+            }
+        }),
+        30
+    );
+    let urlAndSlackChannel = processLineupResults(rawLineupResults);
+    const baseUrlSet = new Set<string>();
+    for (const obj of urlAndSlackChannel) {
+       const match = obj.url.match(/^(https:\/\/[^\/]+\.com\/)/);
+      if (match) {
+        baseUrlSet.add(match[1]);
+      }
+    }
+    return Array.from(baseUrlSet) ;
+   }
+  
 
   async findAndFixWebsitesGrammaticalErrors(domainId?: number, batchSize?: number) {
     const state = this.globalState.getAllState();

@@ -76,12 +76,12 @@ export class SpellCheckerController {
       }
     }
     // used by front end team to get active urls from google ads
-    @Get('/googleBasedActiveUrls')
-    async googleBasedActiveUrls(
+    @Get('/activeUrls')
+    async activeUrls(
       @Query('hostname', ) hostname: string,
       ) {
         try {
-          const urls = await this.spellCheckerService.googleBasedActiveUrls(hostname );
+          const urls = await this.spellCheckerService.activeUrls(hostname );
           return urls;
         } catch (error) {
           logToCloudWatch(`❌ Error fetching Google Ads for domain ${hostname}: ${error.message}`, "ERROR");
@@ -103,7 +103,15 @@ export class SpellCheckerController {
     }
   }
   
- 
+  @Get('/testLongWait')
+  async testLongWait() {
+    for (let i = 1; i <= 200; i++) {
+      logToCloudWatch(`Waiting... second ${i}`);
+      await new Promise(resolve => setTimeout(resolve, 1000));
+    }
+    logToCloudWatch('Done waiting 200 seconds!');
+    return { message: 'Waited 200 seconds, check logs for progress.' };
+  }
 
   @Get(':id')
   findOne(@Param('id') id: string) {
@@ -119,4 +127,6 @@ export class SpellCheckerController {
   remove(@Param('id') id: string) {
     return this.spellCheckerService.remove(+id);
   }
+
+ 
 }

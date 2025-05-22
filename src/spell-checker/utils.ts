@@ -513,6 +513,9 @@ export   function checkIfLineupExists(html: string): boolean {
             continue;
         }
 
+ 
+  
+        // Build the SOAP request dynamically
         const soap = `
   <s:Envelope xmlns:i="http://www.w3.org/2001/XMLSchema-instance" xmlns:s="http://schemas.xmlsoap.org/soap/envelope/">
   <s:Header xmlns="https://bingads.microsoft.com/Reporting/v13">
@@ -529,11 +532,11 @@ export   function checkIfLineupExists(html: string): boolean {
         <ReturnOnlyCompleteData>true</ReturnOnlyCompleteData>
         <Aggregation>Daily</Aggregation>
         <Columns>
-          <string>TimePeriod</string>
-          <string>CampaignName</string>
-          <string>AdGroupName</string>
-          <string>AdId</string>
-          <string>FinalURL</string>
+         <AdPerformanceReportColumn >TimePeriod</AdPerformanceReportColumn >
+         <AdPerformanceReportColumn >CampaignName</AdPerformanceReportColumn >
+         <AdPerformanceReportColumn >AdGroupName</AdPerformanceReportColumn >
+          <AdPerformanceReportColumn >AdId</AdPerformanceReportColumn >
+          <AdPerformanceReportColumn >FinalURL</AdPerformanceReportColumn >
         </Columns>
         <Scope>
           <AccountIds xmlns:a="http://schemas.microsoft.com/2003/10/Serialization/Arrays">
@@ -548,26 +551,32 @@ export   function checkIfLineupExists(html: string): boolean {
     </SubmitGenerateReportRequest>
   </s:Body>
 </s:Envelope>
-      `
         
-          const response = await axios.post(
-            'https://reporting.api.bingads.microsoft.com/Api/Advertiser/Reporting/v13/ReportingService.svc',
-            soap,
-            {
-              headers: {
-                'Content-Type': 'text/xml; charset=utf-8',
-                'SOAPAction': 'SubmitGenerateReport',
-              },
-              timeout: 60000,
-            }
-          );
-        
-          const parser = new XMLParser();
-          const json = parser.parse(response.data);
-          results.push(json?.['s:Envelope']?.['s:Body']?.SubmitGenerateReportResponse?.ReportRequestId) 
+        `;
         
 
-    
+        try {
+     
+  const response = await axios.post(
+    'https://campaign.api.bingads.microsoft.com/Api/Advertiser/CampaignManagement/v13/CampaignManagementService.svc',
+    soap,
+    {
+      headers: {
+        'Content-Type': 'text/xml; charset=utf-8',
+        'SOAPAction': 'GetCampaignsByAccountId',
+      },
+    }
+  );
+            const parser = new XMLParser();
+            const json = parser.parse(response.data);
+            const campaigns = json?.['s:Envelope']?.['s:Body']?.GetCampaignsByAccountIdResponse?.Campaigns?.Campaign || [];
+            let wrongcredentials =json?.['s:Envelope']["s:Body"]["s:Fault"].detail.AdApiFaultDetail.Errors.AdApiError.Code
+            if(wrongcredentials  ){
+                logToCloudWatch(`AuthenticationTokenExpired for domain ${domain.hostname}`, 'ERROR');
+             }
+         } catch (error) {
+            console.error(`Error fetching Bing Ads for domain ${domain.hostname}:`, error.message);
+         }
     }
 
     return results;
