@@ -431,7 +431,7 @@ export async function fetchIgnoreWords(kidonClient: any, configId: string): Prom
         .map((word: string) => word.replace(/[\n"']/g, '').trim())
         .filter(Boolean);
 }
-
+ 
 export async function sendGoogleAdsErrorReports(errors: { spelling: any[], capitalization: any[], outdatedYears: any[] }, state: any) {
     await KF.sendSlackAlert('*🚨 Google Ads Content Errors:*', slackChannels.CONTENT, state.slackToken);
     
@@ -675,3 +675,8 @@ export function isLocal(){
 export async function generateBrowser(){
     return process.env.ENVIRONMENT == 'local' ? await puppeteer.launch({ headless: true,   protocolTimeout: 60000,}) : await puppeteer.launch({ headless: false,  executablePath: '/usr/local/bin/chrome', protocolTimeout: 60000,});
 }
+
+export const extractBaseUrl = (url: string) => {
+    const match = url.match(/^(https?:\/\/[^\/]*?\.com)/i);
+    return match ? match[1] : null;
+  };

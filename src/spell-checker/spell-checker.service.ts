@@ -25,7 +25,7 @@ import puppeteer from 'puppeteer';
 import { BigQuery } from '@google-cloud/bigquery';
 import dayjs from 'dayjs';
 import { invocaColumns } from './consts';
-
+import { extractBaseUrl } from './utils';
 @Injectable()
 export class SpellCheckerService {
 
@@ -419,9 +419,13 @@ export class SpellCheckerService {
         const state =   this.globalState.getAllState(); 
         await establishInvocaConnection();
         const transactions = await  fetchAllTransactions();
-       const landingpages = isLocal() ? new Set(transactions.filter((tr)=>tr.landing_page).map((trl)=>trl.landing_page)) : new Set(transactions.filter((tr)=>tr.landing_page).slice(0,5).map((trl)=>trl.landing_page) );
+       const landingpages = isLocal() ? transactions.filter((tr)=>tr.landing_page).map((trl)=>trl.landing_page) : transactions.filter((tr)=>tr.landing_page).slice(0,5).map((trl)=>trl.landing_page) ;
+       const uniqueLandingpages :string[] = Array.from(new Set(landingpages.map(extractBaseUrl).filter(Boolean)));
+        
+      
+       
     let invoclessPages = [];
-       for(const landingpage of Array.from(landingpages)){
+       for(const landingpage of uniqueLandingpages){
         logToCloudWatch(` processing landingpage: ${landingpage}`, "INFO", 'invoca lineup validation');
             const browser =  await generateBrowser()
             const page = await browser.newPage();
@@ -434,11 +438,11 @@ export class SpellCheckerService {
             } 
        }
        logToCloudWatch(`invoclesspages: ${invoclessPages}`, "INFO", 'invoca lineup validation');
-
+      
        if(invoclessPages.length > 0){
-        await KF.sendSlackAlert(`*Invoca Lineup Validation:*\n${invoclessPages.join('\n')}`, slackChannels.PERSONAL, state.slackToken);
+        await KF.sendSlackAlert(`*🚨Invoca Lineup Validation:*\n${invoclessPages.join('\n')}`, slackChannels.PERSONAL, state.slackToken);
        }else{
-        await KF.sendSlackAlert('*Invoca Lineup Validation:*\nNo invoca pages found', slackChannels.PERSONAL, state.slackToken);
+        await KF.sendSlackAlert('*🌿Invoca Lineup Validation:*\nNo invoca pages found', slackChannels.PERSONAL, state.slackToken);
        }
 
        return 'invoca lineup validation finished';
