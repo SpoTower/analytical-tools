@@ -18,7 +18,11 @@ const { JSDOM } = require('jsdom');
 import * as KF from '@spotower/my-utils';
 import {slackChannels}  from './consts';
 import { log } from 'console';
- 
+import { XMLParser } from 'fast-xml-parser';
+import { googleAdsLandingPageQuery } from './gaqlQuerys';
+import dayjs from 'dayjs';
+import { invocaColumns } from './consts';
+import puppeteer from 'puppeteer';
 export async function fetchGoogleAds(domain: Domain, companies: Company[], tokens:any, query:string ) {
     logToCloudWatch(`Entering fetchGoogleAds, fetching google ads for domain ${domain.id}`);
     console.log(companies.find((c)=>c.id == domain.companyId ).name);
@@ -427,7 +431,7 @@ export async function fetchIgnoreWords(kidonClient: any, configId: string): Prom
         .map((word: string) => word.replace(/[\n"']/g, '').trim())
         .filter(Boolean);
 }
-
+ 
 export async function sendGoogleAdsErrorReports(errors: { spelling: any[], capitalization: any[], outdatedYears: any[] }, state: any) {
     await KF.sendSlackAlert('*🚨 Google Ads Content Errors:*', slackChannels.CONTENT, state.slackToken);
     
@@ -476,3 +480,256 @@ export   function checkIfLineupExists(html: string): boolean {
   // ✅ Return true if either found
   return foundInDOM || foundInRawHtml;
  }
+
+
+
+
+
+
+
+
+
+ export async function getActiveBingUrls(state) {
+    const results = [];
+    const bingDomains = state.domains.filter((d)=>d.bingAdsId)
+
+    for (const domain of bingDomains) {
+        // Find the company for this domain
+        const company = state.companies.find(c => c.id === domain.companyId);
+        if (!company) {
+            console.warn(`No company found for domain ${domain.hostname}`);
+            continue;
+        }
+
+        // Get the Bing access token for this company
+        const accessToken = await KF.getBingAccessTokenFromRefreshToken(company);
+
+        // Get Bing account/customer IDs from the domain or company object
+        const customAccountId = domain.bingAdsId 
+        const customerId = company.bingAccountId
+        const developerToken = company.bingDeveloperToken
+
+        // Skip if any required Bing info is missing
+        if (!customAccountId || !customerId || !developerToken || !accessToken) {
+            console.warn(`Missing Bing credentials for domain ${domain.hostname}`);
+            continue;
+        }
+
+ 
+  
+        // Build the SOAP request dynamically
+        const soap = `
+  <s:Envelope xmlns:i="http://www.w3.org/2001/XMLSchema-instance" xmlns:s="http://schemas.xmlsoap.org/soap/envelope/">
+  <s:Header xmlns="https://bingads.microsoft.com/Reporting/v13">
+    <AuthenticationToken>${accessToken}</AuthenticationToken>
+    <CustomerAccountId>${customAccountId}</CustomerAccountId>
+    <CustomerId>${customerId}</CustomerId>
+    <DeveloperToken>${developerToken}</DeveloperToken>
+  </s:Header>
+  <s:Body>
+    <SubmitGenerateReportRequest xmlns="https://bingads.microsoft.com/Reporting/v13">
+      <ReportRequest xmlns:i="http://www.w3.org/2001/XMLSchema-instance" i:type="AdPerformanceReportRequest">
+        <Format>Csv</Format>
+        <ReportName>ActiveUrlsReport</ReportName>
+        <ReturnOnlyCompleteData>true</ReturnOnlyCompleteData>
+        <Aggregation>Daily</Aggregation>
+        <Columns>
+         <AdPerformanceReportColumn >TimePeriod</AdPerformanceReportColumn >
+         <AdPerformanceReportColumn >CampaignName</AdPerformanceReportColumn >
+         <AdPerformanceReportColumn >AdGroupName</AdPerformanceReportColumn >
+          <AdPerformanceReportColumn >AdId</AdPerformanceReportColumn >
+          <AdPerformanceReportColumn >FinalURL</AdPerformanceReportColumn >
+        </Columns>
+        <Scope>
+          <AccountIds xmlns:a="http://schemas.microsoft.com/2003/10/Serialization/Arrays">
+            <a:long>${customAccountId}</a:long>
+          </AccountIds>
+          <Scope>Account</Scope>
+        </Scope>
+        <Time>
+          <PredefinedTime>LastSevenDays</PredefinedTime>
+        </Time>
+      </ReportRequest>
+    </SubmitGenerateReportRequest>
+  </s:Body>
+</s:Envelope>
+        
+        `;
+        
+
+        try {
+     
+  const response = await axios.post(
+    'https://campaign.api.bingads.microsoft.com/Api/Advertiser/CampaignManagement/v13/CampaignManagementService.svc',
+    soap,
+    {
+      headers: {
+        'Content-Type': 'text/xml; charset=utf-8',
+        'SOAPAction': 'GetCampaignsByAccountId',
+      },
+    }
+  );
+            const parser = new XMLParser();
+            const json = parser.parse(response.data);
+            const campaigns = json?.['s:Envelope']?.['s:Body']?.GetCampaignsByAccountIdResponse?.Campaigns?.Campaign || [];
+            let wrongcredentials =json?.['s:Envelope']["s:Body"]["s:Fault"].detail.AdApiFaultDetail.Errors.AdApiError.Code
+            if(wrongcredentials  ){
+                logToCloudWatch(`AuthenticationTokenExpired for domain ${domain.hostname}`, 'ERROR');
+             }
+         } catch (error) {
+            console.error(`Error fetching Bing Ads for domain ${domain.hostname}:`, error.message);
+         }
+    }
+
+    return results;
+}
+
+
+
+ export async function getActiveGooglUrls(state: any){
+    let domainsToProcess = state.domains.filter((d: Domain) => d.googleAdsId);
+    const allTokens = await Promise.all(state.companies.map(async (c) => ({ company: c.name, token: await KF.getGoogleAuthToken(c) })));
+    
+
+   // ✅ Step 1: fetch lineups
+   const rawLineupResults = await processInBatches(
+       domainsToProcess.map((domain: Domain) => async () => {
+           try {
+               return await fetchLineups(domain, state.companies, allTokens, googleAdsLandingPageQuery);
+           } catch (error) {
+               logToCloudWatch(`❌ Error fetching Google Ads for domain ${domain.id}: ${error.message}`, "ERROR");
+               return { domain, results: [] };
+           }
+       }),
+       30
+   );
+   let urlAndSlackChannel = processLineupResults(rawLineupResults);
+   const baseUrlSet = new Set<string>();
+   for (const obj of urlAndSlackChannel) {
+      const match = obj.url.match(/^(https:\/\/[^\/]+\.com\/)/);
+     if (match) {
+       baseUrlSet.add(match[1]);
+     }
+   }
+   return Array.from(baseUrlSet) ;
+  }
+ 
+
+export async function establishInvocaConnection(){
+    const loginPage = await axios.get(`https://kolimnd.invoca.net/login`); //"https://<domain>/login"
+    const tokenMatch = loginPage.data.match(/<input[^>]+name="authenticity_token"[^>]+value="([^"]+)"/)[1];
+    const setCookieHeader = loginPage.headers['set-cookie'];
+    const cookies = setCookieHeader.map((cookie) => cookie.split(';')[0]).join('; ');
+
+    const myHeaders = new Headers();
+    myHeaders.append('Authorization', `Bearer ${tokenMatch}`);
+    myHeaders.append('Content-Type', 'application/x-www-form-urlencoded');
+    myHeaders.append('Referer', `https://kolimnd.invoca.net/login`);
+    myHeaders.append('Cookie', `${cookies}`);
+
+    const urlencoded = new URLSearchParams();
+    urlencoded.append('utf8', '✓');
+    urlencoded.append('authenticity_token', `${tokenMatch}`);
+    urlencoded.append('username', '^!&@(SPoToWER123@#');
+    urlencoded.append('password', 'talso@spotower.com');
+    urlencoded.append('commit', 'Log in');
+    urlencoded.append('submit_type', '');
+
+    const requestOptions: RequestInit = {
+        method: 'POST',
+        headers: myHeaders,
+        body: urlencoded,
+        redirect: 'follow' as RequestRedirect,
+    };
+
+    const res = await fetch(`https://kolimnd.invoca.net/login`, requestOptions);
+}
+
+  export async function fetchAllTransactions() {
+    const limit = 4000; // Maximum rows per invoca API request
+    let lastId = ''; // To track pagination (start_after_transaction_id)
+    let totalResults = [];
+    let hasMore = true;
+    const endDate = new Date();
+    const startDate = dayjs(endDate).subtract(1, 'day') 
+
+    while (hasMore) {
+        const url = `https://kolimnd.invoca.net/api/2022-09-29/affiliates/transactions/2054.json?from=${dayjs(startDate).format('YYYY-MM-DD')}&to=${dayjs(endDate).format('YYYY-MM-DD')}&oauth_token=3IqceMPe879Sk90AhFg9u7rNcqBjIan1tCzMIezOOBE&include_columns=${invocaColumns.join(',')}&limit=4000
+        ${lastId ? `&start_after_transaction_id=${lastId}` : ''}`;
+        const response = await axios.get(url);
+        const transactions = response.data;
+        totalResults = [...totalResults, ...transactions];
+        if (transactions.length === limit) {
+            lastId = transactions[transactions.length - 1].complete_call_id;
+        } else {
+            hasMore = false;
+        }
+    }
+    return totalResults;
+};
+
+export function isLocal(){
+    return process.env.ENVIRONMENT == 'local';
+}
+
+export async function generateBrowser(){
+    return process.env.ENVIRONMENT == 'local'
+     ? 
+     await puppeteer.launch({ headless: true,   protocolTimeout: 60000,}) 
+     :
+      await puppeteer.launch({ headless: true,  executablePath: '/usr/local/bin/chrome', protocolTimeout: 60000,});
+}
+ 
+export const extractBaseUrl = (url: string) => {
+    const match = url.match(/^(https?:\/\/[^?]+)/i);
+    return match ? match[1] : null;
+  };
+  
+
+
+  export async function checkInvocaInDesktop(landingpage) {
+    const browser = await generateBrowser();
+    const page = await browser.newPage();
+
+    try {
+        await page.goto(landingpage, { waitUntil: 'networkidle2', timeout: 60000 });
+
+        const invocaScripts = await page.evaluate(() =>
+            Array.from(document.scripts)
+                .filter(script => script.src.toLowerCase().includes('invoca'))
+                .map(script => script.src)
+        );
+
+        return invocaScripts;
+    } catch (error) {
+        logToCloudWatch(`❌ Error in checkInvocaInDesktop ${landingpage}: ${error.message}`, "ERROR", 'invoca lineup validation');
+        return []; // Ensure safe return
+    } finally {
+        await browser.close(); // Always close browser
+    }
+}
+
+
+export async function checkInvocaInMobile(landingpage) {
+    const browser = await generateBrowser();
+    const page = await browser.newPage();
+    await page.setUserAgent(
+        'Mozilla/5.0 (iPhone; CPU iPhone OS 13_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/13.1.1 Mobile/15E148 Safari/604.1'
+    );
+    await page.setViewport({ width: 375, height: 812, isMobile: true });
+    await page.goto(landingpage, { waitUntil: 'networkidle2', timeout: 60000 });
+    try {
+    const invocaScripts = await page.evaluate(() =>
+        Array.from(document.scripts)
+            .filter(script => script.src.toLowerCase().includes('invoca'))
+            .map(script => script.src)
+    );
+    await browser.close();
+    return invocaScripts;
+} catch (error) {
+    logToCloudWatch(`❌ Error in checkInvocaInMobile ${landingpage}: ${error.message}  `, "ERROR", 'invoca lineup validation');
+    return [];
+} finally {
+    await browser.close();
+}
+}

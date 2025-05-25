@@ -6,9 +6,12 @@ import { UpdateGoogleDto } from './dto/update-google.dto';
  import {conversionActions,googleAdsSourceData} from './interfaces'
  const logger = new Logger('google-service');
  import { logToCloudWatch }  from 'src/logger';
+ import { v4 as uuidv4 } from 'uuid';
+
 @Controller('google')
 export class GoogleController {
   constructor(private readonly googleService: GoogleService) {}
+    generateAdsTaskMap = new Map<string, { status: string, result?: any, error?: string }>();
 
   //creating conversion names
   @Post('generateConversions')
@@ -29,17 +32,48 @@ export class GoogleController {
  
   //generating ads using gpt
   @Post('generateAds')
-  async generateAds(@Body() body: { sourceData: googleAdsSourceData,   } ) {
+  async generateAds(@Body() body: { sourceData: googleAdsSourceData }) {
+    logToCloudWatch('Entering generateAds endpoint. ', 'INFO', 'google');
     const { sourceData } = body;
+    const taskId = uuidv4();
+  
+    this.generateAdsTaskMap.set(taskId, { status: 'processing' });
+  
+    // Run in background without blocking the HTTP response
+    (async () => {
+ 
+      try {
+        const result = await this.googleService.generateAds(sourceData);
+        logToCloudWatch(`Ads generated successfully for task ${taskId}.`, 'INFO', 'google');
+        this.generateAdsTaskMap.set(taskId, { status: 'done', result });
+   
+      } catch (error) {
+        logToCloudWatch(`Error generating ads for task ${taskId}: ${error.message}`, 'ERROR', 'google');
+        this.generateAdsTaskMap.set(taskId, { status: 'error', error: error.message });
+      }
+    })();
+  
+    return { status: 'processing', taskId };
+  }
 
-    logger.log(' Entering generateAds endpoint. ');
+
+  @Get('generateAds/status/:taskId')
+  getGenerateAdsStatus(@Param('taskId') taskId: string) {
+  const task = this.generateAdsTaskMap.get(taskId);
+
+  if (!task) {
+    return { status: 'not_found' };
+  }
+  if(task.status === 'done'){
     try {
-       const creationResult = await this.googleService.generateAds(sourceData);
-       return { status: 'ok', data: creationResult };
-    } catch (error) {
-      return { status: 'error', count: '', message: error.message };
+      return task;
+    } catch (error) {} finally {
+      this.generateAdsTaskMap.delete(taskId);
     }
   }
+ 
+  
+}
 
 
   @Get()

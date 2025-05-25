@@ -3,7 +3,8 @@ import dayjs from 'dayjs';
 
 export function convertKeysToCamelCase(row: Record<string, any>) {
     return Object.fromEntries(
-        Object.entries(row).map(([key, value]) => [this.snakeToCamel(key), value])
+        Object.entries(row).map(([key, value]) => [snakeToCamel(key), value])
+         
     );
 }
 
