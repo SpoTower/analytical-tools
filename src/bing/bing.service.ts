@@ -78,11 +78,11 @@ export class BingService {
 
     const transformed = conversionActions.map((action) => ({
       name: action["Conversion Name Action"],
-      goal: 'primary', // or use logic to determine this
+      goal: 'secondary', // or use logic to determine this
       status: 'Active', // or extract from action if exists
       count: action["Count Type"],
       domain_id: domainId, // must be passed to the function
-      resource_name: action.resourceName  
+      resource_name: action.resourceName,
     }));
     
     let res =  await this.kidonClient('conversion_names_bing').insert(transformed);
