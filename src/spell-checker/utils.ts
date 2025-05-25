@@ -673,10 +673,10 @@ export function isLocal(){
 }
 
 export async function generateBrowser(){
-    return process.env.ENVIRONMENT == 'local' ? await puppeteer.launch({ headless: true,   protocolTimeout: 60000,}) : await puppeteer.launch({ headless: false,  executablePath: '/usr/local/bin/chrome', protocolTimeout: 60000,});
+    return process.env.ENVIRONMENT == 'local' ? await puppeteer.launch({ headless: true,   protocolTimeout: 60000,}) : await puppeteer.launch({ headless: true,  executablePath: '/usr/local/bin/chrome', protocolTimeout: 60000,});
 }
 
 export const extractBaseUrl = (url: string) => {
     const match = url.match(/^(https?:\/\/[^\/]*?\.com)/i);
     return match ? match[1] : null;
-  };
+  };  
