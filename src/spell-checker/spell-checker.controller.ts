@@ -120,7 +120,7 @@ export class SpellCheckerController {
   async invocaLineupValidation(@Query('hostname') hostname: string) {
     return this.spellCheckerService.invocaLineupValidation(hostname);
   }
-
+x
   @Get(':id')
   findOne(@Param('id') id: string) {
     return this.spellCheckerService.findOne(+id);
