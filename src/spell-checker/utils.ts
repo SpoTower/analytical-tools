@@ -673,10 +673,46 @@ export function isLocal(){
 }
 
 export async function generateBrowser(){
-    return process.env.ENVIRONMENT == 'local' ? await puppeteer.launch({ headless: true,   protocolTimeout: 60000,}) : await puppeteer.launch({ headless: true,  executablePath: '/usr/local/bin/chrome', protocolTimeout: 60000,});
+    return process.env.ENVIRONMENT == 'local'
+     ? 
+     await puppeteer.launch({ headless: true,   protocolTimeout: 60000,}) 
+     :
+      await puppeteer.launch({ headless: true,  executablePath: '/usr/local/bin/chrome', protocolTimeout: 60000,});
+}
+ 
+export const extractBaseUrl = (url: string) => {
+    const match = url.match(/^(https?:\/\/[^?]+)/i);
+    return match ? match[1] : null;
+  };
+  
+
+
+  export async function checkInvocaInDesktop(landingpage) {
+    const browser = await generateBrowser();
+    const page = await browser.newPage();
+    await page.goto(landingpage, { waitUntil: 'networkidle2', timeout: 60000 });
+    const invocaScripts = await page.evaluate(() =>
+        Array.from(document.scripts)
+            .filter(script => script.src.toLowerCase().includes('invoca'))
+            .map(script => script.src)
+    );
+    await browser.close();
+    return invocaScripts;
 }
 
-export const extractBaseUrl = (url: string) => {
-    const match = url.match(/^(https?:\/\/[^\/]*?\.com)/i);
-    return match ? match[1] : null;
-  };  
+export async function checkInvocaInMobile(landingpage) {
+    const browser = await generateBrowser();
+    const page = await browser.newPage();
+    await page.setUserAgent(
+        'Mozilla/5.0 (iPhone; CPU iPhone OS 13_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/13.1.1 Mobile/15E148 Safari/604.1'
+    );
+    await page.setViewport({ width: 375, height: 812, isMobile: true });
+    await page.goto(landingpage, { waitUntil: 'networkidle2', timeout: 60000 });
+    const invocaScripts = await page.evaluate(() =>
+        Array.from(document.scripts)
+            .filter(script => script.src.toLowerCase().includes('invoca'))
+            .map(script => script.src)
+    );
+    await browser.close();
+    return invocaScripts;
+}
