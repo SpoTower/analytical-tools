@@ -195,6 +195,7 @@ export async function   processInBatches(tasks: (() => Promise<any>)[], batchSiz
 
         for (const path of domain.paths) {
             let  actualUrl = url ? url :  `https://${domain.hostname}${path}`;
+            logToCloudWatch(`Fetching ${actualUrl}`, 'INFO', 'fetch Websites InnerHtml And Find Errors');
             try {
 
                 // getting the text of the page
@@ -233,6 +234,8 @@ export async function   processInBatches(tasks: (() => Promise<any>)[], batchSiz
         domainPagesInnerHtml = [];
     }
 
+    if(url) logToCloudWatch(`Found ${finalDomainData.length} errors for ${url} ${JSON.stringify(finalDomainData)}`, 'INFO', 'fetch Websites InnerHtml And Find Errors');
+    
     return finalDomainData; // Return accumulated results for all domains
 }
 
