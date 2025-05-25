@@ -419,11 +419,13 @@ export class SpellCheckerService {
         const state =   this.globalState.getAllState(); 
         await establishInvocaConnection();
         const transactions = await  fetchAllTransactions();
-       const landingpages = !isLocal() ? transactions.filter((tr)=>tr.landing_page).map((trl)=>trl.landing_page) : transactions.filter((tr)=>tr.landing_page).slice(0,5).map((trl)=>trl.landing_page) ;
-       const uniqueLandingpages :string[] = Array.from(new Set(landingpages.map(extractBaseUrl).filter(Boolean)));
-        
-      
-       
+       const landingpages =  !isLocal() ? transactions.filter((tr)=>tr.landing_page).map((trl)=>trl.landing_page) : transactions.filter((tr)=>tr.landing_page).slice(0,5).map((trl)=>trl.landing_page) ;
+       let uniqueLandingpages :string[] = Array.from(new Set(landingpages.map(extractBaseUrl).filter(Boolean)));
+        let domains = await this.kidonClient.raw('select * from domain') ;
+        domains = domains[0].map((d:Domain)=>d.hostname)
+        uniqueLandingpages = uniqueLandingpages.filter(lp =>!domains.some(d => lp.includes(d)));
+          
+             
     let invoclessPages = [];
     let invoclessPagesMobile = [];
     try {
