@@ -233,8 +233,8 @@ export class SpellCheckerService {
     const state = this.globalState.getAllState(); if (!state) return 'No state found';
 
 
-    const activeBingUrls = await getActiveBingUrls(state);
-    logToCloudWatch(`Active Bing URLs: ${JSON.stringify(activeBingUrls)}`, 'INFO');
+   // const activeBingUrls = await getActiveBingUrls(state);
+  //  logToCloudWatch(`Active Bing URLs: ${JSON.stringify(activeBingUrls)}`, 'INFO');
 
 
     let domainsToProcess = state.domains.filter((d: Domain) => d.googleAdsId);

@@ -76,7 +76,7 @@ export class SpellCheckerController {
       }
     }
     // used by front end team to get active urls from google ads
-    @Get('/activeUrls')
+    @Get('/googleBasedActiveUrls')
     async activeUrls(
       @Query('hostname', ) hostname: string,
       ) {
