@@ -384,7 +384,7 @@ export class SpellCheckerService {
       logToCloudWatch(`rows: ${JSON.stringify(rows)}`, "INFO", 'mobile and desktop traffic congruence validation');
      const desktopOnlyTraffick = /^(?!.*\([^)]*[MT\d][^)]*\)).*\(\s*D\s*\).*$/; // reject any parentheses that contain M, T or a digit, require a standalone "(D)" somewhere
      const incongruentTraffick = rows.filter(name=>desktopOnlyTraffick.test(name.campaign_name))
-     logToCloudWatch(`incongruentTraffick: ${JSON.stringify(incongruentTraffick)}`, "INFO", 'mobile and desktop traffic congruence validation');
+     logToCloudWatch(`incongruentTraffic: ${JSON.stringify(incongruentTraffick)}`, "INFO", 'mobile and desktop traffic congruence validation');
 
       // Deduplicate by campaign_id and campaign_name
       const uniqueErrors = [];
@@ -402,9 +402,9 @@ export class SpellCheckerService {
       const formatted = uniqueErrors.map(c =>
         `• *Campaign:* ${c.campaign_name}\n  *Campaign ID:* ${c.campaign_id}\n  *Domain:* ${c.domain_name}\n  *Device:* ${c.device}\n  *Date:* ${c.date?.value}\n  *Source:* ${c.media_source}\n  *Network:* ${c.network_type}\n`
       ).join('\n');
-      await KF.sendSlackAlert(`*Incongruent Traffick campaign names:*\n${formatted}`, slackChannels.CONTENT, state.slackToken);
+      await KF.sendSlackAlert(`*Incongruent Traffic campaign names:*\n${formatted}`, slackChannels.CONTENT, state.slackToken);
     } else {
-      await KF.sendSlackAlert('No incongruent traffick found', slackChannels.CONTENT, state.slackToken);
+      await KF.sendSlackAlert('No incongruent traffic found', slackChannels.CONTENT, state.slackToken);
     }
 
      return 'mobile and desktop traffic congruence validation finished';
