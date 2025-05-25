@@ -19,9 +19,6 @@ export class BingController {
       logToCloudWatch(e.message, 'ERROR', 'bing');
       return { status: 'error', count: '', message: e.message };
     }      
-
-     
-  
    }
   
 
