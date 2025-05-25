@@ -3,5 +3,6 @@ export interface BingConversionAction {
     "Type": string;
     "Goal Category": string;
     "Count Type": string;
+    resourceName: string;
   }
   

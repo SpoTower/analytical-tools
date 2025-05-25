@@ -12,9 +12,9 @@ export class BingController {
 
     try {
       const { conversionActions, hostname, domainId } = body;
-      const res = await this.bingService.createConversionGoals(conversionActions, domainId);
-      await this.bingService.updateConversionNamesKidonTable(conversionActions,domainId);
-      return { status: 'ok', count: res.length };
+      const resourceNames = await this.bingService.createConversionGoals(conversionActions, domainId);
+      await this.bingService.updateConversionNamesKidonTable(conversionActions,resourceNames,domainId);
+      return { status: 'ok', count: resourceNames.length };
     }catch(e){
       logToCloudWatch(e.message, 'ERROR', 'bing');
       return { status: 'error', count: '', message: e.message };
