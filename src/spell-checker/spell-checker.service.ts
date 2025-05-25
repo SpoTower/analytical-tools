@@ -265,7 +265,7 @@ export class SpellCheckerService {
    }
   
 
-  async findAndFixWebsitesGrammaticalErrors(domainId?: number, batchSize?: number) {
+  async findAndFixWebsitesGrammaticalErrors(domainId?: number,   isTest?: boolean, url?: string) {
     const state = this.globalState.getAllState();
     const ignoredWords = await fetchIgnoreWords(this.kidonClient, '56');
 
@@ -286,13 +286,16 @@ export class SpellCheckerService {
          const chosenDomains = domainId ? state.domains.filter((d: Domain) => d.id === domainId) : state.domains.filter(d => recentlyVisitedDomains.some(r => r.domainName === d.hostname));
          chosenDomains.forEach((domain: Domain) => {domain.paths = englishPats.filter((p: Paths) => p.domainId === domain.id).map((p: Paths) => p.path).filter((p)=> p); });  // asign paths per domain
          // ✅ Step 3: fetch all paths' text,   check each word for errors and send result to mail
-         const detectedErrors =    await fetchWebsitesInnerHtmlAndFindErrors(chosenDomains, ignoredWords,state); //get inner html of websites
+         const detectedErrors =    await fetchWebsitesInnerHtmlAndFindErrors(chosenDomains, ignoredWords,state, url); //get inner html of websites
          const domainMessages = createErrorsTable(JSON.stringify(detectedErrors));
           await KF.sendSlackAlert('Web Sites Errors:', slackChannels.CONTENT, state.slackToken);
          
-         for (const message of domainMessages) {
+         if(!isTest){
+          for (const message of domainMessages) {
              await KF.sendSlackAlert(message, slackChannels.CONTENT, state.slackToken);
          }       
+         }
+         
  
 
         return `websites were processed by local spellchecker and sent to kidon to be sended by slack to content errors channel`;
@@ -413,8 +416,8 @@ export class SpellCheckerService {
   }
 
 
-
-  async invocaLineupValidation(hostname: string) {
+// url used if we want to check a specific url (1)
+  async invocaLineupValidation(hostname: string, url:string, isTest:boolean) {
         logToCloudWatch(`entering invoca lineup validation`, "INFO", 'invoca lineup validation');
         const state =   this.globalState.getAllState(); 
         await establishInvocaConnection();
@@ -429,23 +432,23 @@ export class SpellCheckerService {
     let invoclessPages = [];
     let invoclessPagesMobile = [];
     try {
-      
-      for (const landingpage of uniqueLandingpages) {
+      const landingpagesToCheck = url ? [url] : uniqueLandingpages; // if url is provided, we only check that url
+      for (const landingpage of landingpagesToCheck) {
           logToCloudWatch(`Processing landingpage (m+d): ${landingpage}`, "INFO", 'invoca lineup validation');
           const [isInvoca, isInvocaMobile] = await Promise.all([checkInvocaInDesktop(landingpage),checkInvocaInMobile(landingpage)]);
-          if ((isInvoca && isInvoca.length === 0)  )invoclessPages.push(landingpage);
+          if (isInvoca && isInvoca.length === 0) invoclessPages.push(landingpage);
           if ((isInvocaMobile && isInvocaMobile.length === 0)  )invoclessPagesMobile.push(landingpage);
     }
       
        logToCloudWatch(`invoclesspages: ${invoclessPages}`, "INFO", 'invoca lineup validation');
       
-       if(invoclessPages.length > 0){
+       if(invoclessPages.length > 0 && !isTest){
         await KF.sendSlackAlert(`*🚨Invoca Desktop Lineup Validation (no invoca tag in page scripts):*\n${invoclessPages.join('\n')}`, slackChannels.CONTENT, state.slackToken);
        }else{
         await KF.sendSlackAlert('*🌿Invoca Desktop Lineup Validation:*\nNo invoca pages found', slackChannels.CONTENT, state.slackToken);
        }
 
-       if(invoclessPagesMobile.length > 0){
+       if(invoclessPagesMobile.length > 0 && !isTest){
         await KF.sendSlackAlert(`*🚨Invoca Mobile Lineup Validation (no invoca tag in page scripts):*\n${invoclessPagesMobile.join('\n')}`, slackChannels.CONTENT, state.slackToken);
        }else{
         await KF.sendSlackAlert('*🌿Invoca Mobile Lineup Validation:*\nNo invoca pages found', slackChannels.CONTENT, state.slackToken);

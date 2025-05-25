@@ -60,18 +60,29 @@ export class BingService {
   }
 
 
-  async updateConversionNamesKidonTable(conversionActions: BingConversionAction[],  domainId: number) {
+  async updateConversionNamesKidonTable(conversionActions: BingConversionAction[],  resourceNames: string[], domainId: number) {
     logToCloudWatch('Entering updateConversionNamesKidonTable endpoint. '    );
     if(conversionActions.length == 0) {
       logToCloudWatch('No conversion actions to update', 'INFO', 'bing');
       return;
     }
+    if(conversionActions.length != resourceNames.length) {
+      logToCloudWatch('Conversion actions and resource names length mismatch, some conversion action were created, but bing conversions names table was not updated', 'ERROR', 'bing');
+      return;
+    }
+  // attaching the resource name from bing response to the conversion action
+    conversionActions = conversionActions.map((action, index) => ({
+      ...action,
+      resourceName: resourceNames[index],
+    }));
+
     const transformed = conversionActions.map((action) => ({
       name: action["Conversion Name Action"],
-      goal: 'primary', // or use logic to determine this
+      goal: 'secondary', // or use logic to determine this
       status: 'Active', // or extract from action if exists
       count: action["Count Type"],
       domain_id: domainId, // must be passed to the function
+      resource_name: action.resourceName,
     }));
     
     let res =  await this.kidonClient('conversion_names_bing').insert(transformed);
