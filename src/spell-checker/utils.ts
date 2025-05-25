@@ -677,6 +677,7 @@ export async function generateBrowser(){
 }
 
 export const extractBaseUrl = (url: string) => {
-    const match = url.match(/^(https?:\/\/[^\/]*?\.com)/i);
+    const match = url.match(/^(https?:\/\/[^?]+)/i);
     return match ? match[1] : null;
-  };  
+  };
+  
