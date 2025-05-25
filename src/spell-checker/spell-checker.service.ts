@@ -440,9 +440,9 @@ export class SpellCheckerService {
        logToCloudWatch(`invoclesspages: ${invoclessPages}`, "INFO", 'invoca lineup validation');
       
        if(invoclessPages.length > 0){
-        await KF.sendSlackAlert(`*🚨Invoca Lineup Validation (no invoca tag in page scripts):*\n${invoclessPages.join('\n')}`, slackChannels.CONTENT, state.slackToken);
+        await KF.sendSlackAlert(`*🚨Invoca Desktop Lineup Validation (no invoca tag in page scripts):*\n${invoclessPages.join('\n')}`, slackChannels.CONTENT, state.slackToken);
        }else{
-        await KF.sendSlackAlert('*🌿Invoca Lineup Validation:*\nNo invoca pages found', slackChannels.CONTENT, state.slackToken);
+        await KF.sendSlackAlert('*🌿Invoca Desktop Lineup Validation:*\nNo invoca pages found', slackChannels.CONTENT, state.slackToken);
        }
 
        if(invoclessPagesMobile.length > 0){
