@@ -188,7 +188,7 @@ export async function   processInBatches(tasks: (() => Promise<any>)[], batchSiz
         let domainPagesInnerHtml: websiteText[] = []; // Store results per domain
 
         for (const path of domain.paths) {
-            const url = `https://${domain.hostname}/home-2022/`;
+            const url = `https://${domain.hostname}${path}`;
             try {
 
                 // getting the text of the page
