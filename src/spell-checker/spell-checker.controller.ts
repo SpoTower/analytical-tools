@@ -77,11 +77,11 @@ export class SpellCheckerController {
     }
     // used by front end team to get active urls from google ads
     @Get('/googleBasedActiveUrls')
-    async googleBasedActiveUrls(
+    async activeUrls(
       @Query('hostname', ) hostname: string,
       ) {
         try {
-          const urls = await this.spellCheckerService.googleBasedActiveUrls(hostname );
+          const urls = await this.spellCheckerService.activeUrls(hostname );
           return urls;
         } catch (error) {
           logToCloudWatch(`❌ Error fetching Google Ads for domain ${hostname}: ${error.message}`, "ERROR");
@@ -111,6 +111,13 @@ export class SpellCheckerController {
     }
     logToCloudWatch('Done waiting 200 seconds!');
     return { message: 'Waited 200 seconds, check logs for progress.' };
+  }
+
+
+// fetching data from invoca transactions repor, iterates over them with pupeteer and searchinf if there is invoca tag in the dom and script sections
+  @Get('/invocaLineupValidation')
+  async invocaLineupValidation(@Query('hostname') hostname: string) {
+    return this.spellCheckerService.invocaLineupValidation(hostname);
   }
 
   @Get(':id')
