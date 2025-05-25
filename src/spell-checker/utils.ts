@@ -690,15 +690,25 @@ export const extractBaseUrl = (url: string) => {
   export async function checkInvocaInDesktop(landingpage) {
     const browser = await generateBrowser();
     const page = await browser.newPage();
-    await page.goto(landingpage, { waitUntil: 'networkidle2', timeout: 60000 });
-    const invocaScripts = await page.evaluate(() =>
-        Array.from(document.scripts)
-            .filter(script => script.src.toLowerCase().includes('invoca'))
-            .map(script => script.src)
-    );
-    await browser.close();
-    return invocaScripts;
+
+    try {
+        await page.goto(landingpage, { waitUntil: 'networkidle2', timeout: 60000 });
+
+        const invocaScripts = await page.evaluate(() =>
+            Array.from(document.scripts)
+                .filter(script => script.src.toLowerCase().includes('invoca'))
+                .map(script => script.src)
+        );
+
+        return invocaScripts;
+    } catch (error) {
+        logToCloudWatch(`❌ Error in checkInvocaInDesktop ${landingpage}: ${error.message}`, "ERROR", 'invoca lineup validation');
+        return []; // Ensure safe return
+    } finally {
+        await browser.close(); // Always close browser
+    }
 }
+
 
 export async function checkInvocaInMobile(landingpage) {
     const browser = await generateBrowser();
@@ -708,6 +718,7 @@ export async function checkInvocaInMobile(landingpage) {
     );
     await page.setViewport({ width: 375, height: 812, isMobile: true });
     await page.goto(landingpage, { waitUntil: 'networkidle2', timeout: 60000 });
+    try {
     const invocaScripts = await page.evaluate(() =>
         Array.from(document.scripts)
             .filter(script => script.src.toLowerCase().includes('invoca'))
@@ -715,4 +726,10 @@ export async function checkInvocaInMobile(landingpage) {
     );
     await browser.close();
     return invocaScripts;
+} catch (error) {
+    logToCloudWatch(`❌ Error in checkInvocaInMobile ${landingpage}: ${error.message}  `, "ERROR", 'invoca lineup validation');
+    return [];
+} finally {
+    await browser.close();
+}
 }
