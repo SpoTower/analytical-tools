@@ -425,6 +425,7 @@ export class SpellCheckerService {
       
        
     let invoclessPages = [];
+    try {
        for(const landingpage of uniqueLandingpages){
         logToCloudWatch(` processing landingpage: ${landingpage}`, "INFO", 'invoca lineup validation');
             const browser =  await generateBrowser()
@@ -437,6 +438,8 @@ export class SpellCheckerService {
               invoclessPages.push(landingpage);
             } 
        }
+   
+      
        logToCloudWatch(`invoclesspages: ${invoclessPages}`, "INFO", 'invoca lineup validation');
       
        if(invoclessPages.length > 0){
@@ -445,7 +448,11 @@ export class SpellCheckerService {
         await KF.sendSlackAlert('*🌿Invoca Lineup Validation:*\nNo invoca pages found', slackChannels.PERSONAL, state.slackToken);
        }
 
-       return 'invoca lineup validation finished';
+       return 'invoca lineup validation finished'; 
+      } catch (error) {
+        logToCloudWatch(`❌ Error in invocaLineupValidation: ${error.message} |||||| ${JSON.stringify(error)}`, "ERROR", 'invoca lineup validation');
+        return `Error in invocaLineupValidation: ${error.message}`;
+      }
    }
  
   create(createSpellCheckerDto: CreateSpellCheckerDto) {
