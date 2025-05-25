@@ -179,21 +179,27 @@ export async function   processInBatches(tasks: (() => Promise<any>)[], batchSiz
   }
 
 
-  export async function fetchWebsitesInnerHtmlAndFindErrors(domains: Domain[], ignoreList: string[], state: any): Promise<any[]> {
+  export async function fetchWebsitesInnerHtmlAndFindErrors(domains: Domain[], ignoreList: string[], state: any, url?: string): Promise<any[]> {
     logToCloudWatch('Entering fetchWebsitesInnerHtml');
 
     let finalDomainData: websiteText[] = []; // Accumulate results for all domains
+
+    if(url){
+       domains = domains.slice(0,1);
+       domains[0].paths = [url];
+    }
+ 
 
     for (const domain of domains) {  
         let domainPagesInnerHtml: websiteText[] = []; // Store results per domain
 
         for (const path of domain.paths) {
-            const url = `https://${domain.hostname}${path}`;
+            let  actualUrl = url ? url :  `https://${domain.hostname}${path}`;
             try {
 
                 // getting the text of the page
-                const { data: html } = await axios.get(url);
-                const dom = new JSDOM(html, { url });
+                const { data: html } = await axios.get(actualUrl);
+                const dom = new JSDOM(html, { actualUrl});
                 const article = new Readability(dom.window.document).parse();
 
                 // getting the relevant html text
@@ -201,9 +207,9 @@ export async function   processInBatches(tasks: (() => Promise<any>)[], batchSiz
                 const titles = $('title').map((_, el) => $(el).text()).get();
 
 
-                domainPagesInnerHtml.push({ domain: domain.id, fullPath: url, innerHtml: article.textContent, titleElement: titles.join(' ') });
+                domainPagesInnerHtml.push({ domain: domain.id, fullPath: actualUrl, innerHtml: article.textContent, titleElement: titles.join(' ') });
             } catch (error) {
-                logToCloudWatch(`Failed to fetch ${url}: ${error.message}`);
+                logToCloudWatch(`Failed to fetch ${actualUrl}: ${error.message}`);
             }
         }
         // debug - domainPagesInnerHtml[0].innerHtml = 'Thehre are otgher metfhods to protect devieces '; domainPagesInnerHtml[0].titleElement = '2023'
