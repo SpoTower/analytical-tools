@@ -115,6 +115,7 @@ export class SpellCheckerController {
 
 
 // fetching data from invoca transactions repor, iterates over them with pupeteer and searchinf if there is invoca tag in the dom and script sections
+// iterate only over non-spotower urls
   @Get('/invocaLineupValidation')
   async invocaLineupValidation(@Query('hostname') hostname: string) {
     return this.spellCheckerService.invocaLineupValidation(hostname);
