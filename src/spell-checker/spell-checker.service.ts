@@ -431,30 +431,50 @@ export class SpellCheckerService {
      logToCloudWatch(`incongruentTraffic: ${JSON.stringify(incongruentMobileDesctopTraffick)}`, "INFO", 'mobile and desktop traffic congruence validation');
 
       // Deduplicate by campaign_id and campaign_name
-      const uniqueErrors = [];
+      const uniqueErrorsMobile = [];
       const seen = new Set();
       for (const c of incongruentMobileDesctopTraffick) {
         const key = `${c.campaign_id}||${c.campaign_name}`;
         if (!seen.has(key)) {
           seen.add(key);
-          uniqueErrors.push(c);
+          uniqueErrorsMobile.push(c);
         }
       }
  
+      const uniqueErrorsDesktop = [];
+      const seenDesktop = new Set();
+      for (const c of incongruentDesctopMobileTraffick) {
+        const key = `${c.campaign_id}||${c.campaign_name}`;
+        if (!seenDesktop.has(key)) {
+          seenDesktop.add(key); 
+          uniqueErrorsDesktop.push(c);
+        }
+      }
 
 
-     if (uniqueErrors.length > 0) {
-      const formatted = uniqueErrors.map(c =>
+     if (uniqueErrorsMobile.length > 0) {
+      const formatted = uniqueErrorsMobile.map(c =>
         `• *Campaign:* ${c.campaign_name}\n  *Campaign ID:* ${c.campaign_id}\n  *Domain:* ${c.domain_name}\n  *Device:* ${c.device}\n  *Date:* ${c.date?.value}\n  *Source:* ${c.media_source}\n  *Network:* ${c.network_type}\n`
       ).join('\n');
-      await KF.sendSlackAlert(`*🚨Incongruent Traffic campaign names:*\n${formatted}`, slackChannels.CONTENT, state.slackToken);
+      await KF.sendSlackAlert(`*🚨Incongruent Traffic campaign names (should be mobile only, but has desktop traffic):*\n${formatted}`, slackChannels.CONTENT, state.slackToken);
+    } 
+     if (uniqueErrorsDesktop.length > 0) {
+      const formatted = uniqueErrorsDesktop.map(c =>
+        `• *Campaign:* ${c.campaign_name}\n  *Campaign ID:* ${c.campaign_id}\n  *Domain:* ${c.domain_name}\n  *Device:* ${c.device}\n  *Date:* ${c.date?.value}\n  *Source:* ${c.media_source}\n  *Network:* ${c.network_type}\n`
+      ).join('\n');
+      await KF.sendSlackAlert(`*🚨Incongruent Traffic campaign names (should be desktop only, but has mobile traffic):*\n${formatted}`, slackChannels.CONTENT, state.slackToken);
     } else {
       await KF.sendSlackAlert('🌿No incongruent traffic found', slackChannels.CONTENT, state.slackToken);
     }
 
+
+
+
+
+
      return 'mobile and desktop traffic congruence validation finished';
      } catch (error) {
- 
+
       logToCloudWatch(`❌ Error in mobileAndDesktopTrafficCongruenceValidation: ${error.message} |||||| ${JSON.stringify(error)}`, "ERROR", 'mobile and desktop traffic congruence validation');
       return `Error in mobileAndDesktopTrafficCongruenceValidation: ${error.message}`;
     }
