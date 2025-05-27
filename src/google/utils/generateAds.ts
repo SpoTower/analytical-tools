@@ -2,6 +2,43 @@ import { promises as fs } from 'fs'
 import * as path from 'path'
 import { ConstantHeadersAndDescriptions } from '../interfaces'
 
+// Utility to enforce length and replace years
+function cleanAdText(text: string, maxLength: number): string {
+  // First remove any trailing character count like "(24)" or " - 24 characters"
+  let cleaned = text
+    .replace(/\s*-\s*\d+\s*characters?$/, '')  // Remove " - XX characters"
+    .replace(/\s*\(\d+\)$/, '')                // Remove "(XX)"
+    .replace(/\s*-\s*\d+$/, '');               // Remove " - XX"
+
+  // Replace years with {CUSTOMIZER.Year}
+  cleaned = cleaned.replace(/\b(19|20)\d{2}\b/g, '{CUSTOMIZER.Year}');
+  
+  // Check if we have any {CUSTOMIZER.Year} in the text
+  const customizerMatches = cleaned.match(/{CUSTOMIZER\.Year}/g);
+  const customizerCount = customizerMatches ? customizerMatches.length : 0;
+  
+  // Only adjust length if we actually have {CUSTOMIZER.Year} in the text
+  if (customizerCount > 0) {
+    const customizerLength = '{CUSTOMIZER.Year}'.length;
+    const effectiveLength = cleaned.length - (customizerCount * customizerLength);
+    
+    // Truncate if necessary
+    if (effectiveLength > maxLength) {
+      // Try to cut at the last space before maxLength
+      const cut = cleaned.lastIndexOf(' ', maxLength + (customizerCount * customizerLength));
+      cleaned = cleaned.slice(0, cut > 0 ? cut : maxLength + (customizerCount * customizerLength));
+    }
+  } else {
+    // If no {CUSTOMIZER.Year}, just truncate normally
+    if (cleaned.length > maxLength) {
+      const cut = cleaned.lastIndexOf(' ', maxLength);
+      cleaned = cleaned.slice(0, cut > 0 ? cut : maxLength);
+    }
+  }
+  
+  return cleaned;
+}
+
 type FieldInstructions = {
     [fieldName: string]: string[] // array of values per row
   }
@@ -33,24 +70,26 @@ export function extractHeadlinesAndDescriptions(
   
   const concepts = raw.split(/\*\*Ad Concept \d+:.*?\*\*/).filter(Boolean)
   for (const concept of concepts) {
-    const lines = concept.split('\n').map(line => line.trim()).filter(line => /^\d+\.\s+/.test(line)) // lines starting with numbers
+    const lines = concept.split('\n').map(line => line.trim()).filter(line => /^\d+\.\s+/.test(line))
     
     // Extract and clean headlines 1-6 from GPT response
     const headlines = lines.slice(0, 6).map(line => {
       // Remove both the leading number and the trailing character count
-      return line
+      const headline = line
         .replace(/^\d+\.\s*/, '')      
         .replace(/\s*-\s*\d+\s*characters$/, '')  
-        .replace(/\s*-\s*\d+$/, '');   
+        .replace(/\s*-\s*\d+$/, '');
+      return cleanAdText(headline, 30); // Enforce 30 char limit
     });
     
     // Extract and clean descriptions 1-2 from GPT response
     const descriptions = lines.slice(15, 17).map(line => {
       // Remove both the leading number and the trailing character count
-      return line
-        .replace(/^\d+\.\s*/, '')      // Remove leading number with dot
-        .replace(/\s*-\s*\d+\s*characters$/, '')  // Remove trailing " - XX characters"
-        .replace(/\s*-\s*\d+$/, '');   // Remove trailing " - XX"
+      const description = line
+        .replace(/^\d+\.\s*/, '')
+        .replace(/\s*-\s*\d+\s*characters$/, '')
+        .replace(/\s*-\s*\d+$/, '');
+      return cleanAdText(description, 90); // Enforce 90 char limit
     });
       
     // Clone base template
@@ -67,7 +106,7 @@ export function extractHeadlinesAndDescriptions(
       if (!value) {
         console.warn(`[HEADLINE] Filling Headline ${i} with empty value! Index in constantContent.headlines: ${i - 7}`);
       }
-      adTemplate[`Headline ${i}`] = value || '';
+      adTemplate[`Headline ${i}`] = cleanAdText(value || '', 30);
     }
 
     // Fill descriptions 1-2 from GPT response
@@ -81,7 +120,7 @@ export function extractHeadlinesAndDescriptions(
       if (!value) {
         console.warn(`[DESCRIPTION] Filling Description ${i} with empty value! Index in constantContent.descriptions: ${i - 3}`);
       }
-      adTemplate[`Description ${i}`] = value || '';
+      adTemplate[`Description ${i}`] = cleanAdText(value || '', 90);
     }
 
     // Add the Final URL using hostname
@@ -110,8 +149,8 @@ export function extractHeadlinesAndDescriptions(
       baseAd['Campaign'] = `${keyword} | M`;
       baseAd['Ad Group'] = adGroupName;
   
-      // Duplicate with | B
-      duplicatedAd['Campaign'] = `${keyword} | B`;
+      // Duplicate with | D
+      duplicatedAd['Campaign'] = `${keyword} | D`;
       duplicatedAd['Ad Group'] = adGroupName;
   
       finalAds.push(baseAd, duplicatedAd);
@@ -155,6 +194,7 @@ export function extractHeadlinesAndDescriptions(
       descriptions
     };
   }
+
 
 
   export async function exportToCsv(data: any[], filename: string, outputDir = 'exports') {
