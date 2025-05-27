@@ -267,6 +267,14 @@ export class SpellCheckerService {
 
   async findAndFixWebsitesGrammaticalErrors(domainId?: number,   isTest?: boolean, url?: string) {
     const state = this.globalState.getAllState();
+
+
+
+  logToCloudWatch(`state.paths.length: ${state.paths.length}`, 'INFO', 'findAndFixWebsitesGrammaticalErrors');
+      logToCloudWatch(`state.domains.length: ${state.domains.length}`, 'INFO', 'findAndFixWebsitesGrammaticalErrors');
+      return []
+
+    
     const ignoredWords = await fetchIgnoreWords(this.kidonClient, '56');
 
     if (!state || !ignoredWords.length) {
