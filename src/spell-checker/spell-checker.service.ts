@@ -38,9 +38,7 @@ export class SpellCheckerService {
       const state = this.globalState.getAllState();
 
 
-      logToCloudWatch(`state.paths.length: ${state.paths.length}`, 'INFO', 'findAndFixWebsitesGrammaticalErrors');
-      logToCloudWatch(`state.domains.length: ${state.domains.length}`, 'INFO', 'findAndFixWebsitesGrammaticalErrors');
-      return []
+     
 
       const ignoredWords = await fetchIgnoreWords(this.kidonClient, '56');
   
@@ -50,7 +48,9 @@ export class SpellCheckerService {
       }
   
        if(!state || !ignoredWords){ logToCloudWatch('No state/ No ignore words found'); }
-           // ✅ Step 1: filter non english paths out and assign relevant paths to domains
+       logToCloudWatch(`investing paths of domain 27 ${       state.paths.filter((sp)=>sp.domainId == 27 && sp.path.includes('inv')).map((fp)=>fp.path)       }`, 'INFO', 'findAndFixWebsitesGrammaticalErrors');
+
+            // ✅ Step 1: filter non english paths out and assign relevant paths to domains
           const englishPats =  state.paths.filter((p) => !ignoredLanguages.some(lang => p.path.includes(lang)));  //filter out non english paths
            // ✅ Step 2: filter out non visited domains, attach paths to each domain
   
@@ -61,6 +61,8 @@ export class SpellCheckerService {
            const chosenDomains = domainId ? state.domains.filter((d: Domain) => d.id === domainId) : state.domains.filter(d => recentlyVisitedDomains.some(r => r.domainName === d.hostname));
            chosenDomains.forEach((domain: Domain) => {domain.paths = englishPats.filter((p: Paths) => p.domainId === domain.id).map((p: Paths) => p.path).filter((p)=> p); });  // asign paths per domain
            // ✅ Step 3: fetch all paths' text,   check each word for errors and send result to mail
+           logToCloudWatch(`chosenDomains: ${chosenDomains.length}`, 'INFO', 'findAndFixWebsitesGrammaticalErrors');
+           logToCloudWatch(`gold paths: ${chosenDomains.find((ch)=>ch.hostname = 'top10goldinvestments.com').paths}`, 'INFO', 'findAndFixWebsitesGrammaticalErrors');
            const detectedErrors =    await fetchWebsitesInnerHtmlAndFindErrors(chosenDomains, ignoredWords,state, url); //get inner html of websites
            const domainMessages = createErrorsTable(JSON.stringify(detectedErrors));
             await KF.sendSlackAlert('Web Sites Errors:', slackChannels.CONTENT, state.slackToken);
