@@ -358,8 +358,10 @@ export class SpellCheckerService {
       const result = await this.kidonClient.raw('SELECT campaign_id, domain_name, COUNT(*) AS clicks FROM tracker_visitors WHERE device = "mobile" AND DATE(created_at) = CURDATE() - INTERVAL 1 DAY GROUP BY campaign_id, domain_name HAVING COUNT(*) > 5' );   
       logToCloudWatch(`result: ${JSON.stringify(result)}`, "INFO", 'mobile and desktop traffic congruence validation');
       const campaignIds = result[0].map(r => Number(r.campaign_id));
-       const ids = campaignIds.join(',');
-       //   const ids = ['22386145648','21388459597','17268271860']
+      const ids = campaignIds.join(',');
+
+      // '22386145648,21388459597,17268271860';
+          
       logToCloudWatch(`ids: ${ids}`, "INFO", 'mobile and desktop traffic congruence validation');
  
  
@@ -402,9 +404,9 @@ export class SpellCheckerService {
       const formatted = uniqueErrors.map(c =>
         `• *Campaign:* ${c.campaign_name}\n  *Campaign ID:* ${c.campaign_id}\n  *Domain:* ${c.domain_name}\n  *Device:* ${c.device}\n  *Date:* ${c.date?.value}\n  *Source:* ${c.media_source}\n  *Network:* ${c.network_type}\n`
       ).join('\n');
-      await KF.sendSlackAlert(`*Incongruent Traffic campaign names:*\n${formatted}`, slackChannels.CONTENT, state.slackToken);
+      await KF.sendSlackAlert(`*🚨Incongruent Traffic campaign names:*\n${formatted}`, slackChannels.CONTENT, state.slackToken);
     } else {
-      await KF.sendSlackAlert('No incongruent traffic found', slackChannels.CONTENT, state.slackToken);
+      await KF.sendSlackAlert('🌿No incongruent traffic found', slackChannels.CONTENT, state.slackToken);
     }
 
      return 'mobile and desktop traffic congruence validation finished';
