@@ -11,7 +11,7 @@ import {processInBatches,extractMisspelledWords,extractOutdatedYears} from './ut
 import {googleAds } from './interfaces';
 export {emailSubjects} from './consts';
 import * as KF from '@spotower/my-utils';
-import {ignoredLanguages} from './ignoreWords';
+import {ignoredDomains, ignoredLanguages} from './ignoreWords';
 import { KIDON_CONNECTION } from 'src/knex/knex.module';
 import { Knex } from 'knex';
 import { createErrorsTable } from './utils';
@@ -52,13 +52,14 @@ export class SpellCheckerService {
 
             // ✅ Step 1: filter non english paths out and assign relevant paths to domains
           const englishPats =  state.paths.filter((p) => !ignoredLanguages.some(lang => p.path.includes(lang)));  //filter out non english paths
+          let chosenDomains = state.domains.filter(d =>    d.hostname !== 'compare.funcasino.se' );
            // ✅ Step 2: filter out non visited domains, attach paths to each domain
   
           const weekAgo = new Date(new Date().setDate(new Date().getDate() - 7)).toISOString().split('T')[0];
           const recentlyVisitedDomains =  await this.kidonClient('tracker_visitors').select('domain_name').where('created_at', '>', weekAgo).whereIn('utm_source', ['GOOGLE', 'BING']).distinct(); 
            if(!recentlyVisitedDomains || recentlyVisitedDomains.length === 0)     logToCloudWatch('no tracker visitors Data!');
   
-           const chosenDomains = domainId ? state.domains.filter((d: Domain) => d.id === domainId) : state.domains.filter(d => recentlyVisitedDomains.some(r => r.domainName === d.hostname));
+             chosenDomains = domainId ? state.domains.filter((d: Domain) => d.id === domainId) : state.domains.filter(d => recentlyVisitedDomains.some(r => r.domainName === d.hostname));
            chosenDomains.forEach((domain: Domain) => {domain.paths = englishPats.filter((p: Paths) => p.domainId === domain.id).map((p: Paths) => p.path).filter((p)=> p); });  // asign paths per domain
            // ✅ Step 3: fetch all paths' text,   check each word for errors and send result to mail
            logToCloudWatch(`chosenDomains: ${chosenDomains.length}`, 'INFO', 'findAndFixWebsitesGrammaticalErrors');
