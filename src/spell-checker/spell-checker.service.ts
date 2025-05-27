@@ -122,13 +122,13 @@ export class SpellCheckerService {
       
       let urlAndSlackChannel = processLineupResults(rawLineupResults);
       logToCloudWatch(`Found ${urlAndSlackChannel.length} lineups`, 'INFO');
-      
+
       if (hostname) {
           urlAndSlackChannel = urlAndSlackChannel.filter((u) => u.url.includes(hostname));
       }
- 
-      // ✅ Step 2: validate lineups (sequential, not in batches)
-      const validationResults = [];
+
+      let errorsFound = false;
+
       for (const urlAndSlack of urlAndSlackChannel) {
         let axiosRes, pupeteerRes, durationMs;
         try {
@@ -136,7 +136,7 @@ export class SpellCheckerService {
           const startTime = Date.now();
           axiosRes = await axios.get(urlAndSlack.url, { timeout: 10000 });
           durationMs = Date.now() - startTime;
-          const browser = await generateBrowser()
+          const browser = await generateBrowser();
           const page = await browser.newPage();
           await page.goto(urlAndSlack.url, { waitUntil: 'networkidle2', timeout: 60000 });
           await new Promise(resolve => setTimeout(resolve, 2000));
@@ -148,77 +148,63 @@ export class SpellCheckerService {
           await browser.close();
         } catch (err) {
           logToCloudWatch(`Error in lineupValidation: ${err}`, 'ERROR');
-          if (err.name === 'AxiosError'  && err.status != undefined) {
-            validationResults.push({ url: urlAndSlack.url, slackChannelId: urlAndSlack.slackChannelId, campaignName: urlAndSlack.campaignName, status: err.status, reason: `${JSON.stringify(err)}` });
-            continue;
-          } else {
-            //validationResults.push({ url: urlAndSlack.url, slackChannelId: urlAndSlack.slackChannelId, campaignName: urlAndSlack.campaignName, status: err.status, reason: `${JSON.stringify(err)}` });
-            continue;
+          if (err.name === 'AxiosError' && err.status !== undefined) {
+            errorsFound = true;
+            const errorMessage = [
+              '*Lineup Validation Error:*',
+              `*URL:* ${urlAndSlack.url}`,
+              `*Campaign:* ${urlAndSlack.campaignName}`,
+              `*Status:* ${err.status}`,
+              `*Reason:* ${JSON.stringify(err)}`
+            ].join('\n');
+            await KF.sendSlackAlert(errorMessage, slackChannels.CONTENT, state.slackToken);
+          }
+          continue;
+        }
+
+        if (durationMs > 10000) {
+          errorsFound = true;
+          const errorMessage = [
+            '*Lineup Validation Error:*',
+            `*URL:* ${urlAndSlack.url}`,
+            `*Campaign:* ${urlAndSlack.campaignName}`,
+            `*Status:* ${axiosRes.status}`,
+            '*Reason:* timeout'
+          ].join('\n');
+          await KF.sendSlackAlert(errorMessage, slackChannels.CONTENT, state.slackToken);
+          continue;
+        }
+
+        if (!checkIfLineupExists(pupeteerRes, urlAndSlack.url)) {
+          let pupeteerRes2 = '';
+          try {
+            const browser = await puppeteer.launch({ headless: true, executablePath: '/usr/local/bin/chrome', protocolTimeout: 60000 });
+            const page = await browser.newPage();
+            await page.goto(urlAndSlack.url, { waitUntil: 'networkidle2', timeout: 60000 });
+            pupeteerRes2 = await page.content();
+            await browser.close();
+          } catch (err) {
+            logToCloudWatch(`[SECOND TRY] Puppeteer error for ${urlAndSlack.url}: ${err}`, 'ERROR');
+          }
+          const exists = checkIfLineupExists(pupeteerRes2, urlAndSlack.url);
+          if (!exists) {
+            errorsFound = true;
+            const errorMessage = [
+              '*Lineup Validation Error:*',
+              `*URL:* ${urlAndSlack.url}`,
+              `*Campaign:* ${urlAndSlack.campaignName}`,
+              '*Status:* -',
+              '*Reason:* no lineup found'
+            ].join('\n');
+            await KF.sendSlackAlert(errorMessage, slackChannels.CONTENT, state.slackToken);
           }
         }
-        if (durationMs > 10000) {
-          validationResults.push({ url: urlAndSlack.url, slackChannelId: urlAndSlack.slackChannelId, campaignName: urlAndSlack.campaignName, status: axiosRes.status, reason: 'timeout' });
-        } else if (!checkIfLineupExists(pupeteerRes)) {
-          validationResults.push({ url: urlAndSlack.url, slackChannelId: urlAndSlack.slackChannelId, campaignName: urlAndSlack.campaignName, status: '-', reason: 'no lineup found' });
-        }
       }
-  
-      const filteredErrors = validationResults.filter(Boolean);
-  
 
-      const secondCheckResults = await processInBatches(
-        filteredErrors
-          .filter(e => e.reason === 'no lineup found')
-          .map(error => async () => {
-            // Re-fetch the page content
-            let pupeteerRes;
-            try {
-              const browser = await puppeteer.launch({
-                headless: true,
-                   executablePath: '/usr/local/bin/chrome', // the location of chrome on the ec2
-                protocolTimeout: 60000,
-              });
-              const page = await browser.newPage();
-              await page.goto(error.url, { waitUntil: 'networkidle2', timeout: 60000 });
-              pupeteerRes = await page.content();
-              await browser.close();
-            } catch (err) {
-              logToCloudWatch(`[SECOND TRY] Puppeteer error for ${error.url}: ${err}`, 'ERROR');
-              // If puppeteer fails, treat as still error
-              return error;
-            }
-            // Only return error if checkIfLineupExists still fails
-            const exists = checkIfLineupExists(pupeteerRes);
-            logToCloudWatch(`[SECOND TRY] checkIfLineupExists for ${error.url}: ${exists}`, 'INFO');
-            if (!exists) {
-              return error;
-            }
-            logToCloudWatch(`[SECOND TRY] Lineup found on retry for ${error.url}, overriding previous error.`, 'INFO');
-            return null;
-          }),
-        3
-      );
-      
-      let doubleFailed = [
-        ...filteredErrors.filter(e => e.reason !== 'no lineup found'),
-        ...secondCheckResults.filter(Boolean)
-      ];
-      
-
-
-
-    
-
-
-      if(doubleFailed && doubleFailed.length > 0){
-        for(let error of filteredErrors){
-           const errorMessage = [  '*Lineup Validation Error:*',  `*URL:* ${error.url}`,`*Campaign:* ${error.campaignName}`,`*Status:* ${error.status}`,`*Reason:* ${error.reason}` ].join('\n');
-          logToCloudWatch(`Lineup Validation Errors: ${errorMessage}`, 'ERROR');
-          await KF.sendSlackAlert(errorMessage, slackChannels.CONTENT, state.slackToken); 
-        }
-      }else{
+      if (!errorsFound) {
         logToCloudWatch(`No Lineup errors found`);
-        await KF.sendSlackAlert(`no lineup errors found`,  slackChannels.CONTENT, state.slackToken); 
+        await KF.sendSlackAlert(`no lineup errors found`, slackChannels.CONTENT, state.slackToken);
+      }
       }
   
     } catch (e) {
