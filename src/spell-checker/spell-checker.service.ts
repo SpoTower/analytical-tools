@@ -358,7 +358,9 @@ export class SpellCheckerService {
       const result = await this.kidonClient.raw('SELECT campaign_id, domain_name, COUNT(*) AS clicks FROM tracker_visitors WHERE device = "mobile" AND DATE(created_at) = CURDATE() - INTERVAL 1 DAY GROUP BY campaign_id, domain_name HAVING COUNT(*) > 5' );   
       logToCloudWatch(`result: ${JSON.stringify(result)}`, "INFO", 'mobile and desktop traffic congruence validation');
       const campaignIds = result[0].map(r => Number(r.campaign_id));
-      const ids = process.env.ENVIRONMENT === 'prod' ? campaignIds.join(',') : '22386145648,21388459597,17268271860';
+      const ids = campaignIds.join(',');
+
+      // '22386145648,21388459597,17268271860';
           
       logToCloudWatch(`ids: ${ids}`, "INFO", 'mobile and desktop traffic congruence validation');
  
