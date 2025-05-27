@@ -440,6 +440,7 @@ export class SpellCheckerService {
           uniqueErrors.push(c);
         }
       }
+ 
 
 
      if (uniqueErrors.length > 0) {
