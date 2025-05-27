@@ -34,7 +34,50 @@ export class SpellCheckerService {
     private readonly globalState: GlobalStateService,
      ) {}
 
+     async findAndFixWebsitesGrammaticalErrors(domainId?: number,   isTest?: boolean, url?: string) {
+      const state = this.globalState.getAllState();
 
+
+     
+
+      const ignoredWords = await fetchIgnoreWords(this.kidonClient, '56');
+  
+      if (!state || !ignoredWords.length) {
+        logToCloudWatch('No state/No ignore words found');
+        return;
+      }
+  
+       if(!state || !ignoredWords){ logToCloudWatch('No state/ No ignore words found'); }
+       logToCloudWatch(`investing paths of domain 27 ${       state.paths.filter((sp)=>sp.domainId == 27 && sp.path.includes('inv')).map((fp)=>fp.path)       }`, 'INFO', 'findAndFixWebsitesGrammaticalErrors');
+
+            // ✅ Step 1: filter non english paths out and assign relevant paths to domains
+          const englishPats =  state.paths.filter((p) => !ignoredLanguages.some(lang => p.path.includes(lang)));  //filter out non english paths
+           // ✅ Step 2: filter out non visited domains, attach paths to each domain
+  
+          const weekAgo = new Date(new Date().setDate(new Date().getDate() - 7)).toISOString().split('T')[0];
+          const recentlyVisitedDomains =  await this.kidonClient('tracker_visitors').select('domain_name').where('created_at', '>', weekAgo).whereIn('utm_source', ['GOOGLE', 'BING']).distinct(); 
+           if(!recentlyVisitedDomains || recentlyVisitedDomains.length === 0)     logToCloudWatch('no tracker visitors Data!');
+  
+           const chosenDomains = domainId ? state.domains.filter((d: Domain) => d.id === domainId) : state.domains.filter(d => recentlyVisitedDomains.some(r => r.domainName === d.hostname));
+           chosenDomains.forEach((domain: Domain) => {domain.paths = englishPats.filter((p: Paths) => p.domainId === domain.id).map((p: Paths) => p.path).filter((p)=> p); });  // asign paths per domain
+           // ✅ Step 3: fetch all paths' text,   check each word for errors and send result to mail
+           logToCloudWatch(`chosenDomains: ${chosenDomains.length}`, 'INFO', 'findAndFixWebsitesGrammaticalErrors');
+           logToCloudWatch(`gold paths: ${chosenDomains.find((ch)=>ch.hostname = 'top10goldinvestments.com').paths}`, 'INFO', 'findAndFixWebsitesGrammaticalErrors');
+           const detectedErrors =    await fetchWebsitesInnerHtmlAndFindErrors(chosenDomains, ignoredWords,state, url); //get inner html of websites
+           const domainMessages = createErrorsTable(JSON.stringify(detectedErrors));
+            await KF.sendSlackAlert('Web Sites Errors:', slackChannels.CONTENT, state.slackToken);
+           
+           if(!isTest){
+            for (const message of domainMessages) {
+               await KF.sendSlackAlert(message, slackChannels.CONTENT, state.slackToken);
+           }       
+           }
+           
+   
+  
+          return `websites were processed by local spellchecker and sent to kidon to be sended by slack to content errors channel`;
+  }
+   
  
   async findAndFixGoogleAdsGrammaticalErrors(batchSize: number, domainId?: number, sliceSize?: number) {
     logToCloudWatch('entering findAndFixGoogleAdsGrammaticalErrors');
@@ -107,7 +150,7 @@ export class SpellCheckerService {
   
       const urlSet = new Set<string>();
   
-      // ✅ Step 1: fetch lineups
+      // ✅ Step 1: fetch urls from google ads
       const rawLineupResults = await processInBatches(
           domainsToProcess.map((domain: Domain) => async () => {
               try {
@@ -265,49 +308,6 @@ export class SpellCheckerService {
    }
   
 
-  async findAndFixWebsitesGrammaticalErrors(domainId?: number,   isTest?: boolean, url?: string) {
-    const state = this.globalState.getAllState();
-
-
-
-  logToCloudWatch(`state.paths.length: ${state.paths.length}`, 'INFO', 'findAndFixWebsitesGrammaticalErrors');
-      logToCloudWatch(`state.domains.length: ${state.domains.length}`, 'INFO', 'findAndFixWebsitesGrammaticalErrors');
-      return []
-
-    
-    const ignoredWords = await fetchIgnoreWords(this.kidonClient, '56');
-
-    if (!state || !ignoredWords.length) {
-      logToCloudWatch('No state/No ignore words found');
-      return;
-    }
-
-     if(!state || !ignoredWords){ logToCloudWatch('No state/ No ignore words found'); }
-         // ✅ Step 1: filter non english paths out and assign relevant paths to domains
-        const englishPats =  state.paths.filter((p) => !ignoredLanguages.some(lang => p.path.includes(lang)));  //filter out non english paths
-         // ✅ Step 2: filter out non visited domains, attach paths to each domain
-
-        const weekAgo = new Date(new Date().setDate(new Date().getDate() - 7)).toISOString().split('T')[0];
-        const recentlyVisitedDomains =  await this.kidonClient('tracker_visitors').select('domain_name').where('created_at', '>', weekAgo).whereIn('utm_source', ['GOOGLE', 'BING']).distinct(); 
-         if(!recentlyVisitedDomains || recentlyVisitedDomains.length === 0)     logToCloudWatch('no tracker visitors Data!');
-
-         const chosenDomains = domainId ? state.domains.filter((d: Domain) => d.id === domainId) : state.domains.filter(d => recentlyVisitedDomains.some(r => r.domainName === d.hostname));
-         chosenDomains.forEach((domain: Domain) => {domain.paths = englishPats.filter((p: Paths) => p.domainId === domain.id).map((p: Paths) => p.path).filter((p)=> p); });  // asign paths per domain
-         // ✅ Step 3: fetch all paths' text,   check each word for errors and send result to mail
-         const detectedErrors =    await fetchWebsitesInnerHtmlAndFindErrors(chosenDomains, ignoredWords,state, url); //get inner html of websites
-         const domainMessages = createErrorsTable(JSON.stringify(detectedErrors));
-          await KF.sendSlackAlert('Web Sites Errors:', slackChannels.CONTENT, state.slackToken);
-         
-         if(!isTest){
-          for (const message of domainMessages) {
-             await KF.sendSlackAlert(message, slackChannels.CONTENT, state.slackToken);
-         }       
-         }
-         
- 
-
-        return `websites were processed by local spellchecker and sent to kidon to be sended by slack to content errors channel`;
-}
  
 
   async urlValidation( ){
@@ -366,8 +366,10 @@ export class SpellCheckerService {
       const result = await this.kidonClient.raw('SELECT campaign_id, domain_name, COUNT(*) AS clicks FROM tracker_visitors WHERE device = "mobile" AND DATE(created_at) = CURDATE() - INTERVAL 1 DAY GROUP BY campaign_id, domain_name HAVING COUNT(*) > 5' );   
       logToCloudWatch(`result: ${JSON.stringify(result)}`, "INFO", 'mobile and desktop traffic congruence validation');
       const campaignIds = result[0].map(r => Number(r.campaign_id));
-       const ids = campaignIds.join(',');
-       //   const ids = ['22386145648','21388459597','17268271860']
+      const ids = campaignIds.join(',');
+
+      // '22386145648,21388459597,17268271860';
+          
       logToCloudWatch(`ids: ${ids}`, "INFO", 'mobile and desktop traffic congruence validation');
  
  
@@ -410,9 +412,9 @@ export class SpellCheckerService {
       const formatted = uniqueErrors.map(c =>
         `• *Campaign:* ${c.campaign_name}\n  *Campaign ID:* ${c.campaign_id}\n  *Domain:* ${c.domain_name}\n  *Device:* ${c.device}\n  *Date:* ${c.date?.value}\n  *Source:* ${c.media_source}\n  *Network:* ${c.network_type}\n`
       ).join('\n');
-      await KF.sendSlackAlert(`*Incongruent Traffic campaign names:*\n${formatted}`, slackChannels.CONTENT, state.slackToken);
+      await KF.sendSlackAlert(`*🚨Incongruent Traffic campaign names:*\n${formatted}`, slackChannels.CONTENT, state.slackToken);
     } else {
-      await KF.sendSlackAlert('No incongruent traffic found', slackChannels.CONTENT, state.slackToken);
+      await KF.sendSlackAlert('🌿No incongruent traffic found', slackChannels.CONTENT, state.slackToken);
     }
 
      return 'mobile and desktop traffic congruence validation finished';

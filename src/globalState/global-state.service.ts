@@ -40,8 +40,12 @@ export class GlobalStateService implements OnModuleInit {
         
        KF.getSecretFromSecretManager('kidonSecrets'),
 
+    
 
     ]);
+
+ 
+
         this.setState('domains', domains);
         this.setState('companies', companies);
         this.setState('paths', paths);

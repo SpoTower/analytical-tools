@@ -104,21 +104,25 @@ async updateConversionNamesKidonTable(conversionActions?:any[],creationResult?:a
  
   async generateAds(sourceData:googleAdsSourceData){
 logToCloudWatch('Entering generateAds endpoint. ', 'INFO', 'google');
-    const gptResponse = await this.gptService.askGpt01(process.env.GPT_KEY, addLevelSystemMessage, addLevelPromptBoxA);
+    const fullPrompt = `${addLevelPromptBoxA}. the word that should be used for this task is ${JSON.stringify(sourceData.industryKeyword[0])}`;
+    const gptResponse = await this.gptService.askGpt01(process.env.GPT_KEY, addLevelSystemMessage, fullPrompt);
     let constantheadersAndDescriptions = generateConstantHeadersAndDescriptions(gptResponse.choices[0].message.content, adsTemplateDefaults, sourceData.hostname);
    
 
     try {
+
+    
           const [boxA, boxB, boxC] = await Promise.all([
       this.processBoxA(sourceData, constantheadersAndDescriptions),
       this.processBoxB(sourceData, constantheadersAndDescriptions),
       this.processBoxC(sourceData, constantheadersAndDescriptions)
-    ]);
-  
-    const campaigns1 = [...boxA.campaigns, ...boxB.campaigns, ...boxC.campaigns];
-    const adGroups1 = [...boxA.adGroups, ...boxB.adGroups, ...boxC.adGroups];
-    const keywords1 = [...boxA.keywords, ...boxB.keywords, ...boxC.keywords];
-    const ads1 = [...boxA.ads, ...boxB.ads, ...boxC.ads];
+    ]); 
+
+ 
+    const campaigns1 = [   ...boxA.campaigns, ...boxB.campaigns, ...boxC.campaigns];
+    const adGroups1 = [  ...boxA.adGroups, ...boxB.adGroups, ...boxC.adGroups];
+    const keywords1 = [  ...boxA.keywords, ...boxB.keywords, ...boxC.keywords];
+    const ads1 = [   ...boxA.ads, ...boxB.ads, ...boxC.ads];
   
   
  
@@ -292,14 +296,14 @@ logToCloudWatch('finishing generateAds', 'INFO', 'GENERATE_ADS');
     });
   
     // Step 3: Generate campaign rows
-    for (let campaign of campaignNamesAndWords  ) { // 6
+    for (let campaign of campaignNamesAndWords    ) { // 6
 
        const [row1, row2] = generateDualCampaignRows(campaign.name, campaignTemplateDefaults);
       campaigns.push(row1, row2);
     }
    
     // Step 4: For each campaign, get ad group and ad level data
-    for (const wordsSet of campaignNamesAndWords   ) { //6
+    for (const wordsSet of campaignNamesAndWords    ) { //6
       logToCloudWatch(`generating ad group rows for ${wordsSet.name} box c`, 'INFO', 'GENERATE_ADS');
       await new Promise(resolve => setTimeout(resolve, 1000));
       const keywordList = wordsSet.words.map(w => `"${w}"`).join(', ');
