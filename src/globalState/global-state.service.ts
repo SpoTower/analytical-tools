@@ -40,8 +40,13 @@ export class GlobalStateService implements OnModuleInit {
         
        KF.getSecretFromSecretManager('kidonSecrets'),
 
+    
 
     ]);
+
+    let golddomain =    domains.find(d => d.id === 27)
+
+
         this.setState('domains', domains);
         this.setState('companies', companies);
         this.setState('paths', paths);

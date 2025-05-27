@@ -16,7 +16,7 @@ export class SpellCheckerController {
     return this.spellCheckerService.create(createSpellCheckerDto);
   }
 
-
+// iterating over domains.paths and sending requests via axios, processing data with cheerio,  checking errors in text and outdates years
   @Get('/findWebsitesGrammaticalErrors')
   async WebsitesGrammaticalErrors(
     @Query('domainId' ) domainId?: number,
@@ -62,7 +62,7 @@ export class SpellCheckerController {
 
    
  
- // fetches domain and uses axios to send requests to domain.paths
+ // fetches urls from google ads
 // checks whether there is a lineup on the page based on css class and id of lineup wrapper, and also that the status is 200 and the loading time less than 10 seconds
   @Get('/lineupValidation')
   async lineupValidation(
