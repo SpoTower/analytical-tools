@@ -132,3 +132,17 @@ export function fixingGrammErrorsPrompt2( ) {
     'gbraid',
     'wbraid',
 ];
+
+// ✅ Goal:
+// Match strings The string contains D, (D), or +D
+// but do not But does not contain M, (M), or +M
+export const desktopOnlyTraffick = /^(?=.*(\+?D|\(D\)))(?!.*(\+?M|\(M\))).*$/;
+
+
+
+  // ✅ Matches if:
+  // Contains M or (M)
+  // ❌ Fails if: 
+  // Contains D, (D), or +D
+  // 
+ export const mobileOnlyTraffick = /^(?=.*\bM\b|\(M\))(?!.*(\+?D|\(D\))).*$/;

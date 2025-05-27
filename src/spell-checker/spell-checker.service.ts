@@ -15,7 +15,7 @@ import {ignoredLanguages} from './ignoreWords';
 import { KIDON_CONNECTION } from 'src/knex/knex.module';
 import { Knex } from 'knex';
 import { createErrorsTable } from './utils';
-import {slackChannels} from './consts';
+import {desktopOnlyTraffick, mobileOnlyTraffick, slackChannels} from './consts';
 import { getSecretFromSecretManager } from 'src/utils/secrets';
 import {googleAdsGrammarErrors,googleAdsLandingPageQuery} from './gaqlQuerys';
 import { fetchIgnoreWords } from './utils';
@@ -26,6 +26,7 @@ import { BigQuery } from '@google-cloud/bigquery';
 import dayjs from 'dayjs';
 import { invocaColumns } from './consts';
 import { extractBaseUrl } from './utils';
+import { campaignsNetworks, traffic } from './queries/traffic';
 @Injectable()
 export class SpellCheckerService {
 
@@ -355,43 +356,84 @@ export class SpellCheckerService {
     try {    
       const state =   this.globalState.getAllState(); 
 
-      const result = await this.kidonClient.raw('SELECT campaign_id, domain_name, COUNT(*) AS clicks FROM tracker_visitors WHERE device = "mobile" AND DATE(created_at) = CURDATE() - INTERVAL 1 DAY GROUP BY campaign_id, domain_name HAVING COUNT(*) > 5' );   
-      logToCloudWatch(`result: ${JSON.stringify(result)}`, "INFO", 'mobile and desktop traffic congruence validation');
-      const campaignIds = result[0].map(r => Number(r.campaign_id));
-      const ids = campaignIds.join(',');
 
-      // '22386145648,21388459597,17268271860';
-          
-      logToCloudWatch(`ids: ${ids}`, "INFO", 'mobile and desktop traffic congruence validation');
+      // ✅ Step 1: fetch mobile and desktop traffic (campaign id's from tracker visitors aurora table)
+
+     const [mobileTraffic, desktopTraffic] = await Promise.all([
+        this.kidonClient.raw(traffic('mobile') ),   
+        this.kidonClient.raw(traffic('desktop') )
+      ]) 
+      
+
+      logToCloudWatch(`mobileTraffic: ${JSON.stringify(mobileTraffic)}`, "INFO", 'mobile and desktop traffic congruence validation');
+      logToCloudWatch(`desktopTraffic: ${JSON.stringify(desktopTraffic)}`, "INFO", 'mobile and desktop traffic congruence validation');
+
+      const mobileCampaignIds = mobileTraffic[0].map(m => Number(m.campaign_id));
+      const desktopCampaignIds = desktopTraffic[0].map(d => Number(d.campaign_id));
+      
+       const mobileIds = mobileCampaignIds.join(',');
+      const desktopIds = desktopCampaignIds.join(',');
+
+
  
+  
  
+
+      // ✅ Step 2: fetch campaign names and networks from BQ
+
       const res = await getSecretFromSecretManager(process.env.SECRET_NAME);
       const googleKey = JSON.parse(res).GOOGLE_SERVICE_PRIVATE_KEY.replace(/\\n/g, '\n');
-      logToCloudWatch(`googleKey: ${googleKey}`, "INFO", 'mobile and desktop traffic congruence validation');
-      logToCloudWatch(`BQ_EMAIL_SERVICE: ${process.env.BQ_EMAIL_SERVICE} BQ_PROJECT_NAME: ${process.env.BQ_PROJECT_NAME}`, "INFO", 'mobile and desktop traffic congruence validation');
-
-      const credentials = { client_email: process.env.BQ_EMAIL_SERVICE, private_key: googleKey };
-      const bq =   new BigQuery({ credentials, projectId: process.env.BQ_PROJECT_NAME });
+       const bq = await KF.connectToBQ(process.env.BQ_EMAIL_SERVICE, googleKey, process.env.BQ_PROJECT_NAME);
 
 
-     // const bq = await KF.connectToBQ(process.env.BQ_EMAIL_SERVICE, googleKey, process.env.BQ_PROJECT_NAME);
-      const [job] = await bq.createQueryJob({ query: `select * from kidon3_STG.campaigns_name_network WHERE campaign_id IN (${ids})` });
-      let [rows] = await job.getQueryResults();
+      const [job] = await bq.createQueryJob({ query: campaignsNetworks(mobileIds) });
+      let [bqCampaignsTrafficMobile] = await job.getQueryResults(); // bq parallels for what supposed to be mobile only traffick that not contains sole D/(D)
 
-      rows.forEach(r => {
-        const match = result[0].find(re => Number(re.campaign_id) === Number(r.campaign_id));
-        r.domain_name = match ? match.domain_name : '';
+      const [job2] = await bq.createQueryJob({ query: campaignsNetworks(desktopIds) });
+      let [bqCampaignsTrafficDesktop] = await job2.getQueryResults(); // bq parallels for what supposed to be desktop only traffick that not contains sole M/(M)
+
+
+// ✅ Step 2: attach domain name from aurora table to each campaign from BQ
+   bqCampaignsTrafficMobile.forEach(bqt => {
+        const match = mobileTraffic[0].find(mt => Number(mt.campaign_id) === Number(bqt.campaign_id));
+        bqt.domain_name = match ? match.domain_name : '';
       });
 
-      logToCloudWatch(`rows: ${JSON.stringify(rows)}`, "INFO", 'mobile and desktop traffic congruence validation');
-     const desktopOnlyTraffick = /^(?!.*\([^)]*[MT\d][^)]*\)).*\(\s*D\s*\).*$/; // reject any parentheses that contain M, T or a digit, require a standalone "(D)" somewhere
-     const incongruentTraffick = rows.filter(name=>desktopOnlyTraffick.test(name.campaign_name))
-     logToCloudWatch(`incongruentTraffic: ${JSON.stringify(incongruentTraffick)}`, "INFO", 'mobile and desktop traffic congruence validation');
+
+      bqCampaignsTrafficDesktop.forEach(bqt => {
+        const match = desktopTraffic[0].find(mt => Number(mt.campaign_id) === Number(bqt.campaign_id));
+        bqt.domain_name = match ? match.domain_name : '';
+      });
+
+
+      // ✅ Step 3: filter out campaigns that are only in desktop traffic
+
+      const incongruentMobileDesctopTraffick = [];
+      const incongruentDesctopMobileTraffick = [];
+// we are searching for campaigns that are only in desktop traffic, for incongruent campaigns, so false here means that the campaign congruent
+      bqCampaignsTrafficMobile.forEach((c) => {
+          const isMatchDesctop = desktopOnlyTraffick.test(c.campaign_name); // we are iterating over mobile campaign names, so we want exclude campaigns that have only (D) and not some other letter, because then the campaigns are desctop only
+           if (isMatchDesctop) {
+            incongruentMobileDesctopTraffick.push(c);
+          }
+         
+      });
+
+      bqCampaignsTrafficDesktop.forEach((c) => {
+        const isMatchMobile = mobileOnlyTraffick.test(c.campaign_name); // we are iterating over desctop campaign names,  so we want exclude campaigns that have only m/(M) and not some other letter, because then the campaigns are mobile only
+        
+        if (isMatchMobile) {
+          incongruentDesctopMobileTraffick.push(c);
+        }
+      });
+
+      //const incongruentTraffick = bqCampaignsTraffic.filter((c)=>desktopOnlyTraffick.test(c.campaign_name))
+     logToCloudWatch(`incongruentTraffic: ${JSON.stringify(incongruentMobileDesctopTraffick)}`, "INFO", 'mobile and desktop traffic congruence validation');
 
       // Deduplicate by campaign_id and campaign_name
       const uniqueErrors = [];
       const seen = new Set();
-      for (const c of incongruentTraffick) {
+      for (const c of incongruentMobileDesctopTraffick) {
         const key = `${c.campaign_id}||${c.campaign_name}`;
         if (!seen.has(key)) {
           seen.add(key);
