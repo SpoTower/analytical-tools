@@ -261,12 +261,12 @@ export class SpellCheckerService {
 
       if(doubleFailed && doubleFailed.length > 0){
         for(let error of filteredErrors){
-           const errorMessage = [  '*Lineup Validation Error:*',  `*URL:* ${error.url}`,`*Campaign:* ${error.campaignName}`,`*Status:* ${error.status}`,`*Reason:* ${error.reason}` ].join('\n');
+           const errorMessage = [  ' :rotating_light:  *Lineup Validation Error:*',  `*URL:* ${error.url}`,`*Campaign:* ${error.campaignName}`,`*Status:* ${error.status}`,`*Reason:* ${error.reason}` ].join('\n');
           logToCloudWatch(`Lineup Validation Errors: ${errorMessage}`, 'ERROR');
           await KF.sendSlackAlert(errorMessage, isTest ?  slackChannels.PERSONAL : slackChannels.CONTENT, state.slackToken); 
         }
       }else{
-        logToCloudWatch(`No Lineup errors found`);
+        logToCloudWatch(`:herb: No Lineup errors found`);
         await KF.sendSlackAlert(`no lineup errors found`,  isTest ?  slackChannels.PERSONAL : slackChannels.CONTENT, state.slackToken); 
       }
   
