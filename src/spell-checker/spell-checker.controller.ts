@@ -111,16 +111,18 @@ export class SpellCheckerController {
     // used by front end team to get active urls from google ads
     @Get('/googleBasedActiveUrls')
     async activeUrls(
-      @Query('hostname', ) hostname: string,
-      ) {
-        try {
-          const urls = await this.spellCheckerService.activeUrls(hostname );
-          return urls;
-        } catch (error) {
-          logToCloudWatch(`❌ Error fetching Google Ads for domain ${hostname}: ${error.message}`, "ERROR");
-          return [];
-        }
+      @Query('hostname') hostname: string,
+      @Query('originOnly', new DefaultValuePipe(false), ParseBoolPipe) originOnly?: boolean
+    ) {
+      try {
+        const urls = await this.spellCheckerService.activeUrls(hostname, originOnly);
+        return urls;
+      } catch (error) {
+        logToCloudWatch(`❌ Error fetching Google Ads for domain ${hostname}: ${error.message}`, "ERROR");
+        return [];
       }
+    }
+    
 
     @Get('/testLongWait')
     async testLongWait() {
