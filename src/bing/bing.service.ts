@@ -46,7 +46,7 @@ export class BingService {
         const parser = new XMLParser();
         const result = parser.parse(response.data);
         const isDuplicate = result?.['s:Envelope']?.['s:Body']?.['AddConversionGoalsResponse']?.PartialErrors?.BatchError?.Code;
-        if (isDuplicate == 5317) throw  new Error(`Duplicate conversion goal name ${action["Conversion Name Action"]}`);
+     //   if (isDuplicate == 5317) throw  new Error(`Duplicate conversion goal name ${action["Conversion Name Action, all proceeding conversion names were not created"]}`);
 
         const conversionGoalId = result?.['s:Envelope']?.['s:Body']?.['AddConversionGoalsResponse']?.['ConversionGoalIds']['a:long'];
         logToCloudWatch(`Conversion goal created for ${action["Conversion Name Action"]} with ID: ${conversionGoalId}`, 'INFO', 'bing');

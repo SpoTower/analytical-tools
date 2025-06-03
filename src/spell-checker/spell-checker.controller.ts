@@ -67,9 +67,11 @@ export class SpellCheckerController {
   @Get('/lineupValidation')
   async lineupValidation(
     @Query('hostname', ) hostname: string,
+    @Query('isTest', new DefaultValuePipe(false), ParseBoolPipe) isTest?: boolean,
+    @Query('url', new DefaultValuePipe(null)) url?: string
     ) {
       try {
-        return await this.spellCheckerService.lineupValidation(hostname );
+        return await this.spellCheckerService.lineupValidation(hostname, isTest, url );
       } catch (error) {
         if (error instanceof BadRequestException || error instanceof InternalServerErrorException) {
           throw error;
