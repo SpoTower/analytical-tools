@@ -278,7 +278,7 @@ export class SpellCheckerService {
   
 
 
-  async activeUrls(hostname: string) {
+  async activeUrls(hostname: string, onlyOriginalUrl: boolean) {
     const state = this.globalState.getAllState(); if (!state) return 'No state found';
 
 
@@ -303,6 +303,11 @@ export class SpellCheckerService {
         30
     );
     let urlAndSlackChannel = processLineupResults(rawLineupResults);
+
+    if(onlyOriginalUrl){
+       return urlAndSlackChannel.map((u) => u.url);
+    }
+    
     const baseUrlSet = new Set<string>();
     for (const obj of urlAndSlackChannel) {
        const match = obj.url.match(/^(https:\/\/[^\/]+\.com\/)/);
