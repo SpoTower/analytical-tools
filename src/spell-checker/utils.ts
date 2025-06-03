@@ -677,14 +677,28 @@ export function isLocal(){
     return process.env.ENVIRONMENT == 'local';
 }
 
-export async function generateBrowser(){
-    return process.env.ENVIRONMENT == 'local'
-     ? 
-     await puppeteer.launch({ headless: true,   protocolTimeout: 60000,}) 
-     :
-      await puppeteer.launch({ headless: true,  executablePath: '/usr/local/bin/chrome', protocolTimeout: 60000,});
-}
- 
+export async function generateBrowser() {
+    const commonOptions = {
+      headless: true,
+      protocolTimeout: 60000,
+      args: [
+        '--no-sandbox',
+        '--disable-setuid-sandbox',
+        '--disable-dev-shm-usage',
+        '--disable-gpu',
+        '--no-zygote',
+        '--single-process'
+      ]
+    };
+  
+    return process.env.ENVIRONMENT === 'local'
+      ? await puppeteer.launch(commonOptions)
+      : await puppeteer.launch({
+          ...commonOptions,
+          executablePath: '/usr/bin/google-chrome-stable'
+        });
+  }
+  
 export const extractBaseUrl = (url: string) => {
     const match = url.match(/^(https?:\/\/[^?]+)/i);
     return match ? match[1] : null;
