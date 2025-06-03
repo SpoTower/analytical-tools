@@ -139,7 +139,7 @@ export class SpellCheckerService {
 
  
  
-  async lineupValidation(hostname: string) {
+  async lineupValidation(hostname: string, isTest:boolean, url:string) {
     logToCloudWatch('entering lineupValidation');
   
     try {
@@ -171,6 +171,10 @@ export class SpellCheckerService {
       if (hostname) {
           urlAndSlackChannel = urlAndSlackChannel.filter((u) => u.url.includes(hostname));
       }
+
+      if(url){
+        urlAndSlackChannel = urlAndSlackChannel.filter((u) => u.url.includes(url));
+      }
  
       // ✅ Step 2: validate lineups (sequential, not in batches)
       const validationResults = [];
@@ -185,7 +189,7 @@ export class SpellCheckerService {
           const page = await browser.newPage();
           await page.goto(urlAndSlack.url, { waitUntil: 'networkidle2', timeout: 60000 });
           await new Promise(resolve => setTimeout(resolve, 2000));
-          await page.waitForSelector(
+         await page.waitForSelector(
             '[class*="partnersArea_main-partner-list"], [class*="ConditionalPartnersList"], [class*="homePage_partners-list-section"], [class*="articlesSection_container"], [class*="partnerNode"], [id*="test-id-partners-list"]',
             { timeout: 5000 }
           ).catch(() => {});
@@ -259,11 +263,11 @@ export class SpellCheckerService {
         for(let error of filteredErrors){
            const errorMessage = [  '*Lineup Validation Error:*',  `*URL:* ${error.url}`,`*Campaign:* ${error.campaignName}`,`*Status:* ${error.status}`,`*Reason:* ${error.reason}` ].join('\n');
           logToCloudWatch(`Lineup Validation Errors: ${errorMessage}`, 'ERROR');
-          await KF.sendSlackAlert(errorMessage, slackChannels.CONTENT, state.slackToken); 
+          await KF.sendSlackAlert(errorMessage, isTest ?  slackChannels.PERSONAL : slackChannels.CONTENT, state.slackToken); 
         }
       }else{
         logToCloudWatch(`No Lineup errors found`);
-        await KF.sendSlackAlert(`no lineup errors found`,  slackChannels.CONTENT, state.slackToken); 
+        await KF.sendSlackAlert(`no lineup errors found`,  isTest ?  slackChannels.PERSONAL : slackChannels.CONTENT, state.slackToken); 
       }
   
     } catch (e) {

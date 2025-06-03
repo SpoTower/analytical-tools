@@ -467,10 +467,8 @@ export async function sendGoogleAdsErrorReports(errors: { spelling: any[], capit
 
 
 export   function checkIfLineupExists(html: string): boolean {
-    const  lineupClassNames = ['PartnerLists_container__hmkhb PartnerLists_open__WAh6E PartnerList_list__5eMzn',
-        'partnersArea_main-partner-list', 'ConditionalPartnersList', 'test-id-partners-list',
-        'homePage_partners-list-section', 'articlesSection_container', 'partnerNode', 'Partner', 'partner' ];
-  // const  lineupClassNames = [ 'partnersArea_main-partner-list', 'ConditionalPartnersList', 'test-id-partners-list'  ];
+ 
+  const  lineupClassNames = [ 'partnersArea_main-partner-list', 'ConditionalPartnersList', 'test-id-partners-list'  ];
 
   const $ = cheerio.load(html);
 
@@ -482,12 +480,10 @@ export   function checkIfLineupExists(html: string): boolean {
       classAttr.includes(name) || idAttr.includes(name)
     );
   });
-
-  // 🧪 Fallback check via raw HTML
-  const foundInRawHtml = lineupClassNames.some(name => html.includes(name));
+ 
  
   // ✅ Return true if either found
-  return foundInDOM || foundInRawHtml;
+  return foundInDOM  ;
  }
 
 
