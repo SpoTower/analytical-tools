@@ -304,10 +304,10 @@ export class SpellCheckerService {
     );
     let urlAndSlackChannel = processLineupResults(rawLineupResults);
 
-    if(onlyOriginalUrl){
+    if(!onlyOriginalUrl){
        return urlAndSlackChannel.map((u) => u.url);
     }
-    
+
     const baseUrlSet = new Set<string>();
     for (const obj of urlAndSlackChannel) {
        const match = obj.url.match(/^(https:\/\/[^\/]+\.com\/)/);
