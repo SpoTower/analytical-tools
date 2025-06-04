@@ -37,7 +37,9 @@ export class GptService {
 
   async findConfigurationByKeys(keys: string[]) {
     try {
+      logToCloudWatch(`Entering findConfigurationByKeys. keys: ${keys}`);
       const result = await this.analyticsDb(CONFIGURATION).select('*').whereIn('key', keys);
+      logToCloudWatch(`Exiting findConfigurationByKeys. result: ${JSON.stringify(result)}`);
       return result;
     } catch (error) {
       logToCloudWatch(`Error in findConfigurationByKeys: ${error}`);
