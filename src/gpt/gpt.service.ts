@@ -26,9 +26,6 @@ export class GptService {
     try {
       const configs = await this.analyticsDb(CONFIGURATION).select('*');
       return configs.map(item => ({ key: item.key, values: item.values }));
-
- 
-     
     } catch (error) {
       logToCloudWatch(`Error in findAll: ${error}`);
       throw error;
