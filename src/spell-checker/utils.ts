@@ -467,10 +467,7 @@ export async function sendGoogleAdsErrorReports(errors: { spelling: any[], capit
 
 
 export   function checkIfLineupExists(html: string): boolean {
-    const  lineupClassNames = ['PartnerLists_container__hmkhb PartnerLists_open__WAh6E PartnerList_list__5eMzn',
-        'partnersArea_main-partner-list', 'ConditionalPartnersList', 'test-id-partners-list',
-        'homePage_partners-list-section', 'articlesSection_container', 'partnerNode', 'Partner', 'partner' ];
-  // const  lineupClassNames = [ 'partnersArea_main-partner-list', 'ConditionalPartnersList', 'test-id-partners-list'  ];
+  const  lineupClassNames = [ 'main-partner-list_dosfjs_partnersArea_dosfjs', 'partnersArea_main-partner-list', 'ConditionalPartnersList', 'test-id-partners-list'  ];
 
   const $ = cheerio.load(html);
 
@@ -482,12 +479,10 @@ export   function checkIfLineupExists(html: string): boolean {
       classAttr.includes(name) || idAttr.includes(name)
     );
   });
-
-  // 🧪 Fallback check via raw HTML
-  const foundInRawHtml = lineupClassNames.some(name => html.includes(name));
+ 
  
   // ✅ Return true if either found
-  return foundInDOM || foundInRawHtml;
+  return foundInDOM  ;
  }
 
 
@@ -681,14 +676,28 @@ export function isLocal(){
     return process.env.ENVIRONMENT == 'local';
 }
 
-export async function generateBrowser(){
-    return process.env.ENVIRONMENT == 'local'
-     ? 
-     await puppeteer.launch({ headless: true,   protocolTimeout: 60000,}) 
-     :
-      await puppeteer.launch({ headless: true,  executablePath: '/usr/local/bin/chrome', protocolTimeout: 60000,});
-}
- 
+export async function generateBrowser() {
+    const commonOptions = {
+      headless: true,
+      protocolTimeout: 60000,
+      args: [
+        '--no-sandbox',
+        '--disable-setuid-sandbox',
+        '--disable-dev-shm-usage',
+        '--disable-gpu',
+        '--no-zygote',
+        '--single-process'
+      ]
+    };
+  
+    return process.env.ENVIRONMENT === 'local'
+      ? await puppeteer.launch(commonOptions)
+      : await puppeteer.launch({
+          ...commonOptions,
+          executablePath: '/usr/bin/google-chrome-stable'
+        });
+  }
+  
 export const extractBaseUrl = (url: string) => {
     const match = url.match(/^(https?:\/\/[^?]+)/i);
     return match ? match[1] : null;

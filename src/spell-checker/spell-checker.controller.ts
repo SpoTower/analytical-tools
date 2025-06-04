@@ -62,14 +62,17 @@ export class SpellCheckerController {
 
    
  
- // fetches urls from google ads
+
+ // fetches domain and uses pupeteer to send requests to domain.paths
 // checks whether there is a lineup on the page based on css class and id of lineup wrapper, and also that the status is 200 and the loading time less than 10 seconds
   @Get('/lineupValidation')
   async lineupValidation(
     @Query('hostname', ) hostname: string,
+    @Query('isTest', new DefaultValuePipe(false), ParseBoolPipe) isTest?: boolean,
+    @Query('url', new DefaultValuePipe(null)) url?: string
     ) {
       try {
-        return await this.spellCheckerService.lineupValidation(hostname );
+        return await this.spellCheckerService.lineupValidation(hostname, isTest, url );
       } catch (error) {
         if (error instanceof BadRequestException || error instanceof InternalServerErrorException) {
           throw error;
@@ -109,16 +112,18 @@ export class SpellCheckerController {
     // used by front end team to get active urls from google ads
     @Get('/googleBasedActiveUrls')
     async activeUrls(
-      @Query('hostname', ) hostname: string,
-      ) {
-        try {
-          const urls = await this.spellCheckerService.activeUrls(hostname );
-          return urls;
-        } catch (error) {
-          logToCloudWatch(`❌ Error fetching Google Ads for domain ${hostname}: ${error.message}`, "ERROR");
-          return [];
-        }
+      @Query('hostname') hostname: string,
+      @Query('originOnly', new DefaultValuePipe(false), ParseBoolPipe) originOnly?: boolean
+    ) {
+      try {
+        const urls = await this.spellCheckerService.activeUrls(hostname, originOnly);
+        return urls;
+      } catch (error) {
+        logToCloudWatch(`❌ Error fetching Google Ads for domain ${hostname}: ${error.message}`, "ERROR");
+        return [];
       }
+    }
+    
 
     @Get('/testLongWait')
     async testLongWait() {
