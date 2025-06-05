@@ -861,3 +861,30 @@ export const getTrafficIncongruence = (bqCampaignsTrafficMobile, bqCampaignsTraf
     }
   };
   
+
+// utils/invoca/detectInvocaPresence.ts
+
+export async function isInvocaPresent(page: any): Promise<boolean> {
+    return await page.evaluate(() => {
+      // 1. Check script src
+      const hasInvocaScriptSrc = Array.from(document.scripts).some(script =>
+        script.src?.toLowerCase().includes('invoca')
+      );
+  
+      // 2. Check inline script content
+      const hasInvocaInlineScript = Array.from(document.scripts).some(script =>
+        script.textContent?.toLowerCase().includes('invoca')
+      );
+  
+      // 3. Check entire page HTML
+      const hasInvocaInHTML = document.documentElement.innerHTML.toLowerCase().includes('invoca');
+  
+      // 4. Check global variables
+      const hasInvocaGlobal = Object.keys(window).some(key =>
+        key.toLowerCase().includes('invoca')
+      );
+  
+      return hasInvocaScriptSrc || hasInvocaInlineScript || hasInvocaInHTML || hasInvocaGlobal;
+    });
+  }
+  
