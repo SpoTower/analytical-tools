@@ -4,23 +4,31 @@ import { logToCloudWatch } from 'src/logger';
 import { getSecretFromSecretManager } from 'src/utils/secrets';
 
 export const analyticsDbConfig = async (): Promise<Knex.Config> => {
-  const res = await getSecretFromSecretManager(process.env.DB_PASSWORD_KEY);
-  const secretData = JSON.parse(res);
-  logToCloudWatch( `Connecting to ${process.env.RDS_HOSTNAME}`,'INFO', 'knexfile');
-  logToCloudWatch( `Connecting to ${process.env.DB_USERNAME}`,'INFO', 'knexfile');
-  logToCloudWatch( `Connecting to ${process.env.DB_PASSWORD}`,'INFO', 'knexfile');
-  return {
-    client: 'mysql2', 
-    connection: {
-      host: process.env.RDS_HOSTNAME,   // 'spotower-stage-analytical-instance.c1c3obgmz70n.us-east-1.rds.amazonaws.com'
-      port: 3306,
-      user: secretData?.username || process.env.DB_USERNAME,  // root
-      password: secretData?.password || process.env.DB_PASSWORD, // '*R7mnVr2x>M]C.H5Cb6OIdBr*43g' 
-      database: 'analyticaldb',
-    },
-    ...knexSnakeCaseMappers(), // Convert snake_case to camelCase and vice versa
+  try {
+    const res = await getSecretFromSecretManager(process.env.DB_PASSWORD_KEY);
+    const secretData = JSON.parse(res);
+
+    logToCloudWatch(`Connecting to ${process.env.RDS_HOSTNAME}`, 'INFO', 'knexfile');
+    logToCloudWatch(`Connecting to ${secretData?.username}`, 'INFO', 'knexfile');
+    logToCloudWatch(`Connecting to ${secretData?.password}`, 'INFO', 'knexfile');
+
+    return {
+      client: 'mysql2',
+      connection: {
+        host: process.env.RDS_HOSTNAME,
+        port: 3306,
+        user: secretData?.username || process.env.DB_USERNAME,
+        password: secretData?.password || process.env.DB_PASSWORD,
+        database: 'analyticaldb',
+      },
+      ...knexSnakeCaseMappers(),
+    };
+  } catch (err: any) {
+    logToCloudWatch(`❌ Failed to build analytics DB config: ${err.message}`, 'ERROR', 'knexfile');
+    throw err;
   }
 };
+
  
 export const kidonDbConfig = async (): Promise<Knex.Config> => {
   const res = await getSecretFromSecretManager(process.env.KIDON_PASSWORD_KEY);
