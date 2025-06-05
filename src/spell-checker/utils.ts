@@ -712,9 +712,13 @@ export const extractBaseUrl = (url: string) => {
     try {
         await page.goto(landingpage, { waitUntil: 'networkidle2', timeout: 60000 });
 
-        const invocaPresent = await isInvocaPresent(page);
+        const invocaScripts = await page.evaluate(() =>
+            Array.from(document.scripts)
+                .filter(script => script.src.toLowerCase().includes('invoca'))
+                .map(script => script.src)
+        );
 
-        return invocaPresent;
+        return invocaScripts;
     } catch (error) {
         logToCloudWatch(`❌ Error in checkInvocaInDesktop ${landingpage}: ${error.message}`, "ERROR", 'invoca lineup validation');
         return []; // Ensure safe return
@@ -733,9 +737,13 @@ export async function checkInvocaInMobile(landingpage) {
     await page.setViewport({ width: 375, height: 812, isMobile: true });
     await page.goto(landingpage, { waitUntil: 'networkidle2', timeout: 60000 });
     try {
-    const invocaPresent = await isInvocaPresent(page);
+    const invocaScripts = await page.evaluate(() =>
+        Array.from(document.scripts)
+            .filter(script => script.src.toLowerCase().includes('invoca'))
+            .map(script => script.src)
+    );
     await browser.close();
-    return invocaPresent;
+    return invocaScripts;
 } catch (error) {
     logToCloudWatch(`❌ Error in checkInvocaInMobile ${landingpage}: ${error.message}  `, "ERROR", 'invoca lineup validation');
     return [];
@@ -855,53 +863,28 @@ export const getTrafficIncongruence = (bqCampaignsTrafficMobile, bqCampaignsTraf
   
 
 // utils/invoca/detectInvocaPresence.ts
+
 export async function isInvocaPresent(page: any): Promise<boolean> {
     return await page.evaluate(() => {
+      // 1. Check script src
       const hasInvocaScriptSrc = Array.from(document.scripts).some(script =>
         script.src?.toLowerCase().includes('invoca')
       );
   
+      // 2. Check inline script content
       const hasInvocaInlineScript = Array.from(document.scripts).some(script =>
         script.textContent?.toLowerCase().includes('invoca')
       );
   
+      // 3. Check entire page HTML
       const hasInvocaInHTML = document.documentElement.innerHTML.toLowerCase().includes('invoca');
   
+      // 4. Check global variables
       const hasInvocaGlobal = Object.keys(window).some(key =>
         key.toLowerCase().includes('invoca')
       );
   
-      console.log('🔍 Invoca Check: ', {
-        scriptSrc: hasInvocaScriptSrc,
-        inlineScript: hasInvocaInlineScript,
-        htmlContent: hasInvocaInHTML,
-        globalVar: hasInvocaGlobal
-      });
-  
       return hasInvocaScriptSrc || hasInvocaInlineScript || hasInvocaInHTML || hasInvocaGlobal;
     });
-  }
-  
-
-  export async function sendInvocaValidationAlerts({ desktopUrls, mobileUrls, isTest, slackToken }: {
-    desktopUrls: string[]; mobileUrls: string[]; isTest: boolean; slackToken: string;
-  }) {
-    const channel = slackChannels.CONTENT;
-  
-    await KF.sendSlackAlert(
-      desktopUrls.length > 0 && !isTest
-        ? `*🚨Invoca Desktop Lineup Validation (no invoca tag in page scripts):*\n${desktopUrls.join('\n')}`
-        : '*🌿Invoca Desktop Lineup Validation:*\nNo invoca pages found',
-      channel,
-      slackToken
-    );
-  
-    await KF.sendSlackAlert(
-      mobileUrls.length > 0 && !isTest
-        ? `*🚨Invoca Mobile Lineup Validation (no invoca tag in page scripts):*\n${mobileUrls.join('\n')}`
-        : '*🌿Invoca Mobile Lineup Validation:*\nNo invoca pages found',
-      channel,
-      slackToken
-    );
   }
   
