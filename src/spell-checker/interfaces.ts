@@ -45,4 +45,23 @@ export interface googleAds {
     resourceName: string; // Full resource name
 }
 
- 
+export interface BqTrafficCampaign {
+    domain_name: string;
+    domain_id: number;
+    campaign_id: number;
+    campaign_name: string;
+    date: {
+      value: string; // e.g. '2025-06-04'
+    };
+    device: 'MOBILE' | 'DESKTOP';
+    media_source: string;
+    network_letter: string;
+    network_type: string;
+  }
+  
+
+  export interface SqlCampaignTraffic {
+    campaign_id: string;
+    clicks: number;
+    domain_name: string;
+  }

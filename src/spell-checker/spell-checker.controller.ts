@@ -86,9 +86,11 @@ export class SpellCheckerController {
 
 // checks whether traffick from tracker visitors and BQ that defined as mobile only arrives to desktop only campaigns
   @Get('/mobileAndDesktopTrafficCongruenceValidation')
-  async mobileAndDesktopTrafficCongruenceValidation(){
+  async mobileAndDesktopTrafficCongruenceValidation(
+    @Query('isTest', new DefaultValuePipe(false), ParseBoolPipe) isTest?: boolean
+  ){
     try {
-      return await this.spellCheckerService.mobileAndDesktopTrafficCongruenceValidation();
+      return await this.spellCheckerService.mobileAndDesktopTrafficCongruenceValidation(isTest);
     } catch (error) {
       if (error instanceof BadRequestException || error instanceof InternalServerErrorException) {
         throw error;

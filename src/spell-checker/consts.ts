@@ -146,3 +146,10 @@ export const desktopOnlyTraffick = /^(?=.*(\+?D|\(D\)))(?!.*(\+?M|\(M\))).*$/;
   // Contains D, (D), or +D
   // 
  export const mobileOnlyTraffick = /^(?=.*\bM\b|\(M\))(?!.*(\+?D|\(D\))).*$/;
+
+
+ // ✅ Matches if:
+ //D, (D), +D
+ //M, (M), +M
+ 
+ export const hasMobileOrDesktop = /(\+?D|\(D\)|\+?M|\(M\))/;
