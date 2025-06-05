@@ -1,9 +1,9 @@
 import axios from 'axios';
-import { AnyObject } from './consts';
+import { AnyObject, hasMobileOrDesktop, mobileOnlyTraffick, desktopOnlyTraffick } from './consts';
 import { logToCloudWatch } from 'src/logger';
 import { BadRequestException, InternalServerErrorException } from '@nestjs/common';
 import { GptService } from 'src/gpt/gpt.service';
- import {websiteText} from './interfaces';
+ import {BqTrafficCampaign, SqlCampaignTraffic, websiteText} from './interfaces';
 import { Domain } from 'src/kidonInterfaces/shared';
 import { Company } from 'src/kidonInterfaces/shared';
 import { gptProposal } from './interfaces';
@@ -751,3 +751,113 @@ export async function checkInvocaInMobile(landingpage) {
     await browser.close();
 }
 }
+
+
+export const getTrafficIncongruence = (bqCampaignsTrafficMobile, bqCampaignsTrafficDesktop) => {
+    const incongruentMobileDesctopTraffick = [];
+    const incongruentDesctopMobileTraffick = [];
+    const invalidCampaigns = [];
+  
+    bqCampaignsTrafficMobile.forEach((c) => {
+      const isMatchDesktop = desktopOnlyTraffick.test(c.campaign_name);
+      if (isMatchDesktop) {
+        incongruentMobileDesctopTraffick.push(c);
+      }
+    });
+  
+    bqCampaignsTrafficDesktop.forEach((c) => {
+      const isMatchMobile = mobileOnlyTraffick.test(c.campaign_name);
+      if (isMatchMobile) {
+        incongruentDesctopMobileTraffick.push(c);
+      }
+    });
+  
+    [...bqCampaignsTrafficMobile, ...bqCampaignsTrafficDesktop].forEach((c) => {
+      const isValid = hasMobileOrDesktop.test(c.campaign_name);
+      if (!isValid) {
+        invalidCampaigns.push(c);
+      }
+    });
+  
+    return {
+      incongruentMobileDesctopTraffick,
+      incongruentDesctopMobileTraffick,
+      invalidCampaigns
+    };
+  };
+
+
+  export const assignDomainNames = (bqMobile: BqTrafficCampaign[], bqDesktop: BqTrafficCampaign[], mobileTraffic: SqlCampaignTraffic[], desktopTraffic: SqlCampaignTraffic[]) => {
+    bqMobile.forEach(bqt => {
+      const match = mobileTraffic.find(mt => Number(mt.campaign_id) === Number(bqt.campaign_id));
+      bqt.domain_name = match ? match.domain_name : '';
+    });
+  
+    bqDesktop.forEach(bqt => {
+      const match = desktopTraffic.find(mt => Number(mt.campaign_id) === Number(bqt.campaign_id));
+      bqt.domain_name = match ? match.domain_name : '';
+    });
+  };
+
+  export const getUniqueCampaignErrors = (campaigns: BqTrafficCampaign[]) => {
+    const seen = new Set();
+    const unique = [];
+  
+    for (const c of campaigns) {
+      const key = `${c.campaign_id}||${c.campaign_name}`;
+      if (!seen.has(key)) {
+        seen.add(key);
+        unique.push(c);
+      }
+    }
+  
+    return unique;
+  };
+
+
+
+  export const sendTrafficValidationAlerts = async (
+    mobile: BqTrafficCampaign[],
+    desktop: BqTrafficCampaign[],
+    invalid: BqTrafficCampaign[],
+    isTest: boolean,
+    state: any
+  ) => {
+    const channel = isTest ? slackChannels.PERSONAL : slackChannels.CONTENT;
+  
+    const buildMessage = (title: string, campaigns: BqTrafficCampaign[]) => {
+      const body = campaigns.map(c =>
+        `• *Campaign Name:* ${c.campaign_name}\n  *Campaign ID:* ${c.campaign_id}\n  *Domain:* ${c.domain_name}\n  *Device:* ${c.device}\n  *Date:* ${c.date?.value}\n  *Source:* ${c.media_source}\n  *Network:* ${c.network_type}`
+      ).join('\n');
+      return `*${title}*\n${body}`;
+    };
+  
+    if (mobile.length || desktop.length || invalid.length) {
+      if (mobile.length) {
+        await KF.sendSlackAlert(
+          buildMessage('🚨Incongruent Traffic (should be mobile only, but has desktop traffic):', mobile),
+          channel,
+          state.slackToken
+        );
+      }
+  
+      if (desktop.length) {
+        await KF.sendSlackAlert(
+          buildMessage('🚨Incongruent Traffic (should be desktop only, but has mobile traffic):', desktop),
+          channel,
+          state.slackToken
+        );
+      }
+  
+      if (invalid.length) {
+        await KF.sendSlackAlert(
+          buildMessage('🚨Invalid Traffic (should be mobile or desktop, but has none):', invalid),
+          channel,
+          state.slackToken
+        );
+      }
+    } else {
+      await KF.sendSlackAlert('🌿No incongruent traffic found', channel, state.slackToken);
+    }
+  };
+  

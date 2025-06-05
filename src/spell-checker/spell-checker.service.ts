@@ -1,11 +1,11 @@
 import { Injectable,Logger,Inject,HttpException, BadRequestException, InternalServerErrorException } from '@nestjs/common';
 import { CreateSpellCheckerDto } from './dto/create-spell-checker.dto';
 import { UpdateSpellCheckerDto } from './dto/update-spell-checker.dto';
-import { fetchGoogleAds,fetchLineups,filterOutTextlessAds,prepareAdsForErrorChecking,fetchWebsitesInnerHtmlAndFindErrors, extractNonCapitalLetterWords, formatGoogleAdsErrors, sendGoogleAdsErrorReports, checkIfLineupExists, processLineupResults, getActiveBingUrls, fetchAllTransactions, establishInvocaConnection,   isLocal, generateBrowser, checkInvocaInMobile, checkInvocaInDesktop } from './utils';
+import { fetchGoogleAds,fetchLineups,filterOutTextlessAds,prepareAdsForErrorChecking,fetchWebsitesInnerHtmlAndFindErrors, extractNonCapitalLetterWords, formatGoogleAdsErrors, sendGoogleAdsErrorReports, checkIfLineupExists, processLineupResults, getActiveBingUrls, fetchAllTransactions, establishInvocaConnection,   isLocal, generateBrowser, checkInvocaInMobile, checkInvocaInDesktop, getTrafficIncongruence, assignDomainNames, getUniqueCampaignErrors, sendTrafficValidationAlerts } from './utils';
 import { GlobalStateService } from 'src/globalState/global-state.service';
 const logger = new Logger('analytical-tools.spellchecker');
 import { logToCloudWatch } from 'src/logger'; 
-import {adsPreparedForErrorDetection} from './interfaces';
+import {adsPreparedForErrorDetection, BqTrafficCampaign} from './interfaces';
 import { Domain,Paths } from 'src/kidonInterfaces/shared';
 import {processInBatches,extractMisspelledWords,extractOutdatedYears} from './utils';
 import {googleAds } from './interfaces';
@@ -15,7 +15,7 @@ import {ignoredLanguages} from './ignoreWords';
 import { KIDON_CONNECTION } from 'src/knex/knex.module';
 import { Knex } from 'knex';
 import { createErrorsTable } from './utils';
-import {desktopOnlyTraffick, mobileOnlyTraffick, slackChannels} from './consts';
+import {desktopOnlyTraffick, hasMobileOrDesktop, mobileOnlyTraffick, slackChannels} from './consts';
 import { getSecretFromSecretManager } from 'src/utils/secrets';
 import {googleAdsGrammarErrors,googleAdsLandingPageQuery} from './gaqlQuerys';
 import { fetchIgnoreWords } from './utils';
@@ -361,7 +361,7 @@ export class SpellCheckerService {
     }
 
  
-  async mobileAndDesktopTrafficCongruenceValidation(){
+  async mobileAndDesktopTrafficCongruenceValidation(isTest:boolean){
     try {    
       const state =   this.globalState.getAllState(); 
 
@@ -373,12 +373,9 @@ export class SpellCheckerService {
         this.kidonClient.raw(traffic('desktop') )
       ]) 
       
-
-      logToCloudWatch(`mobileTraffic: ${JSON.stringify(mobileTraffic)}`, "INFO", 'mobile and desktop traffic congruence validation');
-      logToCloudWatch(`desktopTraffic: ${JSON.stringify(desktopTraffic)}`, "INFO", 'mobile and desktop traffic congruence validation');
-
-      const mobileCampaignIds = mobileTraffic[0].map(m => Number(m.campaign_id));
-      const desktopCampaignIds = desktopTraffic[0].map(d => Number(d.campaign_id));
+ 
+      const mobileCampaignIds : number[] = mobileTraffic[0].map(m => Number(m.campaign_id));
+      const desktopCampaignIds : number[] = desktopTraffic[0].map(d => Number(d.campaign_id));
       
        const mobileIds = mobileCampaignIds.join(',');
       const desktopIds = desktopCampaignIds.join(',');
@@ -396,89 +393,34 @@ export class SpellCheckerService {
 
 
       const [job] = await bq.createQueryJob({ query: campaignsNetworks(mobileIds) });
-      let [bqCampaignsTrafficMobile] = await job.getQueryResults(); // bq parallels for what supposed to be mobile only traffick that not contains sole D/(D)
+      let [bqCampaignsTrafficMobile] = await job.getQueryResults() as [BqTrafficCampaign[]];; // bq parallels for what supposed to be mobile only traffick that not contains sole D/(D)
+ 
 
       const [job2] = await bq.createQueryJob({ query: campaignsNetworks(desktopIds) });
-      let [bqCampaignsTrafficDesktop] = await job2.getQueryResults(); // bq parallels for what supposed to be desktop only traffick that not contains sole M/(M)
+      let [bqCampaignsTrafficDesktop]  = await job2.getQueryResults() as [BqTrafficCampaign[]]; // bq parallels for what supposed to be desktop only traffick that not contains sole M/(M)
 
+      logToCloudWatch(`bqCampaignsTrafficMobile: ${JSON.stringify(bqCampaignsTrafficMobile.map((c)=>c.campaign_name))}` , "INFO", 'mobile and desktop traffic congruence validation');
+      logToCloudWatch(`bqCampaignsTrafficDesktop: ${JSON.stringify(bqCampaignsTrafficDesktop.map((c)=>c.campaign_name))}` , "INFO", 'mobile and desktop traffic congruence validation');
 
-// ✅ Step 2: attach domain name from aurora table to each campaign from BQ
-   bqCampaignsTrafficMobile.forEach(bqt => {
-        const match = mobileTraffic[0].find(mt => Number(mt.campaign_id) === Number(bqt.campaign_id));
-        bqt.domain_name = match ? match.domain_name : '';
-      });
+    // ✅ Step 2: attach domain name from aurora table to each campaign from BQ
+      assignDomainNames(bqCampaignsTrafficMobile, bqCampaignsTrafficDesktop, mobileTraffic[0], desktopTraffic[0]);
 
+      // ✅ Step 3: filter out campaigns that are only in desktop traffic / mobile traffic / invalid campaigns names
 
-      bqCampaignsTrafficDesktop.forEach(bqt => {
-        const match = desktopTraffic[0].find(mt => Number(mt.campaign_id) === Number(bqt.campaign_id));
-        bqt.domain_name = match ? match.domain_name : '';
-      });
-
-
-      // ✅ Step 3: filter out campaigns that are only in desktop traffic
-
-      const incongruentMobileDesctopTraffick = [];
-      const incongruentDesctopMobileTraffick = [];
-// we are searching for campaigns that are only in desktop traffic, for incongruent campaigns, so false here means that the campaign congruent
-      bqCampaignsTrafficMobile.forEach((c) => {
-          const isMatchDesctop = desktopOnlyTraffick.test(c.campaign_name); // we are iterating over mobile campaign names, so we want exclude campaigns that have only (D) and not some other letter, because then the campaigns are desctop only
-           if (isMatchDesctop) {
-            incongruentMobileDesctopTraffick.push(c);
-          }
-         
-      });
-
-      bqCampaignsTrafficDesktop.forEach((c) => {
-        const isMatchMobile = mobileOnlyTraffick.test(c.campaign_name); // we are iterating over desctop campaign names,  so we want exclude campaigns that have only m/(M) and not some other letter, because then the campaigns are mobile only
+      const { incongruentMobileDesctopTraffick,incongruentDesctopMobileTraffick, invalidCampaigns} = getTrafficIncongruence(bqCampaignsTrafficMobile, bqCampaignsTrafficDesktop);
+       
         
-        if (isMatchMobile) {
-          incongruentDesctopMobileTraffick.push(c);
-        }
-      });
-
+       
+      
       //const incongruentTraffick = bqCampaignsTraffic.filter((c)=>desktopOnlyTraffick.test(c.campaign_name))
      logToCloudWatch(`incongruentTraffic: ${JSON.stringify(incongruentMobileDesctopTraffick)}`, "INFO", 'mobile and desktop traffic congruence validation');
 
       // Deduplicate by campaign_id and campaign_name
-      const uniqueErrorsMobile = [];
-      const seen = new Set();
-      for (const c of incongruentMobileDesctopTraffick) {
-        const key = `${c.campaign_id}||${c.campaign_name}`;
-        if (!seen.has(key)) {
-          seen.add(key);
-          uniqueErrorsMobile.push(c);
-        }
-      }
- 
-      const uniqueErrorsDesktop = [];
-      const seenDesktop = new Set();
-      for (const c of incongruentDesctopMobileTraffick) {
-        const key = `${c.campaign_id}||${c.campaign_name}`;
-        if (!seenDesktop.has(key)) {
-          seenDesktop.add(key); 
-          uniqueErrorsDesktop.push(c);
-        }
-      }
+      const uniqueErrorsMobile = getUniqueCampaignErrors(incongruentMobileDesctopTraffick);
+      const uniqueErrorsDesktop = getUniqueCampaignErrors(incongruentDesctopMobileTraffick);
+      const uniqueErrorsInvalid = getUniqueCampaignErrors(invalidCampaigns);  
 
-
-     if (uniqueErrorsMobile.length > 0) {
-      const formatted = uniqueErrorsMobile.map(c =>
-        `• *Campaign:* ${c.campaign_name}\n  *Campaign ID:* ${c.campaign_id}\n  *Domain:* ${c.domain_name}\n  *Device:* ${c.device}\n  *Date:* ${c.date?.value}\n  *Source:* ${c.media_source}\n  *Network:* ${c.network_type}\n`
-      ).join('\n');
-      await KF.sendSlackAlert(`*🚨Incongruent Traffic campaign names (should be mobile only, but has desktop traffic):*\n${formatted}`, slackChannels.CONTENT, state.slackToken);
-    } 
-     if (uniqueErrorsDesktop.length > 0) {
-      const formatted = uniqueErrorsDesktop.map(c =>
-        `• *Campaign:* ${c.campaign_name}\n  *Campaign ID:* ${c.campaign_id}\n  *Domain:* ${c.domain_name}\n  *Device:* ${c.device}\n  *Date:* ${c.date?.value}\n  *Source:* ${c.media_source}\n  *Network:* ${c.network_type}\n`
-      ).join('\n');
-      await KF.sendSlackAlert(`*🚨Incongruent Traffic campaign names (should be desktop only, but has mobile traffic):*\n${formatted}`, slackChannels.CONTENT, state.slackToken);
-    } else {
-      await KF.sendSlackAlert('🌿No incongruent traffic found', slackChannels.CONTENT, state.slackToken);
-    }
-
-
-
-
+   await sendTrafficValidationAlerts(uniqueErrorsMobile, uniqueErrorsDesktop, uniqueErrorsInvalid, isTest, state);
 
 
      return 'mobile and desktop traffic congruence validation finished';
