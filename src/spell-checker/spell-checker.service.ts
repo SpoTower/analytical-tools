@@ -1,7 +1,7 @@
 import { Injectable,Logger,Inject,HttpException, BadRequestException, InternalServerErrorException } from '@nestjs/common';
 import { CreateSpellCheckerDto } from './dto/create-spell-checker.dto';
 import { UpdateSpellCheckerDto } from './dto/update-spell-checker.dto';
-import { fetchGoogleAds,fetchLineups,filterOutTextlessAds,prepareAdsForErrorChecking,fetchWebsitesInnerHtmlAndFindErrors, extractNonCapitalLetterWords, formatGoogleAdsErrors, sendGoogleAdsErrorReports, checkIfLineupExists, processLineupResults, getActiveBingUrls, fetchAllTransactions, establishInvocaConnection,   isLocal, generateBrowser, checkInvocaInMobile, checkInvocaInDesktop, getTrafficIncongruence, assignDomainNames, getUniqueCampaignErrors, sendTrafficValidationAlerts } from './utils';
+import { fetchGoogleAds,fetchLineups,filterOutTextlessAds,prepareAdsForErrorChecking,fetchWebsitesInnerHtmlAndFindErrors, extractNonCapitalLetterWords, formatGoogleAdsErrors, sendGoogleAdsErrorReports, checkIfLineupExists, processLineupResults, getActiveBingUrls, fetchAllTransactions, establishInvocaConnection,   isLocal, generateBrowser, checkInvocaInMobile, checkInvocaInDesktop, getTrafficIncongruence, assignDomainNames, getUniqueCampaignErrors, sendTrafficValidationAlerts, sendInvocaValidationAlerts } from './utils';
 import { GlobalStateService } from 'src/globalState/global-state.service';
 const logger = new Logger('analytical-tools.spellchecker');
 import { logToCloudWatch } from 'src/logger'; 
@@ -438,38 +438,26 @@ export class SpellCheckerService {
         const state =   this.globalState.getAllState(); 
         await establishInvocaConnection();
         const transactions = await  fetchAllTransactions();
-       const landingpages =  !isLocal() ? transactions.filter((tr)=>tr.landing_page).map((trl)=>trl.landing_page) : transactions.filter((tr)=>tr.landing_page).slice(0,5).map((trl)=>trl.landing_page) ;
+       const landingpages =   isLocal() ? transactions.filter((tr)=>tr.landing_page).map((trl)=>trl.landing_page) : transactions.filter((tr)=>tr.landing_page).slice(0,5).map((trl)=>trl.landing_page) ;
        let uniqueLandingpages :string[] = Array.from(new Set(landingpages.map(extractBaseUrl).filter(Boolean)));
         let domains = await this.kidonClient.raw('select * from domain') ;
         domains = domains[0].map((d:Domain)=>d.hostname)
         uniqueLandingpages = uniqueLandingpages.filter(lp =>!domains.some(d => lp.includes(d)));
-          
-             
+       
     let invoclessPages = [];
     let invoclessPagesMobile = [];
+
     try {
       const landingpagesToCheck = url ? [url] : uniqueLandingpages; // if url is provided, we only check that url
       for (const landingpage of landingpagesToCheck) {
           logToCloudWatch(`Processing landingpage (m+d): ${landingpage}`, "INFO", 'invoca lineup validation');
           const [isInvoca, isInvocaMobile] = await Promise.all([checkInvocaInDesktop(landingpage),checkInvocaInMobile(landingpage)]);
-          if (isInvoca && isInvoca.length === 0) invoclessPages.push(landingpage);
-          if ((isInvocaMobile && isInvocaMobile.length === 0)  )invoclessPagesMobile.push(landingpage);
+          if (isInvoca  ) invoclessPages.push(landingpage);
+          if ((isInvocaMobile  ))invoclessPagesMobile.push(landingpage);
     }
-      
+  
        logToCloudWatch(`invoclesspages: ${invoclessPages}`, "INFO", 'invoca lineup validation');
-      
-       if(invoclessPages.length > 0 && !isTest){
-        await KF.sendSlackAlert(`*🚨Invoca Desktop Lineup Validation (no invoca tag in page scripts):*\n${invoclessPages.join('\n')}`, slackChannels.CONTENT, state.slackToken);
-       }else{
-        await KF.sendSlackAlert('*🌿Invoca Desktop Lineup Validation:*\nNo invoca pages found', slackChannels.CONTENT, state.slackToken);
-       }
-
-       if(invoclessPagesMobile.length > 0 && !isTest){
-        await KF.sendSlackAlert(`*🚨Invoca Mobile Lineup Validation (no invoca tag in page scripts):*\n${invoclessPagesMobile.join('\n')}`, slackChannels.CONTENT, state.slackToken);
-       }else{
-        await KF.sendSlackAlert('*🌿Invoca Mobile Lineup Validation:*\nNo invoca pages found', slackChannels.CONTENT, state.slackToken);
-       }
-
+       await sendInvocaValidationAlerts({ desktopUrls: invoclessPages, mobileUrls: invoclessPagesMobile, isTest, slackToken: state.slackToken });
        return 'invoca lineup validation finished'; 
       } catch (error) {
         logToCloudWatch(`❌ Error in invocaLineupValidation: ${error.message} |||||| ${JSON.stringify(error)}`, "ERROR", 'invoca lineup validation');
