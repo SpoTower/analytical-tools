@@ -65,3 +65,13 @@ export interface BqTrafficCampaign {
     clicks: number;
     domain_name: string;
   }
+
+  export interface pageContentMetaData {
+    domain:number;
+    fullPath:string;
+    innerHtml: string;
+    titleElement?: string;
+    detectedErrors?: string[]
+    outdatedYears?: string[]
+  }
+ 

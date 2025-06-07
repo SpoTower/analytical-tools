@@ -3,8 +3,9 @@ import { CreateSpellCheckerDto } from './dto/create-spell-checker.dto';
 import { UpdateSpellCheckerDto } from './dto/update-spell-checker.dto';
 import { fetchGoogleAds,fetchLineups,filterOutTextlessAds,prepareAdsForErrorChecking,fetchWebsitesInnerHtmlAndFindErrors, extractNonCapitalLetterWords, formatGoogleAdsErrors, sendGoogleAdsErrorReports, checkIfLineupExists, processLineupResults, getActiveBingUrls, fetchAllTransactions, establishInvocaConnection,   isLocal, generateBrowser, checkInvocaInMobile, checkInvocaInDesktop, getTrafficIncongruence, assignDomainNames, getUniqueCampaignErrors, sendTrafficValidationAlerts } from './utils';
 import { GlobalStateService } from 'src/globalState/global-state.service';
+import { GptService } from 'src/gpt/gpt.service';
 const logger = new Logger('analytical-tools.spellchecker');
-import { logToCloudWatch } from 'src/logger'; 
+import {logToCloudWatch} from 'src/logger'; 
 import {adsPreparedForErrorDetection, BqTrafficCampaign} from './interfaces';
 import { Domain,Paths } from 'src/kidonInterfaces/shared';
 import {processInBatches,extractMisspelledWords,extractOutdatedYears} from './utils';
@@ -27,13 +28,15 @@ import dayjs from 'dayjs';
 import { invocaColumns } from './consts';
 import { extractBaseUrl } from './utils';
 import { campaignsNetworks, traffic } from './queries/traffic';
+ 
 @Injectable()
 export class SpellCheckerService {
 
   constructor(
     @Inject(KIDON_CONNECTION) private readonly kidonClient: Knex,
     private readonly globalState: GlobalStateService,
-     ) {}
+    private readonly gptService: GptService
+  ) {}
 
      async findAndFixWebsitesGrammaticalErrors(domainId?: number,   isTest?: boolean, url?: string) {
       const state = this.globalState.getAllState();
@@ -81,7 +84,7 @@ export class SpellCheckerService {
   }
    
  
-  async findAndFixGoogleAdsGrammaticalErrors(batchSize: number, domainId?: number, sliceSize?: number) {
+  async findAndFixGoogleAdsGrammaticalErrors(batchSize: number, domainId?: number, sliceSize?: number    ) {
     logToCloudWatch('entering findAndFixGoogleAdsGrammaticalErrors');
     const [googleAdsIgnoreList, googleAdsNonCapitalLettersIgnoreList] = await Promise.all([fetchIgnoreWords(this.kidonClient, '59'),fetchIgnoreWords(this.kidonClient, '60')]);
     const state = this.globalState.getAllState();
@@ -319,6 +322,44 @@ export class SpellCheckerService {
    }
   
 
+ 
+  async findAndFixWebsitesGrammaticalErrors(domainId?: number,   isTest?: boolean, url?: string) {
+    const state = this.globalState.getAllState();
+    const ignoredWords = await fetchIgnoreWords(this.kidonClient, '56');
+
+    if (!state || !ignoredWords.length) {
+      logToCloudWatch('No state/No ignore words found');
+      return;
+    }
+
+     if(!state || !ignoredWords){ logToCloudWatch('No state/ No ignore words found'); }
+         // ✅ Step 1: filter non english paths out and assign relevant paths to domains
+        const englishPats =  state.paths.filter((p) => !ignoredLanguages.some(lang => p.path.includes(lang)));  //filter out non english paths
+         // ✅ Step 2: filter out non visited domains, attach paths to each domain
+
+        const weekAgo = new Date(new Date().setDate(new Date().getDate() - 7)).toISOString().split('T')[0];
+        const recentlyVisitedDomains =  await this.kidonClient('tracker_visitors').select('domain_name').where('created_at', '>', weekAgo).whereIn('utm_source', ['GOOGLE', 'BING']).distinct(); 
+         if(!recentlyVisitedDomains || recentlyVisitedDomains.length === 0)     logToCloudWatch('no tracker visitors Data!');
+
+         const chosenDomains = domainId ? state.domains.filter((d: Domain) => d.id === domainId) : state.domains.filter(d => recentlyVisitedDomains.some(r => r.domainName === d.hostname));
+         chosenDomains.forEach((domain: Domain) => {domain.paths = englishPats.filter((p: Paths) => p.domainId === domain.id).map((p: Paths) => p.path).filter((p)=> p); });  // asign paths per domain
+         // ✅ Step 3: fetch all paths' text,   check each word for errors and send result to mail
+         const detectedErrors =    await fetchWebsitesInnerHtmlAndFindErrors(chosenDomains, ignoredWords, this.gptService, url); //get inner html of websites
+         const domainMessages = createErrorsTable(JSON.stringify(detectedErrors));
+          await KF.sendSlackAlert('Web Sites Errors:', slackChannels.CONTENT, state.slackToken);
+         
+         if(!isTest){
+          for (const message of domainMessages) {
+             await KF.sendSlackAlert(message, slackChannels.CONTENT, state.slackToken);
+         }       
+         }
+         
+ 
+
+        return `websites were processed by local spellchecker and sent to kidon to be sended by slack to content errors channel`;
+}
+ 
+ 
  
 
   async urlValidation( ){

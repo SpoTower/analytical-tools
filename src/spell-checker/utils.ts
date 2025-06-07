@@ -23,6 +23,8 @@ import { googleAdsLandingPageQuery } from './gaqlQuerys';
 import dayjs from 'dayjs';
 import { invocaColumns } from './consts';
 import puppeteer from 'puppeteer';
+import { extractErrorsWithGpt, extractErrorsWithLocalLibrary } from './utilsOfUtils';
+
 export async function fetchGoogleAds(domain: Domain, companies: Company[], tokens:any, query:string ) {
     logToCloudWatch(`Entering fetchGoogleAds, fetching google ads for domain ${domain.id}`);
     console.log(companies.find((c)=>c.id == domain.companyId ).name);
@@ -179,7 +181,7 @@ export async function   processInBatches(tasks: (() => Promise<any>)[], batchSiz
   }
 
 
-  export async function fetchWebsitesInnerHtmlAndFindErrors(domains: Domain[], ignoreList: string[], state: any, url?: string): Promise<any[]> {
+  export async function fetchWebsitesInnerHtmlAndFindErrors(domains: Domain[], ignoreList: string[], gptService,     url?: string): Promise<any[]> {
     logToCloudWatch('Entering fetchWebsitesInnerHtml');
 
     let finalDomainData: websiteText[] = []; // Accumulate results for all domains
@@ -194,21 +196,19 @@ export async function   processInBatches(tasks: (() => Promise<any>)[], batchSiz
         let domainPagesInnerHtml: websiteText[] = []; // Store results per domain
 
         for (const path of domain.paths) {
+
+
             let  actualUrl = url ? url :  `https://${domain.hostname}${path}`;
             logToCloudWatch(`Fetching ${actualUrl}`, 'INFO', 'fetch Websites InnerHtml And Find Errors');
             try {
-
-                // getting the text of the page
-                const { data: html } = await axios.get(actualUrl);
-                const dom = new JSDOM(html, { actualUrl});
-                const article = new Readability(dom.window.document).parse();
-
-                // getting the relevant html text
-                const $ = cheerio.load(html);
-                const titles = $('title').map((_, el) => $(el).text()).get();
-
-
-                domainPagesInnerHtml.push({ domain: domain.id, fullPath: actualUrl, innerHtml: article.textContent, titleElement: titles.join(' ') });
+                const browser = await generateBrowser()
+                const page = await browser.newPage();
+                await page.goto(actualUrl, { waitUntil: 'networkidle2', timeout: 60000 });
+                await new Promise(resolve => setTimeout(resolve, 1000));
+                const content = await page.evaluate(() => document.body.innerText);
+                const pageTitle = await page.title();
+                await browser.close();
+                domainPagesInnerHtml.push({ domain: domain.id, fullPath: actualUrl, innerHtml: content, titleElement: pageTitle });
             } catch (error) {
                 logToCloudWatch(`Failed to fetch ${actualUrl}: ${error.message}`);
             }
@@ -216,14 +216,10 @@ export async function   processInBatches(tasks: (() => Promise<any>)[], batchSiz
         // debug - domainPagesInnerHtml[0].innerHtml = 'Thehre are otgher metfhods to protect devieces '; domainPagesInnerHtml[0].titleElement = '2023'
 
         // Process inner HTML for each domain before moving to the next one. attach detected errors field to each object that represent path in this array
-        domainPagesInnerHtml.forEach(webSiteText => {
-            webSiteText.detectedErrors = extractMisspelledWords(webSiteText.innerHtml, ignoreList);
-            // Check for outdated years in both title and fullPath
-            const titleYears = extractOutdatedYears(webSiteText.titleElement || '');
-            const pathYears = extractOutdatedYears(webSiteText.fullPath);
-            webSiteText.outdatedYears = [...new Set([...titleYears, ...pathYears])]; // Combine and remove duplicates
-        });
-
+     
+          domainPagesInnerHtml =   extractErrorsWithLocalLibrary(domainPagesInnerHtml, ignoreList);
+        domainPagesInnerHtml = await extractErrorsWithGpt(gptService, domainPagesInnerHtml, ignoreList);
+        domainPagesInnerHtml = domainPagesInnerHtml.map((w)=>({...w, detectedErrors: w.detectedErrors.length > 0 ? w.detectedErrors : []}));
         // Filter out pages with no detected errors
         domainPagesInnerHtml = domainPagesInnerHtml.filter(w => w.detectedErrors.length > 0 || w.outdatedYears.length > 0 );
 
@@ -234,8 +230,7 @@ export async function   processInBatches(tasks: (() => Promise<any>)[], batchSiz
         domainPagesInnerHtml = [];
     }
 
-    if(url) logToCloudWatch(`Found ${finalDomainData.length} errors for ${url} ${JSON.stringify(finalDomainData)}`, 'INFO', 'fetch Websites InnerHtml And Find Errors');
-    
+     
     return finalDomainData; // Return accumulated results for all domains
 }
 

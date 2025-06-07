@@ -7,6 +7,7 @@ import { logToCloudWatch } from 'src/logger';
 import { ANALYTICS_CONNECTION } from 'src/knex/knex.module';
 import { KIDON_CONNECTION } from 'src/knex/knex.module';
 import { Knex } from 'knex';
+import { GptService } from 'src/gpt/gpt.service';
 
 
 
@@ -14,6 +15,7 @@ import { Knex } from 'knex';
 export class SpellCheckerController {
   @Inject(ANALYTICS_CONNECTION) private readonly analyticsClient: Knex
     @Inject(KIDON_CONNECTION) private readonly kidonClient: Knex
+ 
     constructor(private readonly spellCheckerService: SpellCheckerService) {}
 
   @Post()
@@ -30,7 +32,7 @@ export class SpellCheckerController {
      
     ) {
     try {
-       return await this.spellCheckerService.findAndFixWebsitesGrammaticalErrors(+domainId, isTest, url);
+       return await this.spellCheckerService.findAndFixWebsitesGrammaticalErrors(+domainId,  isTest, url);
     } catch (error) {
       logToCloudWatch(`❌ Error in findWebsitesGrammaticalErrors: ${error.message}, ${JSON.stringify(error)} `, "ERROR", 'spell-checker');
       return { message: 'Error in findWebsitesGrammaticalErrors' };
@@ -45,7 +47,7 @@ export class SpellCheckerController {
      @Query('sliceSize' ) sliceSize?: number
     ) {
     try {
-       return await this.spellCheckerService.findAndFixGoogleAdsGrammaticalErrors(batchSize,+domainId, +sliceSize);
+       return await this.spellCheckerService.findAndFixGoogleAdsGrammaticalErrors(batchSize,  +domainId, +sliceSize   );
     } catch (error) {
       if (error instanceof BadRequestException || error instanceof InternalServerErrorException) {
         throw error;
