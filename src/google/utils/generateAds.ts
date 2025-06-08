@@ -1,6 +1,7 @@
 import { promises as fs } from 'fs'
 import * as path from 'path'
 import { ConstantHeadersAndDescriptions } from '../interfaces'
+import { logToCloudWatch } from 'src/logger';
 
 // Utility to enforce length and replace years
 function cleanAdText(text: string, maxLength: number): string {
@@ -123,11 +124,16 @@ export function extractHeadlinesAndDescriptions(
       adTemplate[`Description ${i}`] = cleanAdText(value || '', 90);
     }
 
+  
+
     // Add the Final URL using hostname
     if (hostname) {
       adTemplate['Final URL'] = hostname
     }
-  
+    if (headlines.length === 0 && descriptions.length === 0) {
+       logToCloudWatch('Skipping empty ad set in extractHeadlinesAndDescriptions', 'WARN', 'GENERATE_ADS');
+      continue;
+    }
     adTemplates.push(adTemplate)
   }
 

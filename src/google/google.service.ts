@@ -236,8 +236,18 @@ async generateAds(sourceData:googleAdsSourceData){
   
       const fullPrompt = `${addLevelPrompt}. the word that should be used for this task is ${JSON.stringify(word)}`;
       const gptResponse = await this.gptService.askGpt01(process.env.GPT_KEY, addLevelSystemMessage, fullPrompt);
-      const [ad1, ad2] = extractHeadlinesAndDescriptions(gptResponse.choices[0].message.content, adsTemplateDefaults, sourceData.hostname, constantheadersAndDescriptions);
-      ads.push(...generateFullAddObject([ad1, ad2], { industryKeyword: [word] }));
+      const extractedAds = extractHeadlinesAndDescriptions(
+        gptResponse.choices[0].message.content,
+        adsTemplateDefaults,
+        sourceData.hostname,
+        constantheadersAndDescriptions,
+      );
+
+      if (extractedAds.length > 0) {
+        ads.push(...generateFullAddObject(extractedAds, { industryKeyword: [word] }));
+      } else {
+        logToCloudWatch(`Skipping ads for ${word} in box b due to empty content`, 'WARN', 'GENERATE_ADS');
+      }
   
       keywords.push(
         generateRowsUsinObjectTemplate(keywordTemplateDefaults, 1, {
@@ -318,11 +328,16 @@ async generateAds(sourceData:googleAdsSourceData){
           logToCloudWatch(`generating ad level rows for ${adGroup} inner promise all  box c`, 'INFO', 'GENERATE_ADS');
           const fullPrompt = `${addLevelPrompt}. the words that should be used for this task is ${JSON.stringify(kws)}`;
           const gptResponse = await this.gptService.askGpt01(process.env.GPT_KEY, addLevelSystemMessage, fullPrompt);
-          const [ad1, ad2] = extractHeadlinesAndDescriptions(gptResponse.choices[0].message.content, adsTemplateDefaults, sourceData.hostname, constantheadersAndDescriptions);
-          //const preparedAds = generateFullAddObject([ad1, ad2], { industryKeyword: [wordsSet.name] });
-          const preparedAds2 = generateFullAddObject2([ad1, ad2], {industryKeyword: [wordsSet.name], adGroupName: adGroup,  });
-            
-           
+          const extractedAds = extractHeadlinesAndDescriptions(
+            gptResponse.choices[0].message.content,
+            adsTemplateDefaults,
+            sourceData.hostname,
+            constantheadersAndDescriptions,
+          );
+
+          const preparedAds2 = extractedAds.length > 0
+            ? generateFullAddObject2(extractedAds, { industryKeyword: [wordsSet.name], adGroupName: adGroup })
+            : [];
         
           const adGroupRows = [
             generateRowsUsinObjectTemplate(adGroupTemplateDefaults, 1, { Campaign: [campaignM], 'Ad Group': [adGroup] })[0],
@@ -341,7 +356,11 @@ async generateAds(sourceData:googleAdsSourceData){
       for (const result of adLevelResults) {
         adGroups.push(...result.adGroupRows);
         keywords.push(...result.keywordRows);
-        ads.push(...result.preparedAds2);
+        if (result.preparedAds2.length > 0) {
+          ads.push(...result.preparedAds2);
+        } else {
+          logToCloudWatch('Skipping empty ad set in box c', 'WARN', 'GENERATE_ADS');
+        }
       }
     }
     logToCloudWatch('finishing box c', 'INFO', 'GENERATE_ADS');
