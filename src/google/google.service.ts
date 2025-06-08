@@ -12,7 +12,7 @@ import { GlobalStateService } from 'src/globalState/global-state.service';
 import {googleAdsSourceData,CampaignWordsChunk,ConstantHeadersAndDescriptions} from './interfaces'
 import { GptService } from 'src/gpt/gpt.service';
 import {campaignLevelSystemMessage,campaignLevelPrompt,exampleResponseCampaigns,addGroupLevelSystemMessage,addGroupLevelPrompt,addLevelSystemMessage,addLevelPrompt} from './prompts'
-import {generateRowsUsinObjectTemplate,extractHeadlinesAndDescriptions,exportToCsv,generateFullAddObject,extractCampaignChunks,parseAdGroupBlocks,generateDualCampaignRows} from './utils/generateAds'
+import {generateRowsUsinObjectTemplate,extractHeadlinesAndDescriptions,exportToCsv,generateFullAddObject,extractCampaignChunks,parseAdGroupBlocks,generateDualCampaignRows, generateFullAddObject2} from './utils/generateAds'
 import { keywordTemplateDefaults,adsTemplateDefaults,adGroupTemplateDefaults,campaignTemplateDefaults } from './adsConsts';
 import { logToCloudWatch }  from 'src/logger';
 import {addLevelPrompt as addLevelPromptBoxA} from './prompts'
@@ -102,47 +102,46 @@ async updateConversionNamesKidonTable(conversionActions?:any[],creationResult?:a
 
 
  
-  async generateAds(sourceData:googleAdsSourceData){
-logToCloudWatch('Entering generateAds endpoint. ', 'INFO', 'google');
-    const fullPrompt = `${addLevelPromptBoxA}. the word that should be used for this task is ${JSON.stringify(sourceData.industryKeyword[0])}`;
-    const gptResponse = await this.gptService.askGpt01(process.env.GPT_KEY, addLevelSystemMessage, fullPrompt);
-    let constantheadersAndDescriptions = generateConstantHeadersAndDescriptions(gptResponse.choices[0].message.content, adsTemplateDefaults, sourceData.hostname);
+async generateAds(sourceData:googleAdsSourceData){
+  logToCloudWatch('Entering generateAds endpoint. ', 'INFO', 'google');
+      const fullPrompt = `${addLevelPromptBoxA}. the word that should be used for this task is ${JSON.stringify(sourceData.industryKeyword[0])}`;
+      const gptResponse = await this.gptService.askGpt01(process.env.GPT_KEY, addLevelSystemMessage, fullPrompt);
+      let constantheadersAndDescriptions = generateConstantHeadersAndDescriptions(gptResponse.choices[0].message.content, adsTemplateDefaults, sourceData.hostname);
+     
+  
+      try {
+  
+      
+            const [boxA, boxB, boxC] = await Promise.all([
+        this.processBoxA(sourceData, constantheadersAndDescriptions),
+        this.processBoxB(sourceData, constantheadersAndDescriptions),
+        this.processBoxC(sourceData, constantheadersAndDescriptions)
+      ]); 
+  
    
-
-    try {
-
+      const campaigns1 = [   ...boxA.campaigns, ...boxB.campaigns, ...boxC.campaigns];
+      const adGroups1 = [  ...boxA.adGroups, ...boxB.adGroups, ...boxC.adGroups];
+      const keywords1 = [  ...boxA.keywords, ...boxB.keywords, ...boxC.keywords];
+      const ads1 = [   ...boxA.ads, ...boxB.ads, ...boxC.ads];
     
-          const [boxA, boxB, boxC] = await Promise.all([
-      this.processBoxA(sourceData, constantheadersAndDescriptions),
-      this.processBoxB(sourceData, constantheadersAndDescriptions),
-      this.processBoxC(sourceData, constantheadersAndDescriptions)
-    ]); 
-
- 
-    const campaigns1 = [   ...boxA.campaigns, ...boxB.campaigns, ...boxC.campaigns];
-    const adGroups1 = [  ...boxA.adGroups, ...boxB.adGroups, ...boxC.adGroups];
-    const keywords1 = [  ...boxA.keywords, ...boxB.keywords, ...boxC.keywords];
-    const ads1 = [   ...boxA.ads, ...boxB.ads, ...boxC.ads];
+    
+   
+     const campaignsCsv =  await exportToCsv(campaigns1, 'campaigns.csv');
+      const adGroupsCsv = await exportToCsv(adGroups1, 'ad-groups.csv');
+      const keywordsCsv = await exportToCsv(keywords1, 'keywords.csv');
+      const adsCsv = await exportToCsv(ads1, 'ads.csv');
+  logToCloudWatch('finishing generateAds', 'INFO', 'GENERATE_ADS');
+      return {
+        campaignsCsv,
+        adGroupsCsv,
+        keywordsCsv,
+        adsCsv
+      }
+      } catch (error) {
+        logToCloudWatch(error.message, 'ERROR', 'GENERATE_ADS');
+      }
+     }
   
-  
- 
-   const campaignsCsv =  await exportToCsv(campaigns1, 'campaigns.csv');
-    const adGroupsCsv = await exportToCsv(adGroups1, 'ad-groups.csv');
-    const keywordsCsv = await exportToCsv(keywords1, 'keywords.csv');
-    const adsCsv = await exportToCsv(ads1, 'ads.csv');
-logToCloudWatch('finishing generateAds', 'INFO', 'GENERATE_ADS');
-    return {
-      campaignsCsv,
-      adGroupsCsv,
-      keywordsCsv,
-      adsCsv
-    }
-    } catch (error) {
-      logToCloudWatch(error.message, 'ERROR', 'GENERATE_ADS');
-    }
-   }
-
-
 
   create(createGoogleDto: CreateGoogleDto) {
     return 'This action adds a new google';
@@ -296,7 +295,7 @@ logToCloudWatch('finishing generateAds', 'INFO', 'GENERATE_ADS');
     });
   
     // Step 3: Generate campaign rows
-    for (let campaign of campaignNamesAndWords    ) { // 6
+    for (let campaign of campaignNamesAndWords     ) { // 6
 
        const [row1, row2] = generateDualCampaignRows(campaign.name, campaignTemplateDefaults);
       campaigns.push(row1, row2);
@@ -320,8 +319,11 @@ logToCloudWatch('finishing generateAds', 'INFO', 'GENERATE_ADS');
           const fullPrompt = `${addLevelPrompt}. the words that should be used for this task is ${JSON.stringify(kws)}`;
           const gptResponse = await this.gptService.askGpt01(process.env.GPT_KEY, addLevelSystemMessage, fullPrompt);
           const [ad1, ad2] = extractHeadlinesAndDescriptions(gptResponse.choices[0].message.content, adsTemplateDefaults, sourceData.hostname, constantheadersAndDescriptions);
-          const preparedAds = generateFullAddObject([ad1, ad2], { industryKeyword: [wordsSet.name] });
-  
+          //const preparedAds = generateFullAddObject([ad1, ad2], { industryKeyword: [wordsSet.name] });
+          const preparedAds2 = generateFullAddObject2([ad1, ad2], {industryKeyword: [wordsSet.name], adGroupName: adGroup,  });
+            
+           
+        
           const adGroupRows = [
             generateRowsUsinObjectTemplate(adGroupTemplateDefaults, 1, { Campaign: [campaignM], 'Ad Group': [adGroup] })[0],
             generateRowsUsinObjectTemplate(adGroupTemplateDefaults, 1, { Campaign: [campaignD], 'Ad Group': [adGroup] })[0]
@@ -331,7 +333,7 @@ logToCloudWatch('finishing generateAds', 'INFO', 'GENERATE_ADS');
             generateRowsUsinObjectTemplate(keywordTemplateDefaults, 1, { Campaign: [campaignM], 'Ad Group': [adGroup], Keyword: [keyword] })[0],
             generateRowsUsinObjectTemplate(keywordTemplateDefaults, 1, { Campaign: [campaignD], 'Ad Group': [adGroup], Keyword: [keyword] })[0]
           ]);
-           return { adGroupRows, keywordRows, preparedAds };
+           return { adGroupRows, keywordRows, preparedAds2 };
         })
       );
   
@@ -339,7 +341,7 @@ logToCloudWatch('finishing generateAds', 'INFO', 'GENERATE_ADS');
       for (const result of adLevelResults) {
         adGroups.push(...result.adGroupRows);
         keywords.push(...result.keywordRows);
-        ads.push(...result.preparedAds);
+        ads.push(...result.preparedAds2);
       }
     }
     logToCloudWatch('finishing box c', 'INFO', 'GENERATE_ADS');

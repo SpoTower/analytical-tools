@@ -158,6 +158,38 @@ export function extractHeadlinesAndDescriptions(
   
     return finalAds;
   }
+
+
+  export function generateFullAddObject2(
+    adsArray,
+    sourceData: { industryKeyword: string[]; adGroupName?: string },
+  ) {
+    const finalAds = [];
+  
+    for (const ad of adsArray) {
+      const baseAd = { ...ad };
+      const duplicatedAd = { ...ad };
+  
+      const keyword = sourceData.industryKeyword[0];
+      const adGroupName = sourceData.adGroupName || `${keyword} - Exact`;
+  
+      // Original with | M
+      baseAd['Campaign'] = `${keyword} | M`;
+      baseAd['Ad Group'] = adGroupName;
+  
+      // Duplicate with | D
+      duplicatedAd['Campaign'] = `${keyword} | D`;
+      duplicatedAd['Ad Group'] = adGroupName;
+  
+      finalAds.push(baseAd, duplicatedAd);
+    }
+  
+    return finalAds;
+  }
+
+
+
+
   
 
   export function harvestSpecificContentFromFirstAd(adTemplates: Record<string, string>[]): ConstantHeadersAndDescriptions {
