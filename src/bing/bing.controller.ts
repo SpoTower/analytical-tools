@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Body, Patch, Param, Delete } from '@nestjs/common';
+import { Controller, Get, Post, Body, Patch, Param, Delete, MethodNotAllowedException } from '@nestjs/common';
 import { BingService } from './bing.service';
 import { CreateBingDto } from './dto/create-bing.dto';
 import { UpdateBingDto } from './dto/update-bing.dto';
@@ -11,8 +11,10 @@ export class BingController {
   async generateConversions(@Body() body: any) {
 
     try {
+    
       const { conversionActions, hostname, domainId } = body;
       const resourceNames = await this.bingService.createConversionGoals(conversionActions, domainId);
+      if(conversionActions?.length != resourceNames?.length)  throw new Error('not all resource names were sucessfully created at bing')   
       await this.bingService.updateConversionNamesKidonTable(conversionActions,resourceNames,domainId);
       return { status: 'ok', count: resourceNames.length };
     }catch(e){
