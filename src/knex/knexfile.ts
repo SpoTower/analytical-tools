@@ -7,10 +7,7 @@ export const analyticsDbConfig = async (): Promise<Knex.Config> => {
   try {
     const res = await getSecretFromSecretManager(process.env.DB_PASSWORD_KEY);
     const secretData = JSON.parse(res);
-
-    logToCloudWatch(`Connecting to ${process.env.RDS_HOSTNAME}`, 'INFO', 'knexfile');
-    logToCloudWatch(`Connecting to ${secretData?.username}`, 'INFO', 'knexfile');
-    logToCloudWatch(`Connecting to ${secretData?.password}`, 'INFO', 'knexfile');
+ 
 
     return {
       client: 'mysql2',

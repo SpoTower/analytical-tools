@@ -13,10 +13,8 @@ export class BingController {
     try {
     
       const { conversionActions, hostname, domainId } = body;
-      const resourceNames = await this.bingService.createConversionGoals(conversionActions, domainId);
-      if(conversionActions?.length != resourceNames?.length)  throw new Error('not all resource names were sucessfully created at bing')   
-      await this.bingService.updateConversionNamesKidonTable(conversionActions,resourceNames,domainId);
-      return { status: 'ok', count: resourceNames.length };
+      const resourceNames = await this.bingService.createConversionGoals(conversionActions, domainId );
+       return { status: 'ok', count: resourceNames.length };
     }catch(e){
       logToCloudWatch(e.message, 'ERROR', 'bing');
       return { status: 'error', count: '', message: e.message };
