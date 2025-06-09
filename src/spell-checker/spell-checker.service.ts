@@ -12,7 +12,7 @@ import {processInBatches,extractMisspelledWords,extractOutdatedYears} from './ut
 import {googleAds } from './interfaces';
 export {emailSubjects} from './consts';
 import * as KF from '@spotower/my-utils';
-import {ignoredDomains, ignoredLanguages} from './ignoreWords';
+import {ignoredLanguages} from './ignoreWords';
 import { KIDON_CONNECTION } from 'src/knex/knex.module';
 import { Knex } from 'knex';
 import { createErrorsTable } from './utils';
@@ -37,52 +37,7 @@ export class SpellCheckerService {
     private readonly globalState: GlobalStateService,
     private readonly gptService: GptService
   ) {}
-
-     async findAndFixWebsitesGrammaticalErrors(domainId?: number,   isTest?: boolean, url?: string) {
-      const state = this.globalState.getAllState();
-
-
-     
-
-      const ignoredWords = await fetchIgnoreWords(this.kidonClient, '56');
-  
-      if (!state || !ignoredWords.length) {
-        logToCloudWatch('No state/No ignore words found');
-        return;
-      }
-  
-       if(!state || !ignoredWords){ logToCloudWatch('No state/ No ignore words found'); }
-       logToCloudWatch(`investing paths of domain 27 ${       state.paths.filter((sp)=>sp.domainId == 27 && sp.path.includes('inv')).map((fp)=>fp.path)       }`, 'INFO', 'findAndFixWebsitesGrammaticalErrors');
-
-            // ✅ Step 1: filter non english paths out and assign relevant paths to domains
-          const englishPats =  state.paths.filter((p) => !ignoredLanguages.some(lang => p.path.includes(lang)));  //filter out non english paths
-          let chosenDomains = state.domains.filter(d =>    d.hostname !== 'compare.funcasino.se' );
-           // ✅ Step 2: filter out non visited domains, attach paths to each domain
-  
-          const weekAgo = new Date(new Date().setDate(new Date().getDate() - 7)).toISOString().split('T')[0];
-          const recentlyVisitedDomains =  await this.kidonClient('tracker_visitors').select('domain_name').where('created_at', '>', weekAgo).whereIn('utm_source', ['GOOGLE', 'BING']).distinct(); 
-           if(!recentlyVisitedDomains || recentlyVisitedDomains.length === 0)     logToCloudWatch('no tracker visitors Data!');
-  
-             chosenDomains = domainId ? state.domains.filter((d: Domain) => d.id === domainId) : state.domains.filter(d => recentlyVisitedDomains.some(r => r.domainName === d.hostname));
-           chosenDomains.forEach((domain: Domain) => {domain.paths = englishPats.filter((p: Paths) => p.domainId === domain.id).map((p: Paths) => p.path).filter((p)=> p); });  // asign paths per domain
-           // ✅ Step 3: fetch all paths' text,   check each word for errors and send result to mail
-           logToCloudWatch(`chosenDomains: ${chosenDomains.length}`, 'INFO', 'findAndFixWebsitesGrammaticalErrors');
-           logToCloudWatch(`gold paths: ${chosenDomains.find((ch)=>ch.hostname = 'top10goldinvestments.com').paths}`, 'INFO', 'findAndFixWebsitesGrammaticalErrors');
-           const detectedErrors =    await fetchWebsitesInnerHtmlAndFindErrors(chosenDomains, ignoredWords,state, url); //get inner html of websites
-           const domainMessages = createErrorsTable(JSON.stringify(detectedErrors));
-            await KF.sendSlackAlert('Web Sites Errors:', slackChannels.CONTENT, state.slackToken);
-           
-           if(!isTest){
-            for (const message of domainMessages) {
-               await KF.sendSlackAlert(message, slackChannels.CONTENT, state.slackToken);
-           }       
-           }
-           
-   
-  
-          return `websites were processed by local spellchecker and sent to kidon to be sended by slack to content errors channel`;
-  }
-   
+ 
  
   async findAndFixGoogleAdsGrammaticalErrors(batchSize: number, domainId?: number, sliceSize?: number    ) {
     logToCloudWatch('entering findAndFixGoogleAdsGrammaticalErrors');
@@ -155,7 +110,7 @@ export class SpellCheckerService {
   
       const urlSet = new Set<string>();
   
-      // ✅ Step 1: fetch urls from google ads
+      // ✅ Step 1: fetch lineups
       const rawLineupResults = await processInBatches(
           domainsToProcess.map((domain: Domain) => async () => {
               try {
@@ -321,7 +276,7 @@ export class SpellCheckerService {
     return Array.from(baseUrlSet) ;
    }
   
-
+  
  
   async findAndFixWebsitesGrammaticalErrors(domainId?: number,   isTest?: boolean, url?: string) {
     const state = this.globalState.getAllState();
