@@ -1,21 +1,22 @@
 import { Injectable,Logger,Inject,HttpException, BadRequestException, InternalServerErrorException } from '@nestjs/common';
 import { CreateSpellCheckerDto } from './dto/create-spell-checker.dto';
 import { UpdateSpellCheckerDto } from './dto/update-spell-checker.dto';
-import { fetchGoogleAds,fetchLineups,filterOutTextlessAds,prepareAdsForErrorChecking,fetchWebsitesInnerHtmlAndFindErrors, extractNonCapitalLetterWords, formatGoogleAdsErrors, sendGoogleAdsErrorReports, checkIfLineupExists, processLineupResults, getActiveBingUrls, fetchAllTransactions, establishInvocaConnection,   isLocal, generateBrowser, checkInvocaInMobile, checkInvocaInDesktop } from './utils';
+import { fetchGoogleAds,fetchLineups,filterOutTextlessAds,prepareAdsForErrorChecking,fetchWebsitesInnerHtmlAndFindErrors, extractNonCapitalLetterWords, formatGoogleAdsErrors, sendGoogleAdsErrorReports, checkIfLineupExists, processLineupResults, getActiveBingUrls, fetchAllTransactions, establishInvocaConnection,   isLocal, generateBrowser, checkInvocaInMobile, checkInvocaInDesktop, getTrafficIncongruence, assignDomainNames, getUniqueCampaignErrors, sendTrafficValidationAlerts } from './utils';
 import { GlobalStateService } from 'src/globalState/global-state.service';
+import { GptService } from 'src/gpt/gpt.service';
 const logger = new Logger('analytical-tools.spellchecker');
-import { logToCloudWatch } from 'src/logger'; 
-import {adsPreparedForErrorDetection} from './interfaces';
+import {logToCloudWatch} from 'src/logger'; 
+import {adsPreparedForErrorDetection, BqTrafficCampaign} from './interfaces';
 import { Domain,Paths } from 'src/kidonInterfaces/shared';
 import {processInBatches,extractMisspelledWords,extractOutdatedYears} from './utils';
 import {googleAds } from './interfaces';
 export {emailSubjects} from './consts';
 import * as KF from '@spotower/my-utils';
-import {ignoredDomains, ignoredLanguages} from './ignoreWords';
+import {ignoredLanguages} from './ignoreWords';
 import { KIDON_CONNECTION } from 'src/knex/knex.module';
 import { Knex } from 'knex';
 import { createErrorsTable } from './utils';
-import {slackChannels} from './consts';
+import {desktopOnlyTraffick, hasMobileOrDesktop, mobileOnlyTraffick, slackChannels} from './consts';
 import { getSecretFromSecretManager } from 'src/utils/secrets';
 import {googleAdsGrammarErrors,googleAdsLandingPageQuery} from './gaqlQuerys';
 import { fetchIgnoreWords } from './utils';
@@ -26,61 +27,20 @@ import { BigQuery } from '@google-cloud/bigquery';
 import dayjs from 'dayjs';
 import { invocaColumns } from './consts';
 import { extractBaseUrl } from './utils';
+import { campaignsNetworks, traffic } from './queries/traffic';
+ 
 @Injectable()
 export class SpellCheckerService {
 
   constructor(
     @Inject(KIDON_CONNECTION) private readonly kidonClient: Knex,
     private readonly globalState: GlobalStateService,
-     ) {}
-
-     async findAndFixWebsitesGrammaticalErrors(domainId?: number,   isTest?: boolean, url?: string) {
-      const state = this.globalState.getAllState();
+    private readonly gptService: GptService
+  ) {}
 
 
-     
-
-      const ignoredWords = await fetchIgnoreWords(this.kidonClient, '56');
-  
-      if (!state || !ignoredWords.length) {
-        logToCloudWatch('No state/No ignore words found');
-        return;
-      }
-  
-       if(!state || !ignoredWords){ logToCloudWatch('No state/ No ignore words found'); }
-       logToCloudWatch(`investing paths of domain 27 ${       state.paths.filter((sp)=>sp.domainId == 27 && sp.path.includes('inv')).map((fp)=>fp.path)       }`, 'INFO', 'findAndFixWebsitesGrammaticalErrors');
-
-            // ✅ Step 1: filter non english paths out and assign relevant paths to domains
-          const englishPats =  state.paths.filter((p) => !ignoredLanguages.some(lang => p.path.includes(lang)));  //filter out non english paths
-          let chosenDomains = state.domains.filter(d =>    d.hostname !== 'compare.funcasino.se' );
-           // ✅ Step 2: filter out non visited domains, attach paths to each domain
-  
-          const weekAgo = new Date(new Date().setDate(new Date().getDate() - 7)).toISOString().split('T')[0];
-          const recentlyVisitedDomains =  await this.kidonClient('tracker_visitors').select('domain_name').where('created_at', '>', weekAgo).whereIn('utm_source', ['GOOGLE', 'BING']).distinct(); 
-           if(!recentlyVisitedDomains || recentlyVisitedDomains.length === 0)     logToCloudWatch('no tracker visitors Data!');
-  
-             chosenDomains = domainId ? state.domains.filter((d: Domain) => d.id === domainId) : state.domains.filter(d => recentlyVisitedDomains.some(r => r.domainName === d.hostname));
-           chosenDomains.forEach((domain: Domain) => {domain.paths = englishPats.filter((p: Paths) => p.domainId === domain.id).map((p: Paths) => p.path).filter((p)=> p); });  // asign paths per domain
-           // ✅ Step 3: fetch all paths' text,   check each word for errors and send result to mail
-           logToCloudWatch(`chosenDomains: ${chosenDomains.length}`, 'INFO', 'findAndFixWebsitesGrammaticalErrors');
-           logToCloudWatch(`gold paths: ${chosenDomains.find((ch)=>ch.hostname = 'top10goldinvestments.com').paths}`, 'INFO', 'findAndFixWebsitesGrammaticalErrors');
-           const detectedErrors =    await fetchWebsitesInnerHtmlAndFindErrors(chosenDomains, ignoredWords,state, url); //get inner html of websites
-           const domainMessages = createErrorsTable(JSON.stringify(detectedErrors));
-            await KF.sendSlackAlert('Web Sites Errors:', slackChannels.CONTENT, state.slackToken);
-           
-           if(!isTest){
-            for (const message of domainMessages) {
-               await KF.sendSlackAlert(message, slackChannels.CONTENT, state.slackToken);
-           }       
-           }
-           
-   
-  
-          return `websites were processed by local spellchecker and sent to kidon to be sended by slack to content errors channel`;
-  }
-   
  
-  async findAndFixGoogleAdsGrammaticalErrors(batchSize: number, domainId?: number, sliceSize?: number) {
+  async findAndFixGoogleAdsGrammaticalErrors(batchSize: number, domainId?: number, sliceSize?: number    ) {
     logToCloudWatch('entering findAndFixGoogleAdsGrammaticalErrors');
     const [googleAdsIgnoreList, googleAdsNonCapitalLettersIgnoreList] = await Promise.all([fetchIgnoreWords(this.kidonClient, '59'),fetchIgnoreWords(this.kidonClient, '60')]);
     const state = this.globalState.getAllState();
@@ -138,7 +98,7 @@ export class SpellCheckerService {
 
  
  
-  async lineupValidation(hostname: string) {
+  async lineupValidation(hostname: string, isTest:boolean, url:string) {
     logToCloudWatch('entering lineupValidation');
   
     try {
@@ -151,7 +111,7 @@ export class SpellCheckerService {
   
       const urlSet = new Set<string>();
   
-      // ✅ Step 1: fetch urls from google ads
+      // ✅ Step 1: fetch lineups
       const rawLineupResults = await processInBatches(
           domainsToProcess.map((domain: Domain) => async () => {
               try {
@@ -170,6 +130,10 @@ export class SpellCheckerService {
       if (hostname) {
           urlAndSlackChannel = urlAndSlackChannel.filter((u) => u.url.includes(hostname));
       }
+
+      if(url){
+        urlAndSlackChannel = urlAndSlackChannel.filter((u) => u.url.includes(url));
+      }
  
       // ✅ Step 2: validate lineups (sequential, not in batches)
       const validationResults = [];
@@ -184,7 +148,7 @@ export class SpellCheckerService {
           const page = await browser.newPage();
           await page.goto(urlAndSlack.url, { waitUntil: 'networkidle2', timeout: 60000 });
           await new Promise(resolve => setTimeout(resolve, 2000));
-          await page.waitForSelector(
+         await page.waitForSelector(
             '[class*="partnersArea_main-partner-list"], [class*="ConditionalPartnersList"], [class*="homePage_partners-list-section"], [class*="articlesSection_container"], [class*="partnerNode"], [id*="test-id-partners-list"]',
             { timeout: 5000 }
           ).catch(() => {});
@@ -256,13 +220,13 @@ export class SpellCheckerService {
 
       if(doubleFailed && doubleFailed.length > 0){
         for(let error of filteredErrors){
-           const errorMessage = [  '*Lineup Validation Error:*',  `*URL:* ${error.url}`,`*Campaign:* ${error.campaignName}`,`*Status:* ${error.status}`,`*Reason:* ${error.reason}` ].join('\n');
+           const errorMessage = [  ' :rotating_light:  *Lineup Validation Error:*',  `*URL:* ${error.url}`,`*Campaign:* ${error.campaignName}`,`*Status:* ${error.status}`,`*Reason:* ${error.reason}` ].join('\n');
           logToCloudWatch(`Lineup Validation Errors: ${errorMessage}`, 'ERROR');
-          await KF.sendSlackAlert(errorMessage, slackChannels.CONTENT, state.slackToken); 
+          await KF.sendSlackAlert(errorMessage, isTest ?  slackChannels.PERSONAL : slackChannels.CONTENT, state.slackToken); 
         }
       }else{
-        logToCloudWatch(`No Lineup errors found`);
-        await KF.sendSlackAlert(`no lineup errors found`,  slackChannels.CONTENT, state.slackToken); 
+        logToCloudWatch(`:herb: No Lineup errors found`);
+        await KF.sendSlackAlert(`no lineup errors found`,  isTest ?  slackChannels.PERSONAL : slackChannels.CONTENT, state.slackToken); 
       }
   
     } catch (e) {
@@ -273,7 +237,7 @@ export class SpellCheckerService {
   
 
 
-  async activeUrls(hostname: string) {
+  async activeUrls(hostname: string, onlyOriginalUrl: boolean) {
     const state = this.globalState.getAllState(); if (!state) return 'No state found';
 
 
@@ -298,6 +262,11 @@ export class SpellCheckerService {
         30
     );
     let urlAndSlackChannel = processLineupResults(rawLineupResults);
+
+    if(!onlyOriginalUrl){
+       return urlAndSlackChannel.map((u) => u.url);
+    }
+
     const baseUrlSet = new Set<string>();
     for (const obj of urlAndSlackChannel) {
        const match = obj.url.match(/^(https:\/\/[^\/]+\.com\/)/);
@@ -309,6 +278,42 @@ export class SpellCheckerService {
    }
   
 
+  async findAndFixWebsitesGrammaticalErrors(domainId?: number,   isTest?: boolean, url?: string) {
+    const state = this.globalState.getAllState();
+    const ignoredWords = await fetchIgnoreWords(this.kidonClient, '56');
+
+    if (!state || !ignoredWords.length) {
+      logToCloudWatch('No state/No ignore words found');
+      return;
+    }
+
+     if(!state || !ignoredWords){ logToCloudWatch('No state/ No ignore words found'); }
+         // ✅ Step 1: filter non english paths out and assign relevant paths to domains
+        const englishPats =  state.paths.filter((p) => !ignoredLanguages.some(lang => p.path.includes(lang)));  //filter out non english paths
+         // ✅ Step 2: filter out non visited domains, attach paths to each domain
+
+        const weekAgo = new Date(new Date().setDate(new Date().getDate() - 7)).toISOString().split('T')[0];
+        const recentlyVisitedDomains =  await this.kidonClient('tracker_visitors').select('domain_name').where('created_at', '>', weekAgo).whereIn('utm_source', ['GOOGLE', 'BING']).distinct(); 
+         if(!recentlyVisitedDomains || recentlyVisitedDomains.length === 0)     logToCloudWatch('no tracker visitors Data!');
+
+         const chosenDomains = domainId ? state.domains.filter((d: Domain) => d.id === domainId) : state.domains.filter(d => recentlyVisitedDomains.some(r => r.domainName === d.hostname));
+         chosenDomains.forEach((domain: Domain) => {domain.paths = englishPats.filter((p: Paths) => p.domainId === domain.id).map((p: Paths) => p.path).filter((p)=> p); });  // asign paths per domain
+         // ✅ Step 3: fetch all paths' text,   check each word for errors and send result to mail
+         const detectedErrors =    await fetchWebsitesInnerHtmlAndFindErrors(chosenDomains, ignoredWords, this.gptService, url); //get inner html of websites
+         const domainMessages = createErrorsTable(JSON.stringify(detectedErrors));
+          await KF.sendSlackAlert('Web Sites Errors:', slackChannels.CONTENT, state.slackToken);
+         
+         if(!isTest){
+          for (const message of domainMessages) {
+             await KF.sendSlackAlert(message, slackChannels.CONTENT, state.slackToken);
+         }       
+         }
+         
+ 
+
+        return `websites were processed by local spellchecker and sent to kidon to be sended by slack to content errors channel`;
+}
+ 
  
 
   async urlValidation( ){
@@ -360,67 +365,71 @@ export class SpellCheckerService {
     }
 
  
-  async mobileAndDesktopTrafficCongruenceValidation(){
+  async mobileAndDesktopTrafficCongruenceValidation(isTest:boolean){
     try {    
       const state =   this.globalState.getAllState(); 
 
-      const result = await this.kidonClient.raw('SELECT campaign_id, domain_name, COUNT(*) AS clicks FROM tracker_visitors WHERE device = "mobile" AND DATE(created_at) = CURDATE() - INTERVAL 1 DAY GROUP BY campaign_id, domain_name HAVING COUNT(*) > 5' );   
-      logToCloudWatch(`result: ${JSON.stringify(result)}`, "INFO", 'mobile and desktop traffic congruence validation');
-      const campaignIds = result[0].map(r => Number(r.campaign_id));
-      const ids = campaignIds.join(',');
 
-      // '22386145648,21388459597,17268271860';
-          
-      logToCloudWatch(`ids: ${ids}`, "INFO", 'mobile and desktop traffic congruence validation');
+      // ✅ Step 1: fetch mobile and desktop traffic (campaign id's from tracker visitors aurora table)
+
+     const [mobileTraffic, desktopTraffic] = await Promise.all([
+        this.kidonClient.raw(traffic('mobile') ),   
+        this.kidonClient.raw(traffic('desktop') )
+      ]) 
+      
  
+      const mobileCampaignIds : number[] = mobileTraffic[0].map(m => Number(m.campaign_id));
+      const desktopCampaignIds : number[] = desktopTraffic[0].map(d => Number(d.campaign_id));
+      
+       const mobileIds = mobileCampaignIds.join(',');
+      const desktopIds = desktopCampaignIds.join(',');
+
+
  
+  
+ 
+
+      // ✅ Step 2: fetch campaign names and networks from BQ
+
       const res = await getSecretFromSecretManager(process.env.SECRET_NAME);
       const googleKey = JSON.parse(res).GOOGLE_SERVICE_PRIVATE_KEY.replace(/\\n/g, '\n');
-      logToCloudWatch(`googleKey: ${googleKey}`, "INFO", 'mobile and desktop traffic congruence validation');
-      logToCloudWatch(`BQ_EMAIL_SERVICE: ${process.env.BQ_EMAIL_SERVICE} BQ_PROJECT_NAME: ${process.env.BQ_PROJECT_NAME}`, "INFO", 'mobile and desktop traffic congruence validation');
-
-      const credentials = { client_email: process.env.BQ_EMAIL_SERVICE, private_key: googleKey };
-      const bq =   new BigQuery({ credentials, projectId: process.env.BQ_PROJECT_NAME });
+       const bq = await KF.connectToBQ(process.env.BQ_EMAIL_SERVICE, googleKey, process.env.BQ_PROJECT_NAME);
 
 
-     // const bq = await KF.connectToBQ(process.env.BQ_EMAIL_SERVICE, googleKey, process.env.BQ_PROJECT_NAME);
-      const [job] = await bq.createQueryJob({ query: `select * from kidon3_STG.campaigns_name_network WHERE campaign_id IN (${ids})` });
-      let [rows] = await job.getQueryResults();
+      const [job] = await bq.createQueryJob({ query: campaignsNetworks(mobileIds) });
+      let [bqCampaignsTrafficMobile] = await job.getQueryResults() as [BqTrafficCampaign[]];; // bq parallels for what supposed to be mobile only traffick that not contains sole D/(D)
+ 
 
-      rows.forEach(r => {
-        const match = result[0].find(re => Number(re.campaign_id) === Number(r.campaign_id));
-        r.domain_name = match ? match.domain_name : '';
-      });
+      const [job2] = await bq.createQueryJob({ query: campaignsNetworks(desktopIds) });
+      let [bqCampaignsTrafficDesktop]  = await job2.getQueryResults() as [BqTrafficCampaign[]]; // bq parallels for what supposed to be desktop only traffick that not contains sole M/(M)
 
-      logToCloudWatch(`rows: ${JSON.stringify(rows)}`, "INFO", 'mobile and desktop traffic congruence validation');
-     const desktopOnlyTraffick = /^(?!.*\([^)]*[MT\d][^)]*\)).*\(\s*D\s*\).*$/; // reject any parentheses that contain M, T or a digit, require a standalone "(D)" somewhere
-     const incongruentTraffick = rows.filter(name=>desktopOnlyTraffick.test(name.campaign_name))
-     logToCloudWatch(`incongruentTraffic: ${JSON.stringify(incongruentTraffick)}`, "INFO", 'mobile and desktop traffic congruence validation');
+      logToCloudWatch(`bqCampaignsTrafficMobile: ${JSON.stringify(bqCampaignsTrafficMobile.map((c)=>c.campaign_name))}` , "INFO", 'mobile and desktop traffic congruence validation');
+      logToCloudWatch(`bqCampaignsTrafficDesktop: ${JSON.stringify(bqCampaignsTrafficDesktop.map((c)=>c.campaign_name))}` , "INFO", 'mobile and desktop traffic congruence validation');
+
+    // ✅ Step 2: attach domain name from aurora table to each campaign from BQ
+      assignDomainNames(bqCampaignsTrafficMobile, bqCampaignsTrafficDesktop, mobileTraffic[0], desktopTraffic[0]);
+
+      // ✅ Step 3: filter out campaigns that are only in desktop traffic / mobile traffic / invalid campaigns names
+
+      const { incongruentMobileDesctopTraffick,incongruentDesctopMobileTraffick, invalidCampaigns} = getTrafficIncongruence(bqCampaignsTrafficMobile, bqCampaignsTrafficDesktop);
+       
+        
+       
+      
+      //const incongruentTraffick = bqCampaignsTraffic.filter((c)=>desktopOnlyTraffick.test(c.campaign_name))
+     logToCloudWatch(`incongruentTraffic: ${JSON.stringify(incongruentMobileDesctopTraffick)}`, "INFO", 'mobile and desktop traffic congruence validation');
 
       // Deduplicate by campaign_id and campaign_name
-      const uniqueErrors = [];
-      const seen = new Set();
-      for (const c of incongruentTraffick) {
-        const key = `${c.campaign_id}||${c.campaign_name}`;
-        if (!seen.has(key)) {
-          seen.add(key);
-          uniqueErrors.push(c);
-        }
-      }
+      const uniqueErrorsMobile = getUniqueCampaignErrors(incongruentMobileDesctopTraffick);
+      const uniqueErrorsDesktop = getUniqueCampaignErrors(incongruentDesctopMobileTraffick);
+      const uniqueErrorsInvalid = getUniqueCampaignErrors(invalidCampaigns);  
 
+   await sendTrafficValidationAlerts(uniqueErrorsMobile, uniqueErrorsDesktop, uniqueErrorsInvalid, isTest, state);
 
-     if (uniqueErrors.length > 0) {
-      const formatted = uniqueErrors.map(c =>
-        `• *Campaign:* ${c.campaign_name}\n  *Campaign ID:* ${c.campaign_id}\n  *Domain:* ${c.domain_name}\n  *Device:* ${c.device}\n  *Date:* ${c.date?.value}\n  *Source:* ${c.media_source}\n  *Network:* ${c.network_type}\n`
-      ).join('\n');
-      await KF.sendSlackAlert(`*🚨Incongruent Traffic campaign names:*\n${formatted}`, slackChannels.CONTENT, state.slackToken);
-    } else {
-      await KF.sendSlackAlert('🌿No incongruent traffic found', slackChannels.CONTENT, state.slackToken);
-    }
 
      return 'mobile and desktop traffic congruence validation finished';
      } catch (error) {
- 
+
       logToCloudWatch(`❌ Error in mobileAndDesktopTrafficCongruenceValidation: ${error.message} |||||| ${JSON.stringify(error)}`, "ERROR", 'mobile and desktop traffic congruence validation');
       return `Error in mobileAndDesktopTrafficCongruenceValidation: ${error.message}`;
     }
