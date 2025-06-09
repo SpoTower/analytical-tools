@@ -1,9 +1,9 @@
 import axios from 'axios';
-import { AnyObject } from './consts';
+import { AnyObject, hasMobileOrDesktop, mobileOnlyTraffick, desktopOnlyTraffick } from './consts';
 import { logToCloudWatch } from 'src/logger';
 import { BadRequestException, InternalServerErrorException } from '@nestjs/common';
 import { GptService } from 'src/gpt/gpt.service';
- import {websiteText} from './interfaces';
+ import {BqTrafficCampaign, SqlCampaignTraffic, websiteText} from './interfaces';
 import { Domain } from 'src/kidonInterfaces/shared';
 import { Company } from 'src/kidonInterfaces/shared';
 import { gptProposal } from './interfaces';
@@ -23,6 +23,8 @@ import { googleAdsLandingPageQuery } from './gaqlQuerys';
 import dayjs from 'dayjs';
 import { invocaColumns } from './consts';
 import puppeteer from 'puppeteer';
+import { extractErrorsWithGpt, extractErrorsWithLocalLibrary } from './utilsOfUtils';
+
 export async function fetchGoogleAds(domain: Domain, companies: Company[], tokens:any, query:string ) {
     logToCloudWatch(`Entering fetchGoogleAds, fetching google ads for domain ${domain.id}`);
     console.log(companies.find((c)=>c.id == domain.companyId ).name);
@@ -179,7 +181,7 @@ export async function   processInBatches(tasks: (() => Promise<any>)[], batchSiz
   }
 
 
-  export async function fetchWebsitesInnerHtmlAndFindErrors(domains: Domain[], ignoreList: string[], state: any, url?: string): Promise<any[]> {
+  export async function fetchWebsitesInnerHtmlAndFindErrors(domains: Domain[], ignoreList: string[], gptService,     url?: string): Promise<any[]> {
     logToCloudWatch('Entering fetchWebsitesInnerHtml');
 
     let finalDomainData: websiteText[] = []; // Accumulate results for all domains
@@ -194,21 +196,19 @@ export async function   processInBatches(tasks: (() => Promise<any>)[], batchSiz
         let domainPagesInnerHtml: websiteText[] = []; // Store results per domain
 
         for (const path of domain.paths) {
+
+
             let  actualUrl = url ? url :  `https://${domain.hostname}${path}`;
             logToCloudWatch(`Fetching ${actualUrl}`, 'INFO', 'fetch Websites InnerHtml And Find Errors');
             try {
-
-                // getting the text of the page
-                const { data: html } = await axios.get(actualUrl);
-                const dom = new JSDOM(html, { actualUrl});
-                const article = new Readability(dom.window.document).parse();
-
-                // getting the relevant html text
-                const $ = cheerio.load(html);
-                const titles = $('title').map((_, el) => $(el).text()).get();
-
-
-                domainPagesInnerHtml.push({ domain: domain.id, fullPath: actualUrl, innerHtml: article.textContent, titleElement: titles.join(' ') });
+                const browser = await generateBrowser()
+                const page = await browser.newPage();
+                await page.goto(actualUrl, { waitUntil: 'networkidle2', timeout: 60000 });
+                await new Promise(resolve => setTimeout(resolve, 1000));
+                const content = await page.evaluate(() => document.body.innerText);
+                const pageTitle = await page.title();
+                await browser.close();
+                domainPagesInnerHtml.push({ domain: domain.id, fullPath: actualUrl, innerHtml: content, titleElement: pageTitle });
             } catch (error) {
                 logToCloudWatch(`Failed to fetch ${actualUrl}: ${error.message}`);
             }
@@ -216,14 +216,10 @@ export async function   processInBatches(tasks: (() => Promise<any>)[], batchSiz
         // debug - domainPagesInnerHtml[0].innerHtml = 'Thehre are otgher metfhods to protect devieces '; domainPagesInnerHtml[0].titleElement = '2023'
 
         // Process inner HTML for each domain before moving to the next one. attach detected errors field to each object that represent path in this array
-        domainPagesInnerHtml.forEach(webSiteText => {
-            webSiteText.detectedErrors = extractMisspelledWords(webSiteText.innerHtml, ignoreList);
-            // Check for outdated years in both title and fullPath
-            const titleYears = extractOutdatedYears(webSiteText.titleElement || '');
-            const pathYears = extractOutdatedYears(webSiteText.fullPath);
-            webSiteText.outdatedYears = [...new Set([...titleYears, ...pathYears])]; // Combine and remove duplicates
-        });
-
+     
+          domainPagesInnerHtml =   extractErrorsWithLocalLibrary(domainPagesInnerHtml, ignoreList);
+        domainPagesInnerHtml = await extractErrorsWithGpt(gptService, domainPagesInnerHtml, ignoreList);
+        domainPagesInnerHtml = domainPagesInnerHtml.map((w)=>({...w, detectedErrors: w.detectedErrors.length > 0 ? w.detectedErrors : []}));
         // Filter out pages with no detected errors
         domainPagesInnerHtml = domainPagesInnerHtml.filter(w => w.detectedErrors.length > 0 || w.outdatedYears.length > 0 );
 
@@ -234,8 +230,7 @@ export async function   processInBatches(tasks: (() => Promise<any>)[], batchSiz
         domainPagesInnerHtml = [];
     }
 
-    if(url) logToCloudWatch(`Found ${finalDomainData.length} errors for ${url} ${JSON.stringify(finalDomainData)}`, 'INFO', 'fetch Websites InnerHtml And Find Errors');
-    
+     
     return finalDomainData; // Return accumulated results for all domains
 }
 
@@ -751,3 +746,140 @@ export async function checkInvocaInMobile(landingpage) {
     await browser.close();
 }
 }
+
+
+export const getTrafficIncongruence = (bqCampaignsTrafficMobile, bqCampaignsTrafficDesktop) => {
+    const incongruentMobileDesctopTraffick = [];
+    const incongruentDesctopMobileTraffick = [];
+    const invalidCampaigns = [];
+  
+    bqCampaignsTrafficMobile.forEach((c) => {
+      const isMatchDesktop = desktopOnlyTraffick.test(c.campaign_name);
+      if (isMatchDesktop) {
+        incongruentMobileDesctopTraffick.push(c);
+      }
+    });
+  
+    bqCampaignsTrafficDesktop.forEach((c) => {
+      const isMatchMobile = mobileOnlyTraffick.test(c.campaign_name);
+      if (isMatchMobile) {
+        incongruentDesctopMobileTraffick.push(c);
+      }
+    });
+  
+    [...bqCampaignsTrafficMobile, ...bqCampaignsTrafficDesktop].forEach((c) => {
+      const isValid = hasMobileOrDesktop.test(c.campaign_name);
+      if (!isValid) {
+        invalidCampaigns.push(c);
+      }
+    });
+  
+    return {
+      incongruentMobileDesctopTraffick,
+      incongruentDesctopMobileTraffick,
+      invalidCampaigns
+    };
+  };
+
+
+  export const assignDomainNames = (bqMobile: BqTrafficCampaign[], bqDesktop: BqTrafficCampaign[], mobileTraffic: SqlCampaignTraffic[], desktopTraffic: SqlCampaignTraffic[]) => {
+    bqMobile.forEach(bqt => {
+      const match = mobileTraffic.find(mt => Number(mt.campaign_id) === Number(bqt.campaign_id));
+      bqt.domain_name = match ? match.domain_name : '';
+    });
+  
+    bqDesktop.forEach(bqt => {
+      const match = desktopTraffic.find(mt => Number(mt.campaign_id) === Number(bqt.campaign_id));
+      bqt.domain_name = match ? match.domain_name : '';
+    });
+  };
+
+  export const getUniqueCampaignErrors = (campaigns: BqTrafficCampaign[]) => {
+    const seen = new Set();
+    const unique = [];
+  
+    for (const c of campaigns) {
+      const key = `${c.campaign_id}||${c.campaign_name}`;
+      if (!seen.has(key)) {
+        seen.add(key);
+        unique.push(c);
+      }
+    }
+  
+    return unique;
+  };
+
+
+
+  export const sendTrafficValidationAlerts = async (
+    mobile: BqTrafficCampaign[],
+    desktop: BqTrafficCampaign[],
+    invalid: BqTrafficCampaign[],
+    isTest: boolean,
+    state: any
+  ) => {
+    const channel = isTest ? slackChannels.PERSONAL : slackChannels.CONTENT;
+  
+    const buildMessage = (title: string, campaigns: BqTrafficCampaign[]) => {
+      const body = campaigns.map(c =>
+        `• *Campaign Name:* ${c.campaign_name}\n  *Campaign ID:* ${c.campaign_id}\n  *Domain:* ${c.domain_name}\n  *Device:* ${c.device}\n  *Date:* ${c.date?.value}\n  *Source:* ${c.media_source}\n  *Network:* ${c.network_type}`
+      ).join('\n');
+      return `*${title}*\n${body}`;
+    };
+  
+    if (mobile.length || desktop.length || invalid.length) {
+      if (mobile.length) {
+        await KF.sendSlackAlert(
+          buildMessage('🚨Incongruent Traffic (should be mobile only, but has desktop traffic):', mobile),
+          channel,
+          state.slackToken
+        );
+      }
+  
+      if (desktop.length) {
+        await KF.sendSlackAlert(
+          buildMessage('🚨Incongruent Traffic (should be desktop only, but has mobile traffic):', desktop),
+          channel,
+          state.slackToken
+        );
+      }
+  
+      if (invalid.length) {
+        await KF.sendSlackAlert(
+          buildMessage('🚨Invalid Traffic (should be mobile or desktop, but has none):', invalid),
+          channel,
+          state.slackToken
+        );
+      }
+    } else {
+      await KF.sendSlackAlert('🌿No incongruent traffic found', channel, state.slackToken);
+    }
+  };
+  
+
+// utils/invoca/detectInvocaPresence.ts
+
+export async function isInvocaPresent(page: any): Promise<boolean> {
+    return await page.evaluate(() => {
+      // 1. Check script src
+      const hasInvocaScriptSrc = Array.from(document.scripts).some(script =>
+        script.src?.toLowerCase().includes('invoca')
+      );
+  
+      // 2. Check inline script content
+      const hasInvocaInlineScript = Array.from(document.scripts).some(script =>
+        script.textContent?.toLowerCase().includes('invoca')
+      );
+  
+      // 3. Check entire page HTML
+      const hasInvocaInHTML = document.documentElement.innerHTML.toLowerCase().includes('invoca');
+  
+      // 4. Check global variables
+      const hasInvocaGlobal = Object.keys(window).some(key =>
+        key.toLowerCase().includes('invoca')
+      );
+  
+      return hasInvocaScriptSrc || hasInvocaInlineScript || hasInvocaInHTML || hasInvocaGlobal;
+    });
+  }
+  

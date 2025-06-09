@@ -1,15 +1,22 @@
-import { Controller, Get, Post, Body, Patch, Param, Delete, Query, DefaultValuePipe, ParseIntPipe, ParseBoolPipe } from '@nestjs/common';
+import { Controller, Get, Post, Body, Patch, Param, Delete, Query, DefaultValuePipe, ParseIntPipe, ParseBoolPipe, Inject } from '@nestjs/common';
 import { SpellCheckerService } from './spell-checker.service';
 import { CreateSpellCheckerDto } from './dto/create-spell-checker.dto';
 import { UpdateSpellCheckerDto } from './dto/update-spell-checker.dto';
 import { BadRequestException, InternalServerErrorException } from '@nestjs/common';
 import { logToCloudWatch } from 'src/logger';
+import { ANALYTICS_CONNECTION } from 'src/knex/knex.module';
+import { KIDON_CONNECTION } from 'src/knex/knex.module';
+import { Knex } from 'knex';
+import { GptService } from 'src/gpt/gpt.service';
 
 
 
 @Controller('spell-checker')
 export class SpellCheckerController {
-  constructor(private readonly spellCheckerService: SpellCheckerService) {}
+  @Inject(ANALYTICS_CONNECTION) private readonly analyticsClient: Knex
+    @Inject(KIDON_CONNECTION) private readonly kidonClient: Knex
+ 
+    constructor(private readonly spellCheckerService: SpellCheckerService) {}
 
   @Post()
   create(@Body() createSpellCheckerDto: CreateSpellCheckerDto) {
@@ -25,7 +32,7 @@ export class SpellCheckerController {
      
     ) {
     try {
-       return await this.spellCheckerService.findAndFixWebsitesGrammaticalErrors(+domainId, isTest, url);
+       return await this.spellCheckerService.findAndFixWebsitesGrammaticalErrors(+domainId,  isTest, url);
     } catch (error) {
       logToCloudWatch(`❌ Error in findWebsitesGrammaticalErrors: ${error.message}, ${JSON.stringify(error)} `, "ERROR", 'spell-checker');
       return { message: 'Error in findWebsitesGrammaticalErrors' };
@@ -40,7 +47,7 @@ export class SpellCheckerController {
      @Query('sliceSize' ) sliceSize?: number
     ) {
     try {
-       return await this.spellCheckerService.findAndFixGoogleAdsGrammaticalErrors(batchSize,+domainId, +sliceSize);
+       return await this.spellCheckerService.findAndFixGoogleAdsGrammaticalErrors(batchSize,  +domainId, +sliceSize   );
     } catch (error) {
       if (error instanceof BadRequestException || error instanceof InternalServerErrorException) {
         throw error;
@@ -86,9 +93,11 @@ export class SpellCheckerController {
 
 // checks whether traffick from tracker visitors and BQ that defined as mobile only arrives to desktop only campaigns
   @Get('/mobileAndDesktopTrafficCongruenceValidation')
-  async mobileAndDesktopTrafficCongruenceValidation(){
+  async mobileAndDesktopTrafficCongruenceValidation(
+    @Query('isTest', new DefaultValuePipe(false), ParseBoolPipe) isTest?: boolean
+  ){
     try {
-      return await this.spellCheckerService.mobileAndDesktopTrafficCongruenceValidation();
+      return await this.spellCheckerService.mobileAndDesktopTrafficCongruenceValidation(isTest);
     } catch (error) {
       if (error instanceof BadRequestException || error instanceof InternalServerErrorException) {
         throw error;
@@ -101,7 +110,11 @@ export class SpellCheckerController {
 // fetching data from invoca transactions repor, iterates over them with pupeteer and searchinf if there is invoca tag in the dom and script sections
 // iterate only over non-spotower urls
   @Get('/invocaLineupValidation')
-  async invocaLineupValidation(@Query('hostname') hostname: string, @Query('url') url:string, @Query('isTest') isTest:boolean) {
+  async invocaLineupValidation(
+    @Query('hostname') hostname: string, 
+    @Query('url') url:string, 
+    @Query('isTest') isTest:boolean,
+  ) {
     return this.spellCheckerService.invocaLineupValidation(hostname, url, isTest);
   }
 
@@ -125,14 +138,17 @@ export class SpellCheckerController {
     }
     
 
-    @Get('/testLongWait')
+    @Get('/test')
     async testLongWait() {
-      for (let i = 1; i <= 200; i++) {
-        logToCloudWatch(`Waiting... second ${i}`);
-        await new Promise(resolve => setTimeout(resolve, 1000));
-      }
-      logToCloudWatch('Done waiting 200 seconds!');
-      return { message: 'Waited 200 seconds, check logs for progress.' };
+      try {
+       let atConfig = await this.analyticsClient('at-configuration').select('*') ;
+        logToCloudWatch(`🔄 atConfig: ${JSON.stringify(atConfig)} `, "INFO", 'spell-checker');
+
+       return { message: 'Waited 200 seconds, check logs for progress.' };
+    } catch (error) {
+      logToCloudWatch(`❌ Error in testLongWait: ${error.message}, ${JSON.stringify(error)} `, "ERROR", 'spell-checker');
+      return { message: 'Error in testLongWait' };
+    }
     }
 
   @Get(':id')

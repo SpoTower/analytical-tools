@@ -1,6 +1,7 @@
 import { promises as fs } from 'fs'
 import * as path from 'path'
 import { ConstantHeadersAndDescriptions } from '../interfaces'
+import { logToCloudWatch } from 'src/logger';
 
 // Utility to enforce length and replace years
 function cleanAdText(text: string, maxLength: number): string {
@@ -123,11 +124,16 @@ export function extractHeadlinesAndDescriptions(
       adTemplate[`Description ${i}`] = cleanAdText(value || '', 90);
     }
 
+  
+
     // Add the Final URL using hostname
     if (hostname) {
       adTemplate['Final URL'] = hostname
     }
-  
+    if (headlines.length === 0 && descriptions.length === 0) {
+       logToCloudWatch('Skipping empty ad set in extractHeadlinesAndDescriptions', 'WARN', 'GENERATE_ADS');
+      continue;
+    }
     adTemplates.push(adTemplate)
   }
 
@@ -158,6 +164,38 @@ export function extractHeadlinesAndDescriptions(
   
     return finalAds;
   }
+
+
+  export function generateFullAddObject2(
+    adsArray,
+    sourceData: { industryKeyword: string[]; adGroupName?: string },
+  ) {
+    const finalAds = [];
+  
+    for (const ad of adsArray) {
+      const baseAd = { ...ad };
+      const duplicatedAd = { ...ad };
+  
+      const keyword = sourceData.industryKeyword[0];
+      const adGroupName = sourceData.adGroupName || `${keyword} - Exact`;
+  
+      // Original with | M
+      baseAd['Campaign'] = `${keyword} | M`;
+      baseAd['Ad Group'] = adGroupName;
+  
+      // Duplicate with | D
+      duplicatedAd['Campaign'] = `${keyword} | D`;
+      duplicatedAd['Ad Group'] = adGroupName;
+  
+      finalAds.push(baseAd, duplicatedAd);
+    }
+  
+    return finalAds;
+  }
+
+
+
+
   
 
   export function harvestSpecificContentFromFirstAd(adTemplates: Record<string, string>[]): ConstantHeadersAndDescriptions {
