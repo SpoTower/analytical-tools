@@ -46,13 +46,18 @@ export class BingService {
         const parser = new XMLParser();
         const result = parser.parse(response.data);
         const isDuplicate = result?.['s:Envelope']?.['s:Body']?.['AddConversionGoalsResponse']?.PartialErrors?.BatchError?.Code;
-        if (isDuplicate == 5317) throw  new Error(`Duplicate conversion goal name ${action["Conversion Name Action"]}`);
+         if (isDuplicate == 5317) throw  new Error(`Duplicate conversion goal name ${action["Conversion Name Action"]}, this and all proceeding conversion names were not created`);
 
         const conversionGoalId = result?.['s:Envelope']?.['s:Body']?.['AddConversionGoalsResponse']?.['ConversionGoalIds']['a:long'];
-        logToCloudWatch(`Conversion goal created for ${action["Conversion Name Action"]} with ID: ${conversionGoalId}`, 'INFO', 'bing');
-        results.push(conversionGoalId)
 
-        }
+      //Save to db
+      if(conversionGoalId){
+          await this.kidonClient('conversion_names_bing').insert({name: action["Conversion Name Action"], goal: 'secondary',status: 'Active', count: action["Count Type"], domain_id: domainId, resource_name: conversionGoalId, });
+          results.push(conversionGoalId)
+          logToCloudWatch(`Conversion goal created for ${action["Conversion Name Action"]} with ID: ${conversionGoalId}`, 'INFO', 'bing');
+      }
+   
+      }
 
         return results
  
@@ -62,14 +67,7 @@ export class BingService {
 
   async updateConversionNamesKidonTable(conversionActions: BingConversionAction[],  resourceNames: string[], domainId: number) {
     logToCloudWatch('Entering updateConversionNamesKidonTable endpoint. '    );
-    if(conversionActions.length == 0) {
-      logToCloudWatch('No conversion actions to update', 'INFO', 'bing');
-      return;
-    }
-    if(conversionActions.length != resourceNames.length) {
-      logToCloudWatch('Conversion actions and resource names length mismatch, some conversion action were created, but bing conversions names table was not updated', 'ERROR', 'bing');
-      return;
-    }
+ 
   // attaching the resource name from bing response to the conversion action
     conversionActions = conversionActions.map((action, index) => ({
       ...action,

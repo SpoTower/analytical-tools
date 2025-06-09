@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Body, Patch, Param, Delete } from '@nestjs/common';
+import { Controller, Get, Post, Body, Patch, Param, Delete, MethodNotAllowedException } from '@nestjs/common';
 import { BingService } from './bing.service';
 import { CreateBingDto } from './dto/create-bing.dto';
 import { UpdateBingDto } from './dto/update-bing.dto';
@@ -11,10 +11,11 @@ export class BingController {
   async generateConversions(@Body() body: any) {
 
     try {
+    
       const { conversionActions, hostname, domainId } = body;
-      const resourceNames = await this.bingService.createConversionGoals(conversionActions, domainId);
-      await this.bingService.updateConversionNamesKidonTable(conversionActions,resourceNames,domainId);
-      return { status: 'ok', count: resourceNames.length };
+ 
+      const resourceNames = await this.bingService.createConversionGoals(conversionActions, domainId );
+       return { status: 'ok', count: resourceNames.length };
     }catch(e){
       logToCloudWatch(e.message, 'ERROR', 'bing');
       return { status: 'error', count: '', message: e.message };

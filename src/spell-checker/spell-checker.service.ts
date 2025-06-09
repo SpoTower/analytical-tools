@@ -37,8 +37,7 @@ export class SpellCheckerService {
     private readonly globalState: GlobalStateService,
     private readonly gptService: GptService
   ) {}
-
-
+ 
  
   async findAndFixGoogleAdsGrammaticalErrors(batchSize: number, domainId?: number, sliceSize?: number    ) {
     logToCloudWatch('entering findAndFixGoogleAdsGrammaticalErrors');
@@ -277,7 +276,8 @@ export class SpellCheckerService {
     return Array.from(baseUrlSet) ;
    }
   
-
+  
+ 
   async findAndFixWebsitesGrammaticalErrors(domainId?: number,   isTest?: boolean, url?: string) {
     const state = this.globalState.getAllState();
     const ignoredWords = await fetchIgnoreWords(this.kidonClient, '56');
@@ -313,6 +313,7 @@ export class SpellCheckerService {
 
         return `websites were processed by local spellchecker and sent to kidon to be sended by slack to content errors channel`;
 }
+ 
  
  
 

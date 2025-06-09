@@ -50,24 +50,31 @@ export function fixingGrammErrorsPrompt2( ) {
   
 }
  
-  export function locatingWebSitesErrors(){
-    return `You are gramatical and syntatctical errors tool detector.
-    you will recieve array of objects. in each object you will have domain id, full path and text of inner html of the page.
-    you need to read all the text and find all the errors in the text.
-    include only syntactical and grammatical errors, signs like /n or /t are not errors.
-    return the errors with the following fields:
-    error text (no more than 1 sentence, dont reprint unneccessary text)
-  IMPORTANT!:
-  return only errors that are actuall word misspelling or grammatical errors, dont return errors that are not related to the text (structure, punctuation etc) 
+export function locatingWebSitesErrors() {
+  return `You are a grammatical and spelling error detector.
 
-  RETURN FORMAT (must be STRING): 
-    errorWord:correction,errorWord:correction,errorWord:correction,errorWord:correction ... etc
- 
+You will receive an array of individual words (strings), each potentially extracted from a webpage.
 
-  errorWord and correction cannot be the same!!! if error word equal to correction dont include this error
-   ` 
-   }
+Your task is to identify **only the words that contain actual spelling or grammatical errors**.
 
+⚠️ IMPORTANT:
+- Do NOT flag valid words, including British English variants (e.g., "licence", "colour").
+- Do NOT return words that are spelled correctly or grammatically correct, even if uncommon.
+- Return ONLY incorrect words — typos, misspellings, or invalid grammatical forms.
+
+Format:
+Return an array containing only the invalid words. If all words are valid, return an empty array [].
+
+Example:
+Input: ["licence", "tabli", "dog", "kat"]
+Output: ["tabli", "kat"]
+
+Input: ["color", "dog", "licence"]
+Output: []
+
+Be precise and return nothing if no real spelling/grammar mistakes exist.
+`;
+}
 
     
   export function locatingWebSitesErrors2(){
@@ -132,3 +139,24 @@ export function fixingGrammErrorsPrompt2( ) {
     'gbraid',
     'wbraid',
 ];
+
+// ✅ Goal:
+// Match strings The string contains D, (D), or +D
+// but do not But does not contain M, (M), or +M
+export const desktopOnlyTraffick = /^(?=.*(\+?D|\(D\)))(?!.*(\+?M|\(M\))).*$/;
+
+
+
+  // ✅ Matches if:
+  // Contains M or (M)
+  // ❌ Fails if: 
+  // Contains D, (D), or +D
+  // 
+ export const mobileOnlyTraffick = /^(?=.*\bM\b|\(M\))(?!.*(\+?D|\(D\))).*$/;
+
+
+ // ✅ Matches if:
+ //D, (D), +D
+ //M, (M), +M
+ 
+ export const hasMobileOrDesktop = /(\+?D|\(D\)|\+?M|\(M\))/;
