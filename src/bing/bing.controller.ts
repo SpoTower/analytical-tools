@@ -13,6 +13,7 @@ export class BingController {
     try {
     
       const { conversionActions, hostname, domainId } = body;
+ 
       const resourceNames = await this.bingService.createConversionGoals(conversionActions, domainId );
        return { status: 'ok', count: resourceNames.length };
     }catch(e){

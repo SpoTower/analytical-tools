@@ -49,22 +49,14 @@ export class BingService {
          if (isDuplicate == 5317) throw  new Error(`Duplicate conversion goal name ${action["Conversion Name Action"]}, this and all proceeding conversion names were not created`);
 
         const conversionGoalId = result?.['s:Envelope']?.['s:Body']?.['AddConversionGoalsResponse']?.['ConversionGoalIds']['a:long'];
-        if(!conversionGoalId) throw  new Error(`Some problem with conversion goal name ${action["Conversion Name Action"]}, this and all proceeding conversion names were not created`);
 
-        logToCloudWatch(`Conversion goal created for ${action["Conversion Name Action"]} with ID: ${conversionGoalId}`, 'INFO', 'bing');
-       
       //Save to db
-        await this.kidonClient('conversion_names_bing').insert({
-          name: action["Conversion Name Action"],
-          goal: 'secondary',
-          status: 'Active',
-          count: action["Count Type"],
-          domain_id: domainId,
-          resource_name: conversionGoalId,
-        });
-
+      if(conversionGoalId){
+          await this.kidonClient('conversion_names_bing').insert({name: action["Conversion Name Action"], goal: 'secondary',status: 'Active', count: action["Count Type"], domain_id: domainId, resource_name: conversionGoalId, });
           results.push(conversionGoalId)
-
+          logToCloudWatch(`Conversion goal created for ${action["Conversion Name Action"]} with ID: ${conversionGoalId}`, 'INFO', 'bing');
+      }
+   
       }
 
         return results
