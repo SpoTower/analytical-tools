@@ -3,7 +3,7 @@ import { AnyObject, hasMobileOrDesktop, mobileOnlyTraffick, desktopOnlyTraffick 
 import { logToCloudWatch } from 'src/logger';
 import { BadRequestException, InternalServerErrorException } from '@nestjs/common';
 import { GptService } from 'src/gpt/gpt.service';
- import {BqTrafficCampaign, SqlCampaignTraffic, websiteText} from './interfaces';
+ import {BqTrafficCampaign, googleAdsAndDomain, SqlCampaignTraffic, websiteText} from './interfaces';
 import { Domain } from 'src/kidonInterfaces/shared';
 import { Company } from 'src/kidonInterfaces/shared';
 import { gptProposal } from './interfaces';
@@ -99,7 +99,7 @@ export async function fetchGoogleAds(domain: Domain, companies: Company[], token
         };
     }
 
-    export function processLineupResults(rawResults: {domain: Domain, results: any[]}[]): {url: string, slackChannelId: string, campaignName: string}[] {
+    export function processLineupResults(rawResults: googleAdsAndDomain[]): {url: string, slackChannelId: string, campaignName: string}[] {
         const urlSet = new Set<string>();
         const processedResults: {url: string, slackChannelId: string, campaignName: string}[] = [];
         
