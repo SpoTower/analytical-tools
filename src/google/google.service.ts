@@ -50,7 +50,7 @@ export class GoogleService {
 
   
     try {
-      const result = await axios.post(`https://googleads.googleapis.com/v17/customers/${domainGoogleAdsId}/conversionActions:mutate`,
+      const result = await axios.post(`https://googleads.googleapis.com/v19/customers/${domainGoogleAdsId}/conversionActions:mutate`,
         { operations },
         { headers: { 'developer-token': company.googleDeveloperToken, Authorization: `Bearer ${token}`,'login-customer-id': company.googleCustomerId,},}
       );
@@ -59,14 +59,10 @@ export class GoogleService {
       results.push(result.data);
     } catch (error) {
       logToCloudWatch(error.response?.data?.error?.message ||   error.response?.data?.error?.details?.[0]?.errors?.[0]?.message || error.response?.data?.error?.message)
-      if (error.response?.data?.error?.message) {
-        const errorMessage = error.response?.data?.error?.details?.[0]?.errors?.[0]?.message;
-        if(errorMessage && errorMessage == 'The enum value is not permitted.'){
-          throw new Error(`Error for action "${action['Conversions Name Action']}"  -  Probably invalid category or invalid combination of parameters`)
+      if (error.response?.data) {
+         throw new Error(JSON.stringify(error?.response?.data))
         }
-          else
-         throw new Error(error.response?.data?.error?.message)
-       }
+        logToCloudWatch(JSON.stringify(error), 'ERROR', 'UPLOAD_CONVERSIONS');
     }
   }
   return results;
