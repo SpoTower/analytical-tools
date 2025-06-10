@@ -42,14 +42,14 @@ export class SpellCheckerController {
 
  // fetches domain and uses pupeteer to send requests to domain.paths
 // checks whether there is a lineup on the page based on css class and id of lineup wrapper, and also that the status is 200 and the loading time less than 10 seconds
-@Get('/lineupValidation')
-async lineupValidation(
+@Get('/webSitesChecks')
+async webSitesChecks(
   @Query('hostname', ) hostname: string,
   @Query('isTest', new DefaultValuePipe(false), ParseBoolPipe) isTest?: boolean,
   @Query('url', new DefaultValuePipe(null)) url?: string
   ) {
     try {
-      return await this.spellCheckerService.lineupValidation(hostname, isTest, url );
+      return await this.spellCheckerService.webSitesChecks(hostname, isTest, url );
     } catch (error) {
       if (error instanceof BadRequestException || error instanceof InternalServerErrorException) {
         throw error;

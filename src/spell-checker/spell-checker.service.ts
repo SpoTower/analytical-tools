@@ -94,20 +94,19 @@ export class SpellCheckerService {
 
  
  
-  async lineupValidation(hostname: string, isTest:boolean, url:string) {
-    logToCloudWatch('entering lineupValidation');
+  async webSitesChecks(hostname: string, isTest:boolean, url:string) {
+    logToCloudWatch('entering webSitesChecks');
   
     try {
-      let errors = []
-      
+        // Get ignore list from database
+      const [ignoreList] = await Promise.all([fetchIgnoreWords(this.kidonClient, '59') ]);
       const state = this.globalState.getAllState(); if (!state) return 'No state found';
       let domainsToProcess = state.domains.filter((d: Domain) => d.googleAdsId);
       domainsToProcess = domainsToProcess.filter((d: Domain) =>  ![20,176,128,153,34,17,31,40,4,25,21,115,61,43,68,66,59,122,163,147,183,207,197].includes(d.id)  );
       const allTokens = await Promise.all(state.companies.map(async (c) => ({ company: c.name, token: await KF.getGoogleAuthToken(c) })));
   
-      const urlSet = new Set<string>();
-  
-      // ✅ Step 1: fetch lineups
+   
+      // ✅ Step 1: fetch urls
       const rawLineupResults : googleAdsAndDomain[] = await processInBatches(
           domainsToProcess.map((domain: Domain) => async () => {
               try {
@@ -128,7 +127,7 @@ export class SpellCheckerService {
         
       
  
-      // ✅ Step 2: validate lineups and check for errors
+      // ✅ Step 2: harvest content from urls
       const validationResults = [];
       for (const urlAndSlack of urlAndSlackChannel) {
         let axiosRes, pupeteerRes, durationMs, pageContent, pageTitle;
@@ -147,9 +146,9 @@ export class SpellCheckerService {
           ).catch(() => {});
           
           // Get page content for error checking
-          pageContent = await page.evaluate(() => document.body.innerText);
-          pageTitle = await page.title();
-          pupeteerRes = await page.content();
+          pageContent = await page.evaluate(() => document.body.innerText); // clean html for grammatical errors detection
+          pageTitle = await page.title();     // title for outdated years check
+          pupeteerRes = await page.content(); // raw html for invoca tag detection
           await browser.close();
 
           // Check for errors in the page content
@@ -162,12 +161,11 @@ export class SpellCheckerService {
             outdatedYears: []
           };
 
-          // Get ignore list from database
-          const [ignoreList] = await Promise.all([
-            fetchIgnoreWords(this.kidonClient, '59')
-          ]);
+ 
+            
+         
 
-          // Check for errors
+            // ✅ Step 3.1:  check content errors, outdated years in path and in title
           const pageWithLocalErrors = extractErrorsWithLocalLibrary([pageData], ignoreList)[0];
           const pageWithAllErrors = await extractErrorsWithGpt(this.gptService, [pageWithLocalErrors], ignoreList);
 
@@ -182,15 +180,11 @@ export class SpellCheckerService {
               outdatedYears: pageWithAllErrors[0].outdatedYears
             });
           }
-
+    // ✅ Step 3.2:  check invoca errors
         } catch (err) {
           logToCloudWatch(`Error in lineupValidation: ${err}`, 'ERROR');
           if (err.name === 'AxiosError'  && err.status != undefined) {
-            validationResults.push({ url: urlAndSlack.url, slackChannelId: urlAndSlack.slackChannelId, campaignName: urlAndSlack.campaignName, status: err.status, reason: `${JSON.stringify(err)}` });
-            continue;
-          } else {
-            continue;
-          }
+            validationResults.push({ url: urlAndSlack.url, slackChannelId: urlAndSlack.slackChannelId, campaignName: urlAndSlack.campaignName, status: err.status, reason: `${JSON.stringify(err)}` });          } 
         }
         if (durationMs > 10000) {
           validationResults.push({ url: urlAndSlack.url, slackChannelId: urlAndSlack.slackChannelId, campaignName: urlAndSlack.campaignName, status: axiosRes.status, reason: 'timeout' });
@@ -201,45 +195,9 @@ export class SpellCheckerService {
   
       const filteredErrors = validationResults.filter(Boolean);
   
-      const secondCheckResults = await processInBatches(
-        filteredErrors
-          .filter(e => e.reason === 'no lineup found')
-          .map(error => async () => {
-            // Re-fetch the page content
-            let pupeteerRes;
-            try {
-              const browser = await puppeteer.launch({
-                headless: true,
-                   executablePath: '/usr/local/bin/chrome', // the location of chrome on the ec2
-                protocolTimeout: 60000,
-              });
-              const page = await browser.newPage();
-              await page.goto(error.url, { waitUntil: 'networkidle2', timeout: 60000 });
-              pupeteerRes = await page.content();
-              await browser.close();
-            } catch (err) {
-              logToCloudWatch(`[SECOND TRY] Puppeteer error for ${error.url}: ${err}`, 'ERROR');
-              // If puppeteer fails, treat as still error
-              return error;
-            }
-            // Only return error if checkIfLineupExists still fails
-            const exists = checkIfLineupExists(pupeteerRes);
-            logToCloudWatch(`[SECOND TRY] checkIfLineupExists for ${error.url}: ${exists}`, 'INFO');
-            if (!exists) {
-              return error;
-            }
-            logToCloudWatch(`[SECOND TRY] Lineup found on retry for ${error.url}, overriding previous error.`, 'INFO');
-            return null;
-          }),
-        3
-      );
-      
-      let doubleFailed = [
-        ...filteredErrors.filter(e => e.reason !== 'no lineup found'),
-        ...secondCheckResults.filter(Boolean)
-      ];
-      
-      if(doubleFailed && doubleFailed.length > 0){
+   
+      // ✅ Step 4.1:  sending content errors to slack
+      if(filteredErrors && filteredErrors.length > 0){
         for(let error of filteredErrors){
           let errorMessage = [  ' :rotating_light:  *Lineup Validation Error:*',  `*URL:* ${error.url}`,`*Campaign:* ${error.campaignName}`,`*Status:* ${error.status}`,`*Reason:* ${error.reason}` ];
           
@@ -255,7 +213,16 @@ export class SpellCheckerService {
           logToCloudWatch(`Lineup Validation Errors: ${finalMessage}`, 'ERROR');
           await KF.sendSlackAlert(finalMessage, isTest ?  slackChannels.PERSONAL : slackChannels.CONTENT, state.slackToken); 
         }
-      }else{
+      }
+      // ✅ Step 4.2:  sending invoca errors to slack
+      if(validationResults.length > 0){
+        logToCloudWatch(`Lineup Validation Errors: ${JSON.stringify(validationResults)}`, 'ERROR');
+        await KF.sendSlackAlert(JSON.stringify(validationResults), isTest ?  slackChannels.PERSONAL : slackChannels.CONTENT, state.slackToken); 
+      }
+      
+      
+      
+      else{
         logToCloudWatch(`:herb: No Lineup errors found`);
         await KF.sendSlackAlert(`no lineup errors found`,  isTest ?  slackChannels.PERSONAL : slackChannels.CONTENT, state.slackToken); 
       }
