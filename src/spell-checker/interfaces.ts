@@ -1,6 +1,3 @@
-import { Domain  } from 'src/kidonInterfaces/shared';
-
-
 export interface websiteText{
     domain:number,
     fullPath:string,
@@ -75,3 +72,74 @@ export interface BqTrafficCampaign {
     outdatedYears?: string[]
   }
  
+  export interface googleAdsAndDomain {
+    domain: Domain;
+    results: ResultItem[];
+  }
+  
+  export interface Domain {
+    id: number;
+    hostname: string;
+    googleAdsId: string;
+    bingAdsId: string;
+    bingObcResourceName: string;
+    bingObcUniqueResourceName: string;
+    obcResourceName: string;
+    obcUniqueResourceName: string;
+    companyId: number;
+    industryId: number;
+    domainTimezone: string;
+    roiPercentage: string | number;
+    slackChannelId: string;
+    status: string;
+    createdAt: string;
+    updatedAt: string;
+    deletedAt: string | null;
+  }
+  
+  export interface ResultItem {
+    campaign: {
+      resourceName: string;
+      name: string;
+      id: string;
+    };
+    adGroup: {
+      resourceName: string;
+      name: string;
+    };
+    adGroupAd: {
+      resourceName: string;
+      status: string;
+      ad: {
+        resourceName: string;
+        id: string;
+        finalUrls: string[];
+      };
+    };
+    metrics: {
+      impressions: string;
+    };
+  }
+  export interface CampaignAndUrlInfo {
+    url: string;
+    slackChannelId: string;
+    campaignName: string;
+  }
+
+  export interface WebsiteError {
+    url: string;
+    slackChannelId: string;
+    campaignName: string;
+    status: number | string;
+    reason: string;
+    localErrors?: string[];
+    outdatedYears?: string[];
+  }
+  
+  export interface CategorizedErrors {
+    contentErrors: { [domain: string]: WebsiteError[] };
+    outdatedYearsErrors: { [domain: string]: WebsiteError[] };
+    lineupErrors: { [domain: string]: WebsiteError[] };
+    timeoutErrors: { [domain: string]: WebsiteError[] };
+    httpErrors: { [domain: string]: WebsiteError[] };
+  }
