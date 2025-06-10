@@ -23,7 +23,8 @@ export class SpellCheckerController {
     return this.spellCheckerService.create(createSpellCheckerDto);
   }
 
-// iterating over domains.paths and sending requests via axios, processing data with cheerio,  checking errors in text and outdates years
+// iterating over domains.paths `https://${domain.hostname}${path}` and sending requests via (axios + pupeteer), processing data with (cheerio + gpt ),  checking errors in text and outdates years
+// website content errors
   @Get('/findWebsitesGrammaticalErrors')
   async WebsitesGrammaticalErrors(
     @Query('domainId' ) domainId?: number,
@@ -39,6 +40,45 @@ export class SpellCheckerController {
     }
   }
 
+ // fetches domain and uses pupeteer to send requests to domain.paths
+// checks whether there is a lineup on the page based on css class and id of lineup wrapper, and also that the status is 200 and the loading time less than 10 seconds
+@Get('/lineupValidation')
+async lineupValidation(
+  @Query('hostname', ) hostname: string,
+  @Query('isTest', new DefaultValuePipe(false), ParseBoolPipe) isTest?: boolean,
+  @Query('url', new DefaultValuePipe(null)) url?: string
+  ) {
+    try {
+      return await this.spellCheckerService.lineupValidation(hostname, isTest, url );
+    } catch (error) {
+      if (error instanceof BadRequestException || error instanceof InternalServerErrorException) {
+        throw error;
+      }
+    }
+  }
+
+
+
+
+
+// fetching data from invoca transactions report, iterates over them with pupeteer and searchinf if there is invoca tag in the dom and script sections
+// iterate only over non-spotower urls
+@Get('/invocaLineupValidation')
+async invocaLineupValidation(
+  @Query('hostname') hostname: string, 
+  @Query('url') url:string, 
+  @Query('isTest') isTest:boolean,
+) {
+  return this.spellCheckerService.invocaLineupValidation(hostname, url, isTest);
+}
+
+
+
+
+
+
+
+  
   //fetching google ads via google api with axios. tests: misspelled words, outdated years, non capital letters
   @Get('/findGoogleAdsGrammaticalErrors')
   async GoogleAdsGrammaticalErrors(
@@ -67,28 +107,6 @@ export class SpellCheckerController {
     }
   }
 
-   
- 
-
- // fetches domain and uses pupeteer to send requests to domain.paths
-// checks whether there is a lineup on the page based on css class and id of lineup wrapper, and also that the status is 200 and the loading time less than 10 seconds
-  @Get('/lineupValidation')
-  async lineupValidation(
-    @Query('hostname', ) hostname: string,
-    @Query('isTest', new DefaultValuePipe(false), ParseBoolPipe) isTest?: boolean,
-    @Query('url', new DefaultValuePipe(null)) url?: string
-    ) {
-      try {
-        return await this.spellCheckerService.lineupValidation(hostname, isTest, url );
-      } catch (error) {
-        if (error instanceof BadRequestException || error instanceof InternalServerErrorException) {
-          throw error;
-        }
-      }
-    }
-
-
- 
 
 
 // checks whether traffick from tracker visitors and BQ that defined as mobile only arrives to desktop only campaigns
@@ -106,17 +124,10 @@ export class SpellCheckerController {
   }
   
 
+ 
 
-// fetching data from invoca transactions repor, iterates over them with pupeteer and searchinf if there is invoca tag in the dom and script sections
-// iterate only over non-spotower urls
-  @Get('/invocaLineupValidation')
-  async invocaLineupValidation(
-    @Query('hostname') hostname: string, 
-    @Query('url') url:string, 
-    @Query('isTest') isTest:boolean,
-  ) {
-    return this.spellCheckerService.invocaLineupValidation(hostname, url, isTest);
-  }
+
+
 
 
 
@@ -137,6 +148,14 @@ export class SpellCheckerController {
       }
     }
     
+
+
+
+
+
+
+
+
 
     @Get('/test')
     async testLongWait() {
