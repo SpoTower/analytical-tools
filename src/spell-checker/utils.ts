@@ -35,7 +35,7 @@ export async function fetchGoogleAds(domain: Domain, companies: Company[], token
 
     try {
         const changeEventResult = await axios.post(
-            `https://googleads.googleapis.com/v17/customers/${domain.googleAdsId}/googleAds:searchStream`,
+            `https://googleads.googleapis.com/v19/customers/${domain.googleAdsId}/googleAds:searchStream`,
             {
                 query: query,
             },
@@ -80,7 +80,7 @@ export async function fetchGoogleAds(domain: Domain, companies: Company[], token
 
     export async function fetchLineups(domain: Domain, companies: Company[], tokens:any, query:string): Promise<any> {
         const landingPageResult = await axios.post(
-            `https://googleads.googleapis.com/v17/customers/${domain.googleAdsId}/googleAds:searchStream`,
+            `https://googleads.googleapis.com/v19/customers/${domain.googleAdsId}/googleAds:searchStream`,
             {
                 query: query,
             },
