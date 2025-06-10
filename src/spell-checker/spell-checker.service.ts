@@ -132,7 +132,20 @@ export class SpellCheckerService {
   
    
       // ✅ Step 1: fetch urls
-      const rawGoogleAdsResults : googleAdsAndDomain[] = await processInBatches(domainsToProcess.map((domain: Domain) => async () => {return await fetchLineups(domain, state.companies, allTokens, googleAdsLandingPageQuery);}), 30);
+       const rawGoogleAdsResults : googleAdsAndDomain[] =  await processInBatches(
+        domainsToProcess.map((domain: Domain) => async () => {
+            try {
+                return await fetchLineups(domain, state.companies, allTokens, googleAdsLandingPageQuery);
+            } catch (error) {
+                logToCloudWatch(`❌ Error fetching Google Ads for domain ${domain.id}: ${error.message}`, "ERROR");
+                return { domain, results: [] };
+            }
+        }),
+        30
+    );
+
+
+
       let urlAndSlackChannel : CampaignAndUrlInfo[]  = processLineupResults(rawGoogleAdsResults);
       logToCloudWatch(`Found ${urlAndSlackChannel.length} lineups`, 'INFO');
       if (hostname) urlAndSlackChannel = urlAndSlackChannel.filter((u) => u.url.includes(hostname));
