@@ -36,6 +36,7 @@ export class BingService {
           logToCloudWatch(`Creating conversion goal for ${action["Conversion Name Action"]} in for loop`, 'INFO', 'bing');
 
           const  xmlBody = generateBingCreateOfflineConversionXml(accessToken, customAccountId, customerId, developerToken, action);
+          logToCloudWatch(`XML body: ${JSON.stringify(xmlBody)}`, 'INFO', 'bing');
           const response = await axios.post(`https://campaign.api.bingads.microsoft.com/Api/Advertiser/CampaignManagement/v13/CampaignManagementService.svc`, xmlBody, {
             headers: {
                 'Content-Type': 'text/xml',
@@ -55,6 +56,8 @@ export class BingService {
           await this.kidonClient('conversion_names_bing').insert({name: action["Conversion Name Action"], goal: 'secondary',status: 'Active', count: action["Count Type"], domain_id: domainId, resource_name: conversionGoalId, });
           results.push(conversionGoalId)
           logToCloudWatch(`Conversion goal created for ${action["Conversion Name Action"]} with ID: ${conversionGoalId}`, 'INFO', 'bing');
+      }else{
+        logToCloudWatch(`Conversion goal not created for ${action["Conversion Name Action"]} ${JSON.stringify(result)}`, 'INFO', 'bing');
       }
    
       }
