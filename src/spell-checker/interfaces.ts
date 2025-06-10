@@ -1,5 +1,3 @@
- 
-
 export interface websiteText{
     domain:number,
     fullPath:string,
@@ -126,4 +124,22 @@ export interface BqTrafficCampaign {
     url: string;
     slackChannelId: string;
     campaignName: string;
+  }
+
+  export interface WebsiteError {
+    url: string;
+    slackChannelId: string;
+    campaignName: string;
+    status: number | string;
+    reason: string;
+    localErrors?: string[];
+    outdatedYears?: string[];
+  }
+  
+  export interface CategorizedErrors {
+    contentErrors: { [domain: string]: WebsiteError[] };
+    outdatedYearsErrors: { [domain: string]: WebsiteError[] };
+    lineupErrors: { [domain: string]: WebsiteError[] };
+    timeoutErrors: { [domain: string]: WebsiteError[] };
+    httpErrors: { [domain: string]: WebsiteError[] };
   }
