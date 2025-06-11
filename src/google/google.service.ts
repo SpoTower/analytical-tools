@@ -29,17 +29,18 @@ export class GoogleService {
      //create conversion action on hostname
   async createConversionActions(conversionActions: conversionActions[], hostname:string) {
     logToCloudWatch('entering createConversionActions');
-      const state = this.globalState.getAllState();
-      if (!state) return 'No state found';
-      let allTokens
+       const companies  = await this.kidonClient('companies') 
+       const domains = await this.kidonClient('domain') 
+       let allTokens
+       
       try {
-            allTokens = await Promise.all(state.companies.map(async (c) => ({ company: c.name,token: await KF.getGoogleAuthToken(c)})));
+            allTokens = await Promise.all( companies.map(async (c) => ({ company: c.name,token: await KF.getGoogleAuthToken(c)})));
       } catch (error) { 
         logger.log(error);
       }
      
-   const company = state.companies.find((c)=>c.id == state.domains.find((d)=>d.hostname == hostname).companyId)
-   const domainGoogleAdsId = state.domains.find((d)=>d.hostname == hostname).googleAdsId
+   const company =  companies.find((c)=>c.id ==  domains.find((d)=>d.hostname == hostname).companyId)
+   const domainGoogleAdsId =  domains.find((d)=>d.hostname == hostname).googleAdsId
    const token = allTokens.find((t) => t.company === company.name)?.token
    const results = [];
 
