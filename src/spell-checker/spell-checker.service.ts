@@ -1,12 +1,38 @@
 import { Injectable,Logger,Inject,HttpException, BadRequestException, InternalServerErrorException } from '@nestjs/common';
 import { CreateSpellCheckerDto } from './dto/create-spell-checker.dto';
 import { UpdateSpellCheckerDto } from './dto/update-spell-checker.dto';
-import { fetchGoogleAds,fetchLineups,filterOutTextlessAds,prepareAdsForErrorChecking,fetchWebsitesInnerHtmlAndFindErrors, extractNonCapitalLetterWords, formatGoogleAdsErrors, sendGoogleAdsErrorReports, checkIfLineupExists, processLineupResults, getActiveBingUrls, fetchAllTransactions, establishInvocaConnection,   isLocal, generateBrowser, checkInvocaInMobile, checkInvocaInDesktop, getTrafficIncongruence, assignDomainNames, getUniqueCampaignErrors, sendTrafficValidationAlerts } from './utils';
+import { 
+  fetchGoogleAds,
+  fetchGoogleSearchUrls,
+  filterOutTextlessAds,
+  prepareAdsForErrorChecking,
+  fetchWebsitesInnerHtmlAndFindErrors, 
+  extractNonCapitalLetterWords,
+  formatGoogleAdsErrors,
+  sendGoogleAdsErrorReports,
+  checkIfLineupExists,
+  extractGoogleSearchUrls,
+  getActiveBingUrls,
+  fetchAllTransactions,
+  establishInvocaConnection,
+  isLocal,
+  generateBrowser,
+  checkInvocaInMobile,
+  checkInvocaInDesktop,
+  getTrafficIncongruence,
+  assignDomainNames,
+  getUniqueCampaignErrors,
+  sendTrafficValidationAlerts,
+  categorizeErrors,
+  sendCategorizedErrorsToSlack,
+  WebsiteError
+} from './utils';
+import { extractErrorsWithLocalLibrary, extractErrorsWithGpt } from './utilsOfUtils';
 import { GlobalStateService } from 'src/globalState/global-state.service';
 import { GptService } from 'src/gpt/gpt.service';
 const logger = new Logger('analytical-tools.spellchecker');
 import {logToCloudWatch} from 'src/logger'; 
-import {adsPreparedForErrorDetection, BqTrafficCampaign} from './interfaces';
+import {adsPreparedForErrorDetection, BqTrafficCampaign,googleAdsAndDomain,CampaignAndUrlInfo, CategorizedErrors} from './interfaces';
 import { Domain,Paths } from 'src/kidonInterfaces/shared';
 import {processInBatches,extractMisspelledWords,extractOutdatedYears} from './utils';
 import {googleAds } from './interfaces';
@@ -16,20 +42,16 @@ import {ignoredLanguages} from './ignoreWords';
 import { KIDON_CONNECTION } from 'src/knex/knex.module';
 import { Knex } from 'knex';
 import { createErrorsTable } from './utils';
-import {desktopOnlyTraffick, hasMobileOrDesktop, mobileOnlyTraffick, slackChannels} from './consts';
+import { slackChannels} from './consts';
 import { getSecretFromSecretManager } from 'src/utils/secrets';
 import {googleAdsGrammarErrors,googleAdsLandingPageQuery} from './gaqlQuerys';
 import { fetchIgnoreWords } from './utils';
 import axios from 'axios';
 import { AnyObject } from './consts';
 import puppeteer from 'puppeteer';
-import { BigQuery } from '@google-cloud/bigquery';
-import dayjs from 'dayjs';
-import { invocaColumns } from './consts';
 import { extractBaseUrl } from './utils';
 import { campaignsNetworks, traffic } from './queries/traffic';
- 
-@Injectable()
+ @Injectable()
 export class SpellCheckerService {
 
   constructor(
@@ -97,47 +119,45 @@ export class SpellCheckerService {
 
  
  
-  async lineupValidation(hostname: string, isTest:boolean, url:string) {
-    logToCloudWatch('entering lineupValidation');
+  async webSitesChecks(hostname: string, isTest:boolean, url:string) {
+    logToCloudWatch('entering webSitesChecks');
   
     try {
-      let errors = []
-      
+        // Get ignore list from database
+      const [ignoreList] = await Promise.all([fetchIgnoreWords(this.kidonClient, '59') ]);
       const state = this.globalState.getAllState(); if (!state) return 'No state found';
       let domainsToProcess = state.domains.filter((d: Domain) => d.googleAdsId);
-      domainsToProcess = domainsToProcess.filter((d: Domain) =>  ![20,176,128,153].includes(d.id)  );
+      domainsToProcess = domainsToProcess.filter((d: Domain) =>  ![20,176,128,153,34,17,31,40,4,25,21,115,61,43,68,66,59,122,163,147,183,207,197].includes(d.id)  );
       const allTokens = await Promise.all(state.companies.map(async (c) => ({ company: c.name, token: await KF.getGoogleAuthToken(c) })));
   
-      const urlSet = new Set<string>();
-  
-      // ✅ Step 1: fetch lineups
-      const rawLineupResults = await processInBatches(
-          domainsToProcess.map((domain: Domain) => async () => {
-              try {
-                  return await fetchLineups(domain, state.companies, allTokens, googleAdsLandingPageQuery);
-              } catch (error) {
-                  logToCloudWatch(`❌ Error fetching Google Ads for domain ${domain.id}: ${error.message}`, "ERROR");
-                  return { domain, results: [] };
-              }
-          }),
-          30
-      );
-      
-      let urlAndSlackChannel = processLineupResults(rawLineupResults);
-      logToCloudWatch(`Found ${urlAndSlackChannel.length} lineups`, 'INFO');
-      
-      if (hostname) {
-          urlAndSlackChannel = urlAndSlackChannel.filter((u) => u.url.includes(hostname));
-      }
+   
+      // ✅ Step 1: fetch urls
+      // You're extracting unique final landing page URLs from Google Ads that are active and have received impressions.
+       const rawGoogleSearchResults : googleAdsAndDomain[] =  await processInBatches(
+        domainsToProcess.map((domain: Domain) => async () => {
+            try {
+                return await fetchGoogleSearchUrls(domain, state.companies, allTokens, googleAdsLandingPageQuery);
+            } catch (error) {
+                logToCloudWatch(`❌ Error fetching Google Ads for domain ${domain.id}: ${error.message}`, "ERROR");
+                return { domain, results: [] };
+            }
+        }),
+        30
+    );
 
-      if(url){
-        urlAndSlackChannel = urlAndSlackChannel.filter((u) => u.url.includes(url));
-      }
+
+
+      let urlAndSlackChannel : CampaignAndUrlInfo[]  = extractGoogleSearchUrls(rawGoogleSearchResults);
+      logToCloudWatch(`Found ${urlAndSlackChannel.length} lineups`, 'INFO');
+      if (hostname) urlAndSlackChannel = urlAndSlackChannel.filter((u) => u.url.includes(hostname));
+      if(url)urlAndSlackChannel = urlAndSlackChannel.filter((u) => u.url.includes(url));
+        
+      
  
-      // ✅ Step 2: validate lineups (sequential, not in batches)
-      const validationResults = [];
-      for (const urlAndSlack of urlAndSlackChannel) {
-        let axiosRes, pupeteerRes, durationMs;
+      // ✅ Step 2: harvest content from urls
+      const webSitesAccumulativeErrors = []; // the main object containing all the founded errors
+      for (const urlAndSlack of urlAndSlackChannel ) {
+        let axiosRes, pupeteerRes, durationMs, pageContent, pageTitle;
         try {
           logToCloudWatch(`checking ${urlAndSlack.url}  `, 'INFO');
           const startTime = Date.now();
@@ -147,86 +167,65 @@ export class SpellCheckerService {
           const page = await browser.newPage();
           await page.goto(urlAndSlack.url, { waitUntil: 'networkidle2', timeout: 60000 });
           await new Promise(resolve => setTimeout(resolve, 2000));
-         await page.waitForSelector(
+          await page.waitForSelector(
             '[class*="partnersArea_main-partner-list"], [class*="ConditionalPartnersList"], [class*="homePage_partners-list-section"], [class*="articlesSection_container"], [class*="partnerNode"], [id*="test-id-partners-list"]',
             { timeout: 5000 }
           ).catch(() => {});
-          pupeteerRes = await page.content();
+          
+          // Get page content for error checking
+          pageContent = await page.evaluate(() => document.body.innerText); // clean html for grammatical errors detection
+          pageTitle = await page.title();     // title for outdated years check
+          pupeteerRes = await page.content(); // raw html for invoca tag detection
           await browser.close();
+
+          // Check for errors in the page content
+          const pageData = {
+            domain: domainsToProcess.find(d => urlAndSlack.url.includes(d.hostname))?.id || 0,
+            fullPath: urlAndSlack.url,
+            innerHtml: pageContent,
+            titleElement: pageTitle,
+            detectedErrors: [],
+            outdatedYears: []
+          };
+
+ 
+            
+         
+
+            // ✅ Step 3.1:  check content errors, outdated years in path and in title
+          const pageWithLocalErrors = extractErrorsWithLocalLibrary([pageData], ignoreList)[0];
+          const pageWithAllErrors = await extractErrorsWithGpt(this.gptService, [pageWithLocalErrors], ignoreList);
+
+          if (pageWithAllErrors[0].detectedErrors.length > 0 || pageWithAllErrors[0].outdatedYears.length > 0) {
+            webSitesAccumulativeErrors.push({ 
+              url: urlAndSlack.url, 
+              slackChannelId: urlAndSlack.slackChannelId, 
+              campaignName: urlAndSlack.campaignName, 
+              status: axiosRes.status, 
+              reason: 'content errors found',
+              localErrors: pageWithAllErrors[0].detectedErrors,
+              outdatedYears: pageWithAllErrors[0].outdatedYears
+            });
+          }
+    // ✅ Step 3.2:  check invoca errors
         } catch (err) {
           logToCloudWatch(`Error in lineupValidation: ${err}`, 'ERROR');
           if (err.name === 'AxiosError'  && err.status != undefined) {
-            validationResults.push({ url: urlAndSlack.url, slackChannelId: urlAndSlack.slackChannelId, campaignName: urlAndSlack.campaignName, status: err.status, reason: `${JSON.stringify(err)}` });
-            continue;
-          } else {
-            //validationResults.push({ url: urlAndSlack.url, slackChannelId: urlAndSlack.slackChannelId, campaignName: urlAndSlack.campaignName, status: err.status, reason: `${JSON.stringify(err)}` });
-            continue;
-          }
+            webSitesAccumulativeErrors.push({ url: urlAndSlack.url, slackChannelId: urlAndSlack.slackChannelId, campaignName: urlAndSlack.campaignName, status: err.status, reason: `${JSON.stringify(err)}` });          } 
         }
         if (durationMs > 10000) {
-          validationResults.push({ url: urlAndSlack.url, slackChannelId: urlAndSlack.slackChannelId, campaignName: urlAndSlack.campaignName, status: axiosRes.status, reason: 'timeout' });
+          webSitesAccumulativeErrors.push({ url: urlAndSlack.url, slackChannelId: urlAndSlack.slackChannelId, campaignName: urlAndSlack.campaignName, status: axiosRes.status, reason: 'timeout' });
         } else if (!checkIfLineupExists(pupeteerRes)) {
-          validationResults.push({ url: urlAndSlack.url, slackChannelId: urlAndSlack.slackChannelId, campaignName: urlAndSlack.campaignName, status: '-', reason: 'no lineup found' });
+          webSitesAccumulativeErrors.push({ url: urlAndSlack.url, slackChannelId: urlAndSlack.slackChannelId, campaignName: urlAndSlack.campaignName, status: '-', reason: 'no lineup found' });
         }
       }
   
-      const filteredErrors = validationResults.filter(Boolean);
+      
   
-
-      const secondCheckResults = await processInBatches(
-        filteredErrors
-          .filter(e => e.reason === 'no lineup found')
-          .map(error => async () => {
-            // Re-fetch the page content
-            let pupeteerRes;
-            try {
-              const browser = await puppeteer.launch({
-                headless: true,
-                   executablePath: '/usr/local/bin/chrome', // the location of chrome on the ec2
-                protocolTimeout: 60000,
-              });
-              const page = await browser.newPage();
-              await page.goto(error.url, { waitUntil: 'networkidle2', timeout: 60000 });
-              pupeteerRes = await page.content();
-              await browser.close();
-            } catch (err) {
-              logToCloudWatch(`[SECOND TRY] Puppeteer error for ${error.url}: ${err}`, 'ERROR');
-              // If puppeteer fails, treat as still error
-              return error;
-            }
-            // Only return error if checkIfLineupExists still fails
-            const exists = checkIfLineupExists(pupeteerRes);
-            logToCloudWatch(`[SECOND TRY] checkIfLineupExists for ${error.url}: ${exists}`, 'INFO');
-            if (!exists) {
-              return error;
-            }
-            logToCloudWatch(`[SECOND TRY] Lineup found on retry for ${error.url}, overriding previous error.`, 'INFO');
-            return null;
-          }),
-        3
-      );
-      
-      let doubleFailed = [
-        ...filteredErrors.filter(e => e.reason !== 'no lineup found'),
-        ...secondCheckResults.filter(Boolean)
-      ];
-      
-
-
-
-    
-
-
-      if(doubleFailed && doubleFailed.length > 0){
-        for(let error of filteredErrors){
-           const errorMessage = [  ' :rotating_light:  *Lineup Validation Error:*',  `*URL:* ${error.url}`,`*Campaign:* ${error.campaignName}`,`*Status:* ${error.status}`,`*Reason:* ${error.reason}` ].join('\n');
-          logToCloudWatch(`Lineup Validation Errors: ${errorMessage}`, 'ERROR');
-          await KF.sendSlackAlert(errorMessage, isTest ?  slackChannels.PERSONAL : slackChannels.CONTENT, state.slackToken); 
-        }
-      }else{
-        logToCloudWatch(`:herb: No Lineup errors found`);
-        await KF.sendSlackAlert(`no lineup errors found`,  isTest ?  slackChannels.PERSONAL : slackChannels.CONTENT, state.slackToken); 
-      }
+   
+      // ✅ Step 4.1: Categorize and send errors to slack
+      const categorizedErrors = categorizeErrors(webSitesAccumulativeErrors);
+      await sendCategorizedErrorsToSlack(categorizedErrors, isTest, state);
   
     } catch (e) {
       logToCloudWatch(`Error during lineupValidation: ${e}`, 'ERROR');
@@ -252,7 +251,7 @@ export class SpellCheckerService {
     const rawLineupResults = await processInBatches(
         domainsToProcess.map((domain: Domain) => async () => {
             try {
-                return await fetchLineups(domain, state.companies, allTokens, googleAdsLandingPageQuery);
+                return await fetchGoogleSearchUrls(domain, state.companies, allTokens, googleAdsLandingPageQuery);
             } catch (error) {
                 logToCloudWatch(`❌ Error fetching Google Ads for domain ${domain.id}: ${error.message}`, "ERROR");
                 return { domain, results: [] };
@@ -260,7 +259,7 @@ export class SpellCheckerService {
         }),
         30
     );
-    let urlAndSlackChannel = processLineupResults(rawLineupResults);
+    let urlAndSlackChannel = extractGoogleSearchUrls(rawLineupResults);
 
     if(!onlyOriginalUrl){
        return urlAndSlackChannel.map((u) => u.url);

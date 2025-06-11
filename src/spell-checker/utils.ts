@@ -3,11 +3,11 @@ import { AnyObject, hasMobileOrDesktop, mobileOnlyTraffick, desktopOnlyTraffick 
 import { logToCloudWatch } from 'src/logger';
 import { BadRequestException, InternalServerErrorException } from '@nestjs/common';
 import { GptService } from 'src/gpt/gpt.service';
- import {BqTrafficCampaign, SqlCampaignTraffic, websiteText} from './interfaces';
+import {BqTrafficCampaign, CategorizedErrors, googleAdsAndDomain, SqlCampaignTraffic, WebsiteError, websiteText} from './interfaces';
 import { Domain } from 'src/kidonInterfaces/shared';
 import { Company } from 'src/kidonInterfaces/shared';
 import { gptProposal } from './interfaces';
- import JSON5 from 'json5';
+import JSON5 from 'json5';
 import { getDateRange } from 'src/utils';
 import spellchecker from 'spellchecker';
 import fs from 'fs';
@@ -16,7 +16,7 @@ const cheerio = require('cheerio');
 const { Readability } = require('@mozilla/readability');
 const { JSDOM } = require('jsdom');
 import * as KF from '@spotower/my-utils';
-import {slackChannels}  from './consts';
+import {slackChannels} from './consts';
 import { log } from 'console';
 import { XMLParser } from 'fast-xml-parser';
 import { googleAdsLandingPageQuery } from './gaqlQuerys';
@@ -78,7 +78,7 @@ export async function fetchGoogleAds(domain: Domain, companies: Company[], token
 
 
 
-    export async function fetchLineups(domain: Domain, companies: Company[], tokens:any, query:string): Promise<any> {
+    export async function fetchGoogleSearchUrls(domain: Domain, companies: Company[], tokens:any, query:string): Promise<any> {
         const landingPageResult = await axios.post(
             `https://googleads.googleapis.com/v19/customers/${domain.googleAdsId}/googleAds:searchStream`,
             {
@@ -99,7 +99,7 @@ export async function fetchGoogleAds(domain: Domain, companies: Company[], token
         };
     }
 
-    export function processLineupResults(rawResults: {domain: Domain, results: any[]}[]): {url: string, slackChannelId: string, campaignName: string}[] {
+    export function extractGoogleSearchUrls(rawResults: googleAdsAndDomain[]): {url: string, slackChannelId: string, campaignName: string}[] {
         const urlSet = new Set<string>();
         const processedResults: {url: string, slackChannelId: string, campaignName: string}[] = [];
         
@@ -594,7 +594,7 @@ export   function checkIfLineupExists(html: string): boolean {
    const rawLineupResults = await processInBatches(
        domainsToProcess.map((domain: Domain) => async () => {
            try {
-               return await fetchLineups(domain, state.companies, allTokens, googleAdsLandingPageQuery);
+               return await fetchGoogleSearchUrls(domain, state.companies, allTokens, googleAdsLandingPageQuery);
            } catch (error) {
                logToCloudWatch(`❌ Error fetching Google Ads for domain ${domain.id}: ${error.message}`, "ERROR");
                return { domain, results: [] };
@@ -602,7 +602,7 @@ export   function checkIfLineupExists(html: string): boolean {
        }),
        30
    );
-   let urlAndSlackChannel = processLineupResults(rawLineupResults);
+   let urlAndSlackChannel = extractGoogleSearchUrls(rawLineupResults);
    const baseUrlSet = new Set<string>();
    for (const obj of urlAndSlackChannel) {
       const match = obj.url.match(/^(https:\/\/[^\/]+\.com\/)/);
@@ -882,4 +882,128 @@ export async function isInvocaPresent(page: any): Promise<boolean> {
       return hasInvocaScriptSrc || hasInvocaInlineScript || hasInvocaInHTML || hasInvocaGlobal;
     });
   }
+  
+ 
+
+export function categorizeErrors(errors: WebsiteError[]): CategorizedErrors {
+  const categorized: CategorizedErrors = {
+    contentErrors: {},
+    outdatedYearsErrors: {},
+    lineupErrors: {},
+    timeoutErrors: {},
+    httpErrors: {}
+  };
+
+  for (const error of errors) {
+    const domain = error.url.match(/https?:\/\/([^\/]+)/)?.[1] || 'unknown';
+    
+    if (error.localErrors?.length > 0) {
+      if (!categorized.contentErrors[domain]) categorized.contentErrors[domain] = [];
+      categorized.contentErrors[domain].push(error);
+    }
+    
+    if (error.outdatedYears?.length > 0) {
+      if (!categorized.outdatedYearsErrors[domain]) categorized.outdatedYearsErrors[domain] = [];
+      categorized.outdatedYearsErrors[domain].push(error);
+    }
+    
+    if (error.reason === 'no lineup found') {
+      if (!categorized.lineupErrors[domain]) categorized.lineupErrors[domain] = [];
+      categorized.lineupErrors[domain].push(error);
+    }
+    
+    if (error.reason === 'timeout') {
+      if (!categorized.timeoutErrors[domain]) categorized.timeoutErrors[domain] = [];
+      categorized.timeoutErrors[domain].push(error);
+    }
+    
+    if (error.reason.includes('AxiosError')) {
+      if (!categorized.httpErrors[domain]) categorized.httpErrors[domain] = [];
+      categorized.httpErrors[domain].push(error);
+    }
+  }
+
+  return categorized;
+}
+
+export { WebsiteError };
+  
+export async function sendCategorizedErrorsToSlack(
+  categorizedErrors: CategorizedErrors, 
+  isTest: boolean, 
+  state: any
+): Promise<void> {
+  const messages: string[] = [];
+
+  // Content Errors
+  if (Object.keys(categorizedErrors.contentErrors).length > 0) {
+    messages.push('*📝🟥🟥🟥  CONTENT ERRORS  🟥🟥🟥*');
+    for (const [domain, domainErrors] of Object.entries(categorizedErrors.contentErrors)) {
+      messages.push(`\n***Domain: ${domain}***`); 
+        for (const error of domainErrors) {
+        messages.push(`• *URL*: ${error.url}:  *Errors*: ${error.localErrors?.join(', ') || ''}`);
+      }
+    }
+  }
+
+  // Outdated Years Errors
+  if (Object.keys(categorizedErrors.outdatedYearsErrors).length > 0) {
+    messages.push('\n*📅 Outdated Years:*');
+    for (const [domain, domainErrors] of Object.entries(categorizedErrors.outdatedYearsErrors)) {
+      messages.push(`\n*Domain: ${domain}*`);
+      for (const error of domainErrors) {
+        messages.push(`• URL: ${error.url}`);
+        messages.push(`  Campaign: ${error.campaignName}`);
+        messages.push(`  Years: ${error.outdatedYears?.join(', ') || ''}`);
+      }
+    }
+    messages.push('\n\n\n');
+  }
+
+  // Lineup Errors
+  if (Object.keys(categorizedErrors.lineupErrors).length > 0) {
+    messages.push('\n*⚠️ Missing Lineup Content:*');
+    for (const [domain, domainErrors] of Object.entries(categorizedErrors.lineupErrors)) {
+      messages.push(`\n*Domain: ${domain}*`);
+      for (const error of domainErrors) {
+        messages.push(`• URL: ${error.url}`);
+        messages.push(`  Campaign: ${error.campaignName}`);
+      }
+    }
+  }
+
+  // Timeout Errors
+  if (Object.keys(categorizedErrors.timeoutErrors).length > 0) {
+    messages.push('\n*⏰ Page Load Timeouts:*');
+    for (const [domain, domainErrors] of Object.entries(categorizedErrors.timeoutErrors)) {
+      messages.push(`\n*Domain: ${domain}*`);
+      for (const error of domainErrors) {
+        messages.push(`• URL: ${error.url}`);
+        messages.push(`  Campaign: ${error.campaignName}`);
+      }
+    }
+  }
+
+  // HTTP Errors
+  if (Object.keys(categorizedErrors.httpErrors).length > 0) {
+    messages.push('\n*🔴 HTTP Errors:*');
+    for (const [domain, domainErrors] of Object.entries(categorizedErrors.httpErrors)) {
+      messages.push(`\n*Domain: ${domain}*`);
+      for (const error of domainErrors) {
+        messages.push(`• URL: ${error.url}`);
+        messages.push(`  Campaign: ${error.campaignName}`);
+        messages.push(`  Status: ${error.status}`);
+      }
+    }
+  }
+
+  if (messages.length > 0) {
+    const finalMessage = messages.join('\n');
+    logToCloudWatch(`Website Validation Errors:\n${finalMessage}`, 'ERROR');
+    await KF.sendSlackAlert(finalMessage, isTest ? slackChannels.PERSONAL : slackChannels.CONTENT, state.slackToken);
+  } else {
+    logToCloudWatch(`:herb: No website errors found`);
+    await KF.sendSlackAlert(`no website errors found`, isTest ? slackChannels.PERSONAL : slackChannels.CONTENT, state.slackToken);
+  }
+}
   
