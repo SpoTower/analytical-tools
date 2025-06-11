@@ -19,11 +19,10 @@ export class BingService {
 
   async createConversionGoals(conversionActions: BingConversionAction[],   domainId: number) {
     logToCloudWatch('Entering createConversionGoals endpoint. '    );
-    const state = this.globalState.getAllState();
-    const domain = state.domains.filter((d)=>d.id == domainId)[0]
-    let results = []
-        const company = state.companies.find(c => c.id === domain.companyId);
-        let accessToken = null
+    const domain  = await this.kidonClient('domain').where('id', domainId).first();
+    const company  = await this.kidonClient('companies').where('id', domain.companyId).first();
+     let results = []
+         let accessToken = null
         try {accessToken = await KF.getBingAccessTokenFromRefreshToken(company);} catch{}
           
 
