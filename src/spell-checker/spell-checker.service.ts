@@ -3,7 +3,7 @@ import { CreateSpellCheckerDto } from './dto/create-spell-checker.dto';
 import { UpdateSpellCheckerDto } from './dto/update-spell-checker.dto';
 import { 
   fetchGoogleAds,
-  fetchLineups,
+  fetchGoogleSearchUrls,
   filterOutTextlessAds,
   prepareAdsForErrorChecking,
   fetchWebsitesInnerHtmlAndFindErrors, 
@@ -11,7 +11,7 @@ import {
   formatGoogleAdsErrors,
   sendGoogleAdsErrorReports,
   checkIfLineupExists,
-  processLineupResults,
+  extractGoogleSearchUrls,
   getActiveBingUrls,
   fetchAllTransactions,
   establishInvocaConnection,
@@ -132,10 +132,11 @@ export class SpellCheckerService {
   
    
       // ✅ Step 1: fetch urls
-       const rawGoogleAdsResults : googleAdsAndDomain[] =  await processInBatches(
+      // You're extracting unique final landing page URLs from Google Ads that are active and have received impressions.
+       const rawGoogleSearchResults : googleAdsAndDomain[] =  await processInBatches(
         domainsToProcess.map((domain: Domain) => async () => {
             try {
-                return await fetchLineups(domain, state.companies, allTokens, googleAdsLandingPageQuery);
+                return await fetchGoogleSearchUrls(domain, state.companies, allTokens, googleAdsLandingPageQuery);
             } catch (error) {
                 logToCloudWatch(`❌ Error fetching Google Ads for domain ${domain.id}: ${error.message}`, "ERROR");
                 return { domain, results: [] };
@@ -146,7 +147,7 @@ export class SpellCheckerService {
 
 
 
-      let urlAndSlackChannel : CampaignAndUrlInfo[]  = processLineupResults(rawGoogleAdsResults);
+      let urlAndSlackChannel : CampaignAndUrlInfo[]  = extractGoogleSearchUrls(rawGoogleSearchResults);
       logToCloudWatch(`Found ${urlAndSlackChannel.length} lineups`, 'INFO');
       if (hostname) urlAndSlackChannel = urlAndSlackChannel.filter((u) => u.url.includes(hostname));
       if(url)urlAndSlackChannel = urlAndSlackChannel.filter((u) => u.url.includes(url));
@@ -250,7 +251,7 @@ export class SpellCheckerService {
     const rawLineupResults = await processInBatches(
         domainsToProcess.map((domain: Domain) => async () => {
             try {
-                return await fetchLineups(domain, state.companies, allTokens, googleAdsLandingPageQuery);
+                return await fetchGoogleSearchUrls(domain, state.companies, allTokens, googleAdsLandingPageQuery);
             } catch (error) {
                 logToCloudWatch(`❌ Error fetching Google Ads for domain ${domain.id}: ${error.message}`, "ERROR");
                 return { domain, results: [] };
@@ -258,7 +259,7 @@ export class SpellCheckerService {
         }),
         30
     );
-    let urlAndSlackChannel = processLineupResults(rawLineupResults);
+    let urlAndSlackChannel = extractGoogleSearchUrls(rawLineupResults);
 
     if(!onlyOriginalUrl){
        return urlAndSlackChannel.map((u) => u.url);

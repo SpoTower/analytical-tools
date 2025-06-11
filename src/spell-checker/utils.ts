@@ -78,7 +78,7 @@ export async function fetchGoogleAds(domain: Domain, companies: Company[], token
 
 
 
-    export async function fetchLineups(domain: Domain, companies: Company[], tokens:any, query:string): Promise<any> {
+    export async function fetchGoogleSearchUrls(domain: Domain, companies: Company[], tokens:any, query:string): Promise<any> {
         const landingPageResult = await axios.post(
             `https://googleads.googleapis.com/v19/customers/${domain.googleAdsId}/googleAds:searchStream`,
             {
@@ -99,7 +99,7 @@ export async function fetchGoogleAds(domain: Domain, companies: Company[], token
         };
     }
 
-    export function processLineupResults(rawResults: googleAdsAndDomain[]): {url: string, slackChannelId: string, campaignName: string}[] {
+    export function extractGoogleSearchUrls(rawResults: googleAdsAndDomain[]): {url: string, slackChannelId: string, campaignName: string}[] {
         const urlSet = new Set<string>();
         const processedResults: {url: string, slackChannelId: string, campaignName: string}[] = [];
         
@@ -594,7 +594,7 @@ export   function checkIfLineupExists(html: string): boolean {
    const rawLineupResults = await processInBatches(
        domainsToProcess.map((domain: Domain) => async () => {
            try {
-               return await fetchLineups(domain, state.companies, allTokens, googleAdsLandingPageQuery);
+               return await fetchGoogleSearchUrls(domain, state.companies, allTokens, googleAdsLandingPageQuery);
            } catch (error) {
                logToCloudWatch(`❌ Error fetching Google Ads for domain ${domain.id}: ${error.message}`, "ERROR");
                return { domain, results: [] };
@@ -602,7 +602,7 @@ export   function checkIfLineupExists(html: string): boolean {
        }),
        30
    );
-   let urlAndSlackChannel = processLineupResults(rawLineupResults);
+   let urlAndSlackChannel = extractGoogleSearchUrls(rawLineupResults);
    const baseUrlSet = new Set<string>();
    for (const obj of urlAndSlackChannel) {
       const match = obj.url.match(/^(https:\/\/[^\/]+\.com\/)/);
@@ -937,12 +937,11 @@ export async function sendCategorizedErrorsToSlack(
 
   // Content Errors
   if (Object.keys(categorizedErrors.contentErrors).length > 0) {
-    messages.push('*📝 Content Errors:*');
+    messages.push('*📝🟥🟥🟥  CONTENT ERRORS  🟥🟥🟥*');
     for (const [domain, domainErrors] of Object.entries(categorizedErrors.contentErrors)) {
-      messages.push(`\n*Domain: ${domain}*`);
-      for (const error of domainErrors) {
-        messages.push(`• URL: ${error.url}`);
-        messages.push(`  Errors: ${error.localErrors?.join(', ') || ''}`);
+      messages.push(`\n***Domain: ${domain}***`); 
+        for (const error of domainErrors) {
+        messages.push(`• *URL*: ${error.url}:  *Errors*: ${error.localErrors?.join(', ') || ''}`);
       }
     }
   }
@@ -958,6 +957,7 @@ export async function sendCategorizedErrorsToSlack(
         messages.push(`  Years: ${error.outdatedYears?.join(', ') || ''}`);
       }
     }
+    messages.push('\n\n\n');
   }
 
   // Lineup Errors
