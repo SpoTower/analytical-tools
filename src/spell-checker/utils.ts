@@ -937,12 +937,15 @@ export async function sendCategorizedErrorsToSlack(
 
   // Content Errors
   if (Object.keys(categorizedErrors.contentErrors).length > 0) {
-    messages.push('*📝🟥🟥🟥  CONTENT ERRORS  🟥🟥🟥*');
+    messages.push('*📝📝 ❗ CONTENT ERRORS  ❗📝📝* \n');
+  
     for (const [domain, domainErrors] of Object.entries(categorizedErrors.contentErrors)) {
-      messages.push(`\n***Domain: ${domain}***`); 
-        for (const error of domainErrors) {
-          messages.push(`• *URL*: \`${error.url}\`  *Errors*: ${error.localErrors?.join(', ') || ''}`);
-        }
+      messages.push(`\n*Domain: ${domain}*`);
+      messages.push('```');
+      for (const error of domainErrors) {
+        messages.push(`URL => ${error.url}, ERRORS => ${(error.localErrors || []).join(' | ')}`);
+      }
+      messages.push('```');
     }
   }
 
