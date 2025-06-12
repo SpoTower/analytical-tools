@@ -941,8 +941,8 @@ export async function sendCategorizedErrorsToSlack(
     for (const [domain, domainErrors] of Object.entries(categorizedErrors.contentErrors)) {
       messages.push(`\n***Domain: ${domain}***`); 
         for (const error of domainErrors) {
-        messages.push(`• *URL*: ${error.url}:  *Errors*: ${error.localErrors?.join(', ') || ''}`);
-      }
+          messages.push(`• *URL*: \`${error.url}\`  *Errors*: ${error.localErrors?.join(', ') || ''}`);
+        }
     }
   }
 
