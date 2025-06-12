@@ -175,7 +175,7 @@ export class SpellCheckerService {
           // Get page content for error checking
           pageContent = await page.evaluate(() => document.body.innerText); // clean html for grammatical errors detection
           pageTitle = await page.title();     // title for outdated years check
-          pupeteerRes = await page.content(); // raw html for invoca tag detection
+          pupeteerRes = await page.content(); // raw html for lineup (based on css classes) detection
           await browser.close();
 
           // Check for errors in the page content
@@ -213,10 +213,12 @@ export class SpellCheckerService {
           if (err.name === 'AxiosError'  && err.status != undefined) {
             webSitesAccumulativeErrors.push({ url: urlAndSlack.url, slackChannelId: urlAndSlack.slackChannelId, campaignName: urlAndSlack.campaignName, status: err.status, reason: `${JSON.stringify(err)}` });          } 
         }
-        if (durationMs > 10000) {
+        if (durationMs && durationMs > 10000) {
           webSitesAccumulativeErrors.push({ url: urlAndSlack.url, slackChannelId: urlAndSlack.slackChannelId, campaignName: urlAndSlack.campaignName, status: axiosRes.status, reason: 'timeout' });
-        } else if (!checkIfLineupExists(pupeteerRes)) {
+        } else if (pupeteerRes && !checkIfLineupExists(pupeteerRes)) {
           webSitesAccumulativeErrors.push({ url: urlAndSlack.url, slackChannelId: urlAndSlack.slackChannelId, campaignName: urlAndSlack.campaignName, status: '-', reason: 'no lineup found' });
+        }else if(!pupeteerRes){
+          webSitesAccumulativeErrors.push({ url: urlAndSlack.url, slackChannelId: urlAndSlack.slackChannelId, campaignName: urlAndSlack.campaignName, status: '-', reason: 'no raw content found for lineup detection' });
         }
       }
   
