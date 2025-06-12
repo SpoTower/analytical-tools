@@ -150,8 +150,12 @@ export class SpellCheckerService {
       let urlAndSlackChannel : CampaignAndUrlInfo[]  = extractGoogleSearchUrls(rawGoogleSearchResults);
       logToCloudWatch(`Found ${urlAndSlackChannel.length} lineups`, 'INFO');
       if (hostname) urlAndSlackChannel = urlAndSlackChannel.filter((u) => u.url.includes(hostname));
-      if(url)urlAndSlackChannel = urlAndSlackChannel.filter((u) => u.url.includes(url));
-        
+      if (url) {
+        const filtered = urlAndSlackChannel.filter((u) => u.url.includes(url));
+        urlAndSlackChannel = filtered.length > 0
+          ? filtered
+          : [{ ...urlAndSlackChannel[0], url }];
+      }        
       
  
       // ✅ Step 2: harvest content from urls

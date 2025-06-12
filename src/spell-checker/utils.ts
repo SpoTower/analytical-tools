@@ -283,34 +283,9 @@ export   function filterOutIrrelevantErrors(gptErrorDetectionResults: gptProposa
 
 export function extractMisspelledWords(text: string, excludedWords: string[]): string[] {
     const lowerExcludedWords = new Set(excludedWords.map(word => word.toLowerCase()));
- 
-    // Remove HTML tags
-    text = text.replace(/<[^>]+>/g, ' ');
-
-    // Function to split words with multiple capital letters (e.g., "TotalAV" → ["Total", "AV"])
-    const splitByCapitalLetters = (word: string): string[] => {
-        return word.split(/(?=[A-Z][a-z])/); // Split before capital letters followed by lowercase
-    };
-
-    // Process each word: split by spaces, then split merged words
-    let innerHtmlSeparatedWords = text
-        .split(/\s+/) // Split by spaces
-        .flatMap(splitByCapitalLetters) // Further split words with multiple capital letters
-        .filter(word => /^[A-Za-z]+$/.test(word)); // Keep only valid words
-
-    // Filter out ignored words
-
-
-
-
-    // apply spechecer to inner html words
+    let innerHtmlSeparatedWords = text.replace(/[^a-zA-Z'-]+/g, ' ').toLowerCase().split(/\s+/).filter(Boolean);
     let misspelledWords = innerHtmlSeparatedWords.filter(word => spellchecker.isMisspelled(word));
- 
-//apply ignore list to alleged errors after spellchecker
-
-let finalMisspelledWordsDbfiltered = misspelledWords.filter(word => !lowerExcludedWords.has(word.toLowerCase()));
- 
-
+    let finalMisspelledWordsDbfiltered = misspelledWords.filter(word => !lowerExcludedWords.has(word.toLowerCase()));
     return [...new Set(finalMisspelledWordsDbfiltered)]; // Remove duplicates
 }
 
@@ -336,12 +311,17 @@ export function extractNonCapitalLetterWords(text: string, excludedWords: string
 
 
 export function extractOutdatedYears(text: string): string[] {
-    const currentYear = new Date().getFullYear();
-    return [...text.matchAll(/\b(19|20)\d{2}\b/g)]
-        .map(match => match[0])
-        .filter(year => parseInt(year) !== currentYear);
-}
+  const currentYear = new Date().getFullYear();
 
+  const validYears = [...text.matchAll(/\b20\d{2}\b/g)]
+    .map(match => match[0])
+    .filter(year => parseInt(year) !== currentYear);
+
+  const malformedYears = [...text.matchAll(/\b20\d{3,}\b/g)]
+    .map(match => match[0]);
+
+  return [...new Set([...validYears, ...malformedYears])];
+}
  
 export function saveResults(results: any[]) {
     const filePath = path.join(__dirname, '../..', 'webSiteErrors.json');
@@ -934,32 +914,36 @@ export async function sendCategorizedErrorsToSlack(
   state: any
 ): Promise<void> {
   const messages: string[] = [];
+// Content Errors
+if (Object.keys(categorizedErrors.contentErrors).length > 0) {
+  messages.push('*📝📝 ❗ CONTENT ERRORS ❗📝📝* \n');
 
-  // Content Errors
-  if (Object.keys(categorizedErrors.contentErrors).length > 0) {
-    messages.push('*📝📝 ❗ CONTENT ERRORS  ❗📝📝* \n');
-  
-    for (const [domain, domainErrors] of Object.entries(categorizedErrors.contentErrors)) {
-      messages.push(`\n*Domain: ${domain}*`);
-      messages.push('```');
-      for (const error of domainErrors) {
-        messages.push(`URL => ${error.url}, ERRORS => ${(error.localErrors || []).join(' | ')}`);
-      }
-      messages.push('```');
+  for (const [domain, domainErrors] of Object.entries(categorizedErrors.contentErrors)) {
+    if (!domainErrors?.length) continue; // 🔒 skip if empty or invalid
+
+    messages.push(`\n*Domain: ${domain}*`);
+    messages.push('```');
+    for (const error of domainErrors) {
+      messages.push(`URL: ${error.url}, ERRORS: ${(error.localErrors || []).join(', ')}`);
     }
+    messages.push('```'); // ✅ always close
   }
-
+}
   // Outdated Years Errors
   if (Object.keys(categorizedErrors.outdatedYearsErrors).length > 0) {
     messages.push('\n*📅 Outdated Years:*');
+  
     for (const [domain, domainErrors] of Object.entries(categorizedErrors.outdatedYearsErrors)) {
+      if (!domainErrors?.length) continue;
+  
       messages.push(`\n*Domain: ${domain}*`);
+      messages.push('```');
       for (const error of domainErrors) {
-        messages.push(`• URL: ${error.url}`);
-        messages.push(`  Campaign: ${error.campaignName}`);
-        messages.push(`  Years: ${error.outdatedYears?.join(', ') || ''}`);
+        messages.push(`URL: ${error.url}, CAMPAIGN: ${error.campaignName}, YEARS: ${error.outdatedYears?.join(', ') || ''}`);
       }
+      messages.push('```');
     }
+  
     messages.push('\n\n\n');
   }
 
