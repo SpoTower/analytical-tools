@@ -1,14 +1,14 @@
 import { Injectable, Inject } from '@nestjs/common';
 import { CreateBingDto } from './dto/create-bing.dto';
 import { UpdateBingDto } from './dto/update-bing.dto';
-import { generateBingCreateOfflineConversionXml } from './consts';
+import { generateBingCreateOfflineConversionXml, generateBingGetCampaignsByAccountIdXml, generateGetAdGroupsByCampaignIdXml, generateGetAdsByAdGroupIdsXml } from './consts';
   import axios from 'axios';
   import { XMLParser } from 'fast-xml-parser';
   import * as KF from '@spotower/my-utils';
 import { GlobalStateService } from 'src/globalState/global-state.service';
 import {   KIDON_CONNECTION } from 'src/knex/knex.module';
 import { Knex } from 'knex';
-import { BingConversionAction } from './interfaces';
+import { BingAd, BingConversionAction } from './interfaces';
 import { logToCloudWatch } from 'src/logger';
  @Injectable()
 export class BingService {
@@ -16,7 +16,6 @@ export class BingService {
   constructor(private readonly globalState: GlobalStateService,
     @Inject(KIDON_CONNECTION) private readonly kidonClient: Knex,
   ) {}
-
   async createConversionGoals(conversionActions: BingConversionAction[],   domainId: number) {
     logToCloudWatch('Entering createConversionGoals endpoint. '    );
     const domain  = await this.kidonClient('domain').where('id', domainId).first();
@@ -65,6 +64,99 @@ export class BingService {
  
      
   }
+
+
+
+async getBingUrls(domainId?: number) {
+
+  const domain  = await this.kidonClient('domain').where('id', domainId).first();
+    const company  = await this.kidonClient('companies').where('id', domain.companyId).first();
+     let results = []
+         let accessToken = null
+        try {accessToken = await KF.getBingAccessTokenFromRefreshToken(company);} catch{}
+          
+
+        // Get Bing account/customer IDs from the domain or company object
+        const customAccountId = domain.bingAdsId 
+        const customerId = company.bingAccountId
+        const developerToken = company.bingDeveloperToken
+
+       
+ 
+          const  xmlBody = generateBingGetCampaignsByAccountIdXml(accessToken, customAccountId, customerId, developerToken);
+          logToCloudWatch(`XML body: ${JSON.stringify(xmlBody)}`, 'INFO', 'bing');
+          const response = await axios.post(`https://campaign.api.bingads.microsoft.com/Api/Advertiser/CampaignManagement/v13/CampaignManagementService.svc`, xmlBody, {
+            headers: {
+                'Content-Type': 'text/xml',
+                SOAPAction: 'GetCampaignsByAccountId',
+            },
+        });
+
+
+ 
+
+
+        const parser = new XMLParser();
+        const result = parser.parse(response.data);
+        const campaigns = result?.['s:Envelope']?.['s:Body']?.GetCampaignsByAccountIdResponse?.Campaigns?.Campaign;
+        const campaignIds = Array.isArray(campaigns) ? campaigns.map(c => c.Id) : campaigns ? [campaigns.Id] : [];
+
+
+        for (const campaignId of campaignIds) {
+          const xmlAdGroups = generateGetAdGroupsByCampaignIdXml(
+            accessToken, customAccountId, customerId, developerToken, campaignId
+          );
+        
+          const responseAdGroups = await axios.post(
+            `https://campaign.api.bingads.microsoft.com/Api/Advertiser/CampaignManagement/v13/CampaignManagementService.svc`,
+            xmlAdGroups,
+            {
+              headers: {
+                'Content-Type': 'text/xml',
+                SOAPAction: 'GetAdGroupsByCampaignId',
+              },
+            }
+          );
+        
+          const resultAdGroups = parser.parse(responseAdGroups.data);
+          const adGroups = resultAdGroups?.['s:Envelope']?.['s:Body']?.GetAdGroupsByCampaignIdResponse?.AdGroups?.AdGroup;
+          const adGroupIds = Array.isArray(adGroups) ? adGroups.map(c => c.Id) : adGroups ? [adGroups.Id] : []; 
+
+          if (!adGroupIds || adGroupIds.length === 0) continue;
+        
+          for (const adGroupId of adGroupIds) {
+            const xmlAds = generateGetAdsByAdGroupIdsXml(
+              accessToken, customAccountId, customerId, developerToken, adGroupId
+            );
+        
+            const responseAds = await axios.post(
+              `https://campaign.api.bingads.microsoft.com/Api/Advertiser/CampaignManagement/v13/CampaignManagementService.svc`,
+              xmlAds,
+              {
+                headers: {
+                  'Content-Type': 'text/xml',
+                  SOAPAction: 'GetAdsByAdGroupId',
+                },
+              }
+            );
+            const resultAd  = parser.parse(responseAds.data);
+            const ads = resultAd["s:Envelope"]["s:Body"].GetAdsByAdGroupIdResponse.Ads.Ad;
+            const adsArray = Array.isArray(ads) ? ads : [ads];
+            
+            const allUrls = adsArray.flatMap(ad => {
+              const urls = ad?.FinalUrls?.["a:string"];
+              return Array.isArray(urls) ? urls : urls ? [urls] : []; });
+           
+            results.push(allUrls)
+          }
+
+        }
+        console.log(results)
+
+}
+
+
+
 
 
   async updateConversionNamesKidonTable(conversionActions: BingConversionAction[],  resourceNames: string[], domainId: number) {
