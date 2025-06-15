@@ -12,6 +12,7 @@ import { BingAd, BingConversionAction } from './interfaces';
 import { logToCloudWatch } from 'src/logger';
 import { bingCall, ensureArray } from './utils';
 import { processInBatches } from 'src/spell-checker/utils';
+ 
  @Injectable()
 export class BingService {
 
@@ -71,7 +72,7 @@ export class BingService {
 
 
 
-async getBingUrls(domainId?: number): Promise<string[]> {
+async saveBingUrls(domainId?: number): Promise<string[]> {
 
 
   const getCompanyById = (id: number) => companies.find(c => c.id === id);
@@ -105,7 +106,7 @@ async getBingUrls(domainId?: number): Promise<string[]> {
       const customerId = company.bingAccountId;
       const developerToken = company.bingDeveloperToken;
   
-      const localResults: string[] = [];
+      const localResults: any[]    = [];
   
       const xmlCampaigns = generateBingGetCampaignsByAccountIdXml(company.accessToken, customAccountId, customerId, developerToken);
       const resCampaigns = await bingCall(xmlCampaigns, 'GetCampaignsByAccountId');
@@ -123,7 +124,7 @@ async getBingUrls(domainId?: number): Promise<string[]> {
           const resAds = await bingCall(xmlAds, 'GetAdsByAdGroupId');
           const adsParsed = parser.parse(resAds.data);
           const ads = ensureArray(adsParsed?.['s:Envelope']?.['s:Body']?.GetAdsByAdGroupIdResponse?.Ads?.Ad);
-          const urls = ads.flatMap(ad => ensureArray(ad?.FinalUrls?.['a:string']));
+          const urls = ads.flatMap(ad => ensureArray(ad?.FinalUrls?.['a:string']).map(url => ({ url, domainId: domain.id })));
           localResults.push(...urls);
         }));
       }));
