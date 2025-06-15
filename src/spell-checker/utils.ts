@@ -1,5 +1,5 @@
 import axios from 'axios';
-import { AnyObject, hasMobileOrDesktop, mobileOnlyTraffick, desktopOnlyTraffick } from './consts';
+import { AnyObject, hasMobileOrDesktop, mobileOnlyTraffick, desktopOnlyTraffick, urlsWithParams } from './consts';
 import { logToCloudWatch } from 'src/logger';
 import { BadRequestException, InternalServerErrorException } from '@nestjs/common';
 import { GptService } from 'src/gpt/gpt.service';
@@ -673,10 +673,17 @@ export async function generateBrowser() {
         });
   }
   
+  // overall the function should be used to extract the base url from the url to further deduplicate the urls, but 
 export const extractBaseUrl = (url: string) => {
-    const match = url.match(/^(https?:\/\/[^?]+)/i);
-    return match ? match[1] : null;
-  };
+ const paramsMatch = urlsWithParams.find(u=>url.includes(u))
+if(paramsMatch){
+    return url;
+}else{
+  const urlStructureMatch = url.match(/^(https?:\/\/[^?]+)/i);
+  return urlStructureMatch ? urlStructureMatch[1] : null; 
+}
+ 
+   };
   
 
 

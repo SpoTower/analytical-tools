@@ -105,6 +105,8 @@ async getBingUrls(domainId?: number): Promise<string[]> {
       const customerId = company.bingAccountId;
       const developerToken = company.bingDeveloperToken;
   
+      const localResults: string[] = [];
+  
       const xmlCampaigns = generateBingGetCampaignsByAccountIdXml(company.accessToken, customAccountId, customerId, developerToken);
       const resCampaigns = await bingCall(xmlCampaigns, 'GetCampaignsByAccountId');
       const campaignsParsed = parser.parse(resCampaigns.data);
@@ -122,11 +124,13 @@ async getBingUrls(domainId?: number): Promise<string[]> {
           const adsParsed = parser.parse(resAds.data);
           const ads = ensureArray(adsParsed?.['s:Envelope']?.['s:Body']?.GetAdsByAdGroupIdResponse?.Ads?.Ad);
           const urls = ads.flatMap(ad => ensureArray(ad?.FinalUrls?.['a:string']));
-          results.push(...urls);
+          localResults.push(...urls);
         }));
       }));
+  
+      results.push(...localResults); // Single atomic write
     }),
-    10
+    3   
   );
 
   return Array.from(new Set(results));
