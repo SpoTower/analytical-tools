@@ -72,7 +72,7 @@ export class BingService {
 
 
 
-async saveBingUrls(domainId?: number): Promise<string[]> {
+async saveBingUrls(domainId?: number): Promise<string> {
 
 
   const getCompanyById = (id: number) => companies.find(c => c.id === id);
@@ -97,7 +97,7 @@ async saveBingUrls(domainId?: number): Promise<string[]> {
  
   }));
 
-  const results: string[] = [];
+  const results: any[] = [];
 
   await processInBatches(
     validDomains.map(domain => async () => {
@@ -134,11 +134,22 @@ async saveBingUrls(domainId?: number): Promise<string[]> {
     3   
   );
 
-  return Array.from(new Set(results));
+  const uniqueResultsFromBing = Array.from(new Map(results.map(item => [`${item.url}|${item.domainId}`, item])).values()); 
+  const existingBingUrlsFromDb = await this.kidonClient('bing_landing_pages') 
+  const existingSet = new Set(existingBingUrlsFromDb.map(item => `${item.url}|${item.domainId}`) );
+  const newResults = uniqueResultsFromBing.filter(item => !existingSet.has(`${item.url}|${item.domainId}`));
+  if(newResults.length > 0){
+    await this.kidonClient('bing_landing_pages').insert(newResults);
+  }
+
+  return  `Bing urls saved for ${newResults.length} domains`;
 }
 
 
-
+ async getBingUrls(domainId?: number)  {
+  const results = domainId ? await this.kidonClient('bing_landing_pages').where('domain_id', domainId) : await this.kidonClient('bing_landing_pages')
+  return results;
+}
 
   async updateConversionNamesKidonTable(conversionActions: BingConversionAction[],  resourceNames: string[], domainId: number) {
     logToCloudWatch('Entering updateConversionNamesKidonTable endpoint. '    );
