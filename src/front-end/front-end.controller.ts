@@ -21,7 +21,7 @@ export class FrontEndController {
 
 
     // used by front end team to get active urls from google ads
-    @Get('/googleBasedActiveUrls')
+    @Get('/googleActiveUrls')
     async activeUrls(
       @Query('hostname') hostname: string,
       @Query('originOnly', new DefaultValuePipe(false), ParseBoolPipe) originOnly?: boolean
@@ -34,11 +34,11 @@ export class FrontEndController {
         return [];
       }
     }
-    @Get('/bingBasedActiveUrls')
+    @Get('/bingActiveUrls')
     async bingBasedActiveUrls(
       @Query('domainId') domainId: number,
      ) {
-      const urls = await this.bingService.saveBingUrls(domainId);
+      const urls = await this.bingService.getBingUrls(domainId);
       return urls;
     }
     
