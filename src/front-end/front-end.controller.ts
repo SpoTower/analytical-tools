@@ -38,7 +38,7 @@ export class FrontEndController {
     async bingBasedActiveUrls(
       @Query('domainId') domainId: number,
      ) {
-      const urls = await this.bingService.getBingUrls(domainId);
+      const urls = await this.bingService.saveBingUrls(domainId);
       return urls;
     }
     

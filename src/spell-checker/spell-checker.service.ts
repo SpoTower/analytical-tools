@@ -474,13 +474,13 @@ export class SpellCheckerService {
        if(invoclessPages.length > 0 && !isTest){
         await KF.sendSlackAlert(`*🚨Invoca Tag Desktop Validation (Partners websites) (no invoca tag in page scripts):*\n${invoclessPages.join('\n')}`, slackChannels.CONTENT, state.slackToken);
        }else{
-        await KF.sendSlackAlert('*🌿Invoca Tag Desktop Validation (Partners websites):*\nNo invoca pages found', slackChannels.CONTENT, state.slackToken);
+        await KF.sendSlackAlert('*🌿Invoca Tag Desktop Validation (Partners websites):*\n No Tag-less pages detected', slackChannels.CONTENT, state.slackToken);
        }
 
        if(invoclessPagesMobile.length > 0 && !isTest){
         await KF.sendSlackAlert(`*🚨Invoca Tag Mobile  Validation (Partners websites) (no invoca tag in page scripts):*\n${invoclessPagesMobile.join('\n')}`, slackChannels.CONTENT, state.slackToken);
        }else{
-        await KF.sendSlackAlert('*🌿Invoca Tag Mobile  Validation (Partners websites):*\nNo invoca pages found', slackChannels.CONTENT, state.slackToken);
+        await KF.sendSlackAlert('*🌿Invoca Tag Mobile  Validation (Partners websites):*\n No Tag-less pages detected', slackChannels.CONTENT, state.slackToken);
        }
 
        return 'invoca tag validation (Partners websites) finished'; 
