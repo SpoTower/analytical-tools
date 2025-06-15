@@ -25,8 +25,13 @@ export class BingController {
    //obtaining bing urls from bibng soap ads api. campaigns->ad groups->ads -> urls
    @Get('/geBingUrls')
    async getUrls(@Query('domainId') domainId?: number) {
-    const urls = await this.bingService.getBingUrls(domainId);
-    return { status: 'ok', urls };
+    try{
+    const urls = await this.bingService.getBingUrls(+domainId );
+    return urls;
+    }catch(e){
+      logToCloudWatch(e.message, 'ERROR', 'bing');
+      return { status: 'error', count: '', message: e.message };
+    }
    }
   
 

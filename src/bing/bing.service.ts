@@ -10,6 +10,8 @@ import {   KIDON_CONNECTION } from 'src/knex/knex.module';
 import { Knex } from 'knex';
 import { BingAd, BingConversionAction } from './interfaces';
 import { logToCloudWatch } from 'src/logger';
+import { bingCall, ensureArray } from './utils';
+import { processInBatches } from 'src/spell-checker/utils';
  @Injectable()
 export class BingService {
 
@@ -67,94 +69,68 @@ export class BingService {
 
 
 
-async getBingUrls(domainId?: number) {
 
-  const domain  = await this.kidonClient('domain').where('id', domainId).first();
-    const company  = await this.kidonClient('companies').where('id', domain.companyId).first();
-     let results = []
-         let accessToken = null
-        try {accessToken = await KF.getBingAccessTokenFromRefreshToken(company);} catch{}
-          
 
-        // Get Bing account/customer IDs from the domain or company object
-        const customAccountId = domain.bingAdsId 
-        const customerId = company.bingAccountId
-        const developerToken = company.bingDeveloperToken
+async getBingUrls(domainId?: number): Promise<string[]> {
 
-       
+
+  const getCompanyById = (id: number) => companies.find(c => c.id === id);
+
+  const domains = await this.kidonClient('domain');
+  const companies = await this.kidonClient('companies');
+  const parser = new XMLParser();
+
+  let validDomains = domains.filter(d => !!d.bingAdsId);
+  if(domainId){
+    validDomains = validDomains.filter(d => d.id == domainId);
+  }
+  await Promise.all(validDomains.map(async (domain) => {
+    const company = companies.find(c => c.id === domain.companyId);
+    if (!company) return;
+  
+    try {
+      company.accessToken = await KF.getBingAccessTokenFromRefreshToken(company);
+    } catch {
+      return;
+    }
  
-          const  xmlBody = generateBingGetCampaignsByAccountIdXml(accessToken, customAccountId, customerId, developerToken);
-          logToCloudWatch(`XML body: ${JSON.stringify(xmlBody)}`, 'INFO', 'bing');
-          const response = await axios.post(`https://campaign.api.bingads.microsoft.com/Api/Advertiser/CampaignManagement/v13/CampaignManagementService.svc`, xmlBody, {
-            headers: {
-                'Content-Type': 'text/xml',
-                SOAPAction: 'GetCampaignsByAccountId',
-            },
-        });
+  }));
 
+  const results: string[] = [];
 
- 
+  await processInBatches(
+    validDomains.map(domain => async () => {
+      const company = getCompanyById(domain.companyId);
+      const customAccountId = domain.bingAdsId;
+      const customerId = company.bingAccountId;
+      const developerToken = company.bingDeveloperToken;
+  
+      const xmlCampaigns = generateBingGetCampaignsByAccountIdXml(company.accessToken, customAccountId, customerId, developerToken);
+      const resCampaigns = await bingCall(xmlCampaigns, 'GetCampaignsByAccountId');
+      const campaignsParsed = parser.parse(resCampaigns.data);
+      const campaignIds = ensureArray(campaignsParsed?.['s:Envelope']?.['s:Body']?.GetCampaignsByAccountIdResponse?.Campaigns?.Campaign).map(c => c.Id);
+  
+      await Promise.all(campaignIds.map(async campaignId => {
+        const xmlAdGroups = generateGetAdGroupsByCampaignIdXml(company.accessToken, customAccountId, customerId, developerToken, campaignId);
+        const resAdGroups = await bingCall(xmlAdGroups, 'GetAdGroupsByCampaignId');
+        const adGroupsParsed = parser.parse(resAdGroups.data);
+        const adGroupIds = ensureArray(adGroupsParsed?.['s:Envelope']?.['s:Body']?.GetAdGroupsByCampaignIdResponse?.AdGroups?.AdGroup).map(c => c.Id);
+  
+        await Promise.all(adGroupIds.map(async adGroupId => {
+          const xmlAds = generateGetAdsByAdGroupIdsXml(company.accessToken, customAccountId, customerId, developerToken, adGroupId);
+          const resAds = await bingCall(xmlAds, 'GetAdsByAdGroupId');
+          const adsParsed = parser.parse(resAds.data);
+          const ads = ensureArray(adsParsed?.['s:Envelope']?.['s:Body']?.GetAdsByAdGroupIdResponse?.Ads?.Ad);
+          const urls = ads.flatMap(ad => ensureArray(ad?.FinalUrls?.['a:string']));
+          results.push(...urls);
+        }));
+      }));
+    }),
+    10
+  );
 
-
-        const parser = new XMLParser();
-        const result = parser.parse(response.data);
-        const campaigns = result?.['s:Envelope']?.['s:Body']?.GetCampaignsByAccountIdResponse?.Campaigns?.Campaign;
-        const campaignIds = Array.isArray(campaigns) ? campaigns.map(c => c.Id) : campaigns ? [campaigns.Id] : [];
-
-
-        for (const campaignId of campaignIds) {
-          const xmlAdGroups = generateGetAdGroupsByCampaignIdXml(
-            accessToken, customAccountId, customerId, developerToken, campaignId
-          );
-        
-          const responseAdGroups = await axios.post(
-            `https://campaign.api.bingads.microsoft.com/Api/Advertiser/CampaignManagement/v13/CampaignManagementService.svc`,
-            xmlAdGroups,
-            {
-              headers: {
-                'Content-Type': 'text/xml',
-                SOAPAction: 'GetAdGroupsByCampaignId',
-              },
-            }
-          );
-        
-          const resultAdGroups = parser.parse(responseAdGroups.data);
-          const adGroups = resultAdGroups?.['s:Envelope']?.['s:Body']?.GetAdGroupsByCampaignIdResponse?.AdGroups?.AdGroup;
-          const adGroupIds = Array.isArray(adGroups) ? adGroups.map(c => c.Id) : adGroups ? [adGroups.Id] : []; 
-
-          if (!adGroupIds || adGroupIds.length === 0) continue;
-        
-          for (const adGroupId of adGroupIds) {
-            const xmlAds = generateGetAdsByAdGroupIdsXml(
-              accessToken, customAccountId, customerId, developerToken, adGroupId
-            );
-        
-            const responseAds = await axios.post(
-              `https://campaign.api.bingads.microsoft.com/Api/Advertiser/CampaignManagement/v13/CampaignManagementService.svc`,
-              xmlAds,
-              {
-                headers: {
-                  'Content-Type': 'text/xml',
-                  SOAPAction: 'GetAdsByAdGroupId',
-                },
-              }
-            );
-            const resultAd  = parser.parse(responseAds.data);
-            const ads = resultAd["s:Envelope"]["s:Body"].GetAdsByAdGroupIdResponse.Ads.Ad;
-            const adsArray = Array.isArray(ads) ? ads : [ads];
-            
-            const allUrls = adsArray.flatMap(ad => {
-              const urls = ad?.FinalUrls?.["a:string"];
-              return Array.isArray(urls) ? urls : urls ? [urls] : []; });
-           
-            results.push(allUrls)
-          }
-
-        }
-        console.log(results)
-
+  return Array.from(new Set(results));
 }
-
 
 
 

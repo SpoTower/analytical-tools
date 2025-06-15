@@ -8,15 +8,19 @@ import { ANALYTICS_CONNECTION } from 'src/knex/knex.module';
 import { KIDON_CONNECTION } from 'src/knex/knex.module';
 import { Knex } from 'knex';
 import { GptService } from 'src/gpt/gpt.service';
-
+import { BingService } from 'src/bing/bing.service';
 
 
 @Controller('spell-checker')
 export class SpellCheckerController {
+ 
   @Inject(ANALYTICS_CONNECTION) private readonly analyticsClient: Knex
     @Inject(KIDON_CONNECTION) private readonly kidonClient: Knex
+
  
-    constructor(private readonly spellCheckerService: SpellCheckerService) {}
+    constructor(
+      private readonly spellCheckerService: SpellCheckerService, 
+      private readonly bingService: BingService) {}
 
   @Post()
   create(@Body() createSpellCheckerDto: CreateSpellCheckerDto) {
@@ -114,45 +118,10 @@ async invocaLineupValidation(
 
 
 
+ 
 
 
-
-    // used by front end team to get active urls from google ads
-    @Get('/googleBasedActiveUrls')
-    async activeUrls(
-      @Query('hostname') hostname: string,
-      @Query('originOnly', new DefaultValuePipe(false), ParseBoolPipe) originOnly?: boolean
-    ) {
-      try {
-        const urls = await this.spellCheckerService.activeUrls(hostname, originOnly);
-        return urls;
-      } catch (error) {
-        logToCloudWatch(`❌ Error fetching Google Ads for domain ${hostname}: ${error.message}`, "ERROR");
-        return [];
-      }
-    }
-    
-
-
-
-
-
-
-
-
-
-    @Get('/test')
-    async testLongWait() {
-      try {
-       let atConfig = await this.analyticsClient('at-configuration').select('*') ;
-        logToCloudWatch(`🔄 atConfig: ${JSON.stringify(atConfig)} `, "INFO", 'spell-checker');
-
-       return { message: 'Waited 200 seconds, check logs for progress.' };
-    } catch (error) {
-      logToCloudWatch(`❌ Error in testLongWait: ${error.message}, ${JSON.stringify(error)} `, "ERROR", 'spell-checker');
-      return { message: 'Error in testLongWait' };
-    }
-    }
+ 
 
   @Get(':id')
   findOne(@Param('id') id: string) {
