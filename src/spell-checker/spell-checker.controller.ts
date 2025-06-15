@@ -51,13 +51,13 @@ async webSitesChecks(
 
 // fetching data from invoca transactions report, iterates over them with pupeteer and searchinf if there is invoca tag in the dom and script sections
 // iterate only over non-spotower urls
-@Get('/invocaLineupValidation')
-async invocaLineupValidation(
+@Get('/invocaPartnersTagValidation')
+async invocaPartnersTagValidation(
   @Query('hostname') hostname: string, 
   @Query('url') url:string, 
   @Query('isTest') isTest:boolean,
 ) {
-  return this.spellCheckerService.invocaLineupValidation(hostname, url, isTest);
+  return this.spellCheckerService.invocaPartnersTagValidation(hostname, url, isTest);
 }
 
 

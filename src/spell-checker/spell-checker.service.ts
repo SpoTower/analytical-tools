@@ -443,17 +443,20 @@ export class SpellCheckerService {
 
 
 // url used if we want to check a specific url (1)
-  async invocaLineupValidation(hostname: string, url:string, isTest:boolean) {
+  async invocaPartnersTagValidation(hostname: string, url:string, isTest:boolean) {
         logToCloudWatch(`entering invoca lineup validation`, "INFO", 'invoca lineup validation');
         const state =   this.globalState.getAllState(); 
         await establishInvocaConnection();
         const transactions = await  fetchAllTransactions();
-       const landingpages =  !isLocal() ? transactions.filter((tr)=>tr.landing_page).map((trl)=>trl.landing_page) : transactions.filter((tr)=>tr.landing_page).slice(0,5).map((trl)=>trl.landing_page) ;
+       const landingpages = transactions.filter((tr)=>tr.landing_page).map((trl)=>trl.landing_page)  
+       logToCloudWatch(`landingpages fetched from invoca report length ${landingpages.length}: ${landingpages}`, "INFO", 'invoca partners tag validation');
        let uniqueLandingpages :string[] = Array.from(new Set(landingpages.map(extractBaseUrl).filter(Boolean)));
         let domains = await this.kidonClient.raw('select * from domain') ;
         domains = domains[0].map((d:Domain)=>d.hostname)
+
+        // ✅ Step 1: filter out domains that are in the domains table (checking partner websites and not our websites)
         uniqueLandingpages = uniqueLandingpages.filter(lp =>!domains.some(d => lp.includes(d)));
-          
+        logToCloudWatch(`uniqueLandingpages after filtering out our domains (retaining only partners websites): ${uniqueLandingpages.length}: ${uniqueLandingpages}`, "INFO", 'invoca partners tag validation');
              
     let invoclessPages = [];
     let invoclessPagesMobile = [];
@@ -469,21 +472,21 @@ export class SpellCheckerService {
        logToCloudWatch(`invoclesspages: ${invoclessPages}`, "INFO", 'invoca lineup validation');
       
        if(invoclessPages.length > 0 && !isTest){
-        await KF.sendSlackAlert(`*🚨Invoca Desktop Lineup Validation (no invoca tag in page scripts):*\n${invoclessPages.join('\n')}`, slackChannels.CONTENT, state.slackToken);
+        await KF.sendSlackAlert(`*🚨Invoca Tag Desktop Validation (Partners websites) (no invoca tag in page scripts):*\n${invoclessPages.join('\n')}`, slackChannels.CONTENT, state.slackToken);
        }else{
-        await KF.sendSlackAlert('*🌿Invoca Desktop Lineup Validation:*\nNo invoca pages found', slackChannels.CONTENT, state.slackToken);
+        await KF.sendSlackAlert('*🌿Invoca Tag Desktop Validation (Partners websites):*\nNo invoca pages found', slackChannels.CONTENT, state.slackToken);
        }
 
        if(invoclessPagesMobile.length > 0 && !isTest){
-        await KF.sendSlackAlert(`*🚨Invoca Mobile Lineup Validation (no invoca tag in page scripts):*\n${invoclessPagesMobile.join('\n')}`, slackChannels.CONTENT, state.slackToken);
+        await KF.sendSlackAlert(`*🚨Invoca Tag Mobile  Validation (Partners websites) (no invoca tag in page scripts):*\n${invoclessPagesMobile.join('\n')}`, slackChannels.CONTENT, state.slackToken);
        }else{
-        await KF.sendSlackAlert('*🌿Invoca Mobile Lineup Validation:*\nNo invoca pages found', slackChannels.CONTENT, state.slackToken);
+        await KF.sendSlackAlert('*🌿Invoca Tag Mobile  Validation (Partners websites):*\nNo invoca pages found', slackChannels.CONTENT, state.slackToken);
        }
 
-       return 'invoca lineup validation finished'; 
+       return 'invoca tag validation (Partners websites) finished'; 
       } catch (error) {
-        logToCloudWatch(`❌ Error in invocaLineupValidation: ${error.message} |||||| ${JSON.stringify(error)}`, "ERROR", 'invoca lineup validation');
-        return `Error in invocaLineupValidation: ${error.message}`;
+        logToCloudWatch(`❌ Error in invocaPartnersTagValidation: ${error.message} |||||| ${JSON.stringify(error)}`, "ERROR", 'invoca partners tag validation');
+        return `Error in invocaPartnersTagValidation: ${error.message}`;
       }
    }
  

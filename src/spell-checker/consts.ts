@@ -160,3 +160,16 @@ export const desktopOnlyTraffick = /^(?=.*(\+?D|\(D\)))(?!.*(\+?M|\(M\))).*$/;
  //M, (M), +M
  
  export const hasMobileOrDesktop = /(\+?D|\(D\)|\+?M|\(M\))/;
+
+
+// these are domains that when fetched from invoca transaction report the urls that contains them must be used fully and not just the base of them
+// because without the full parameters the invoca tag will not appear in the partner website
+ export const urlsWithParams=[
+  'https://safeshipquotes.com',
+  'https://naviautotransport.com',
+  'https://chwprice.com',
+  'https://try.anthemtaxes.net',
+  'https://www.movingapt.com',
+  'https://apply.amerisave.com',
+  'https://quote.selecthomewarranty.com'
+]
