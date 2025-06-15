@@ -1,22 +1,23 @@
 import { Injectable, Inject } from '@nestjs/common';
 import { CreateBingDto } from './dto/create-bing.dto';
 import { UpdateBingDto } from './dto/update-bing.dto';
-import { generateBingCreateOfflineConversionXml } from './consts';
+import { generateBingCreateOfflineConversionXml, generateBingGetCampaignsByAccountIdXml, generateGetAdGroupsByCampaignIdXml, generateGetAdsByAdGroupIdsXml } from './consts';
   import axios from 'axios';
   import { XMLParser } from 'fast-xml-parser';
   import * as KF from '@spotower/my-utils';
 import { GlobalStateService } from 'src/globalState/global-state.service';
 import {   KIDON_CONNECTION } from 'src/knex/knex.module';
 import { Knex } from 'knex';
-import { BingConversionAction } from './interfaces';
+import { BingAd, BingConversionAction } from './interfaces';
 import { logToCloudWatch } from 'src/logger';
+import { bingCall, ensureArray } from './utils';
+import { processInBatches } from 'src/spell-checker/utils';
  @Injectable()
 export class BingService {
 
   constructor(private readonly globalState: GlobalStateService,
     @Inject(KIDON_CONNECTION) private readonly kidonClient: Knex,
   ) {}
-
   async createConversionGoals(conversionActions: BingConversionAction[],   domainId: number) {
     logToCloudWatch('Entering createConversionGoals endpoint. '    );
     const domain  = await this.kidonClient('domain').where('id', domainId).first();
@@ -65,6 +66,73 @@ export class BingService {
  
      
   }
+
+
+
+
+
+async getBingUrls(domainId?: number): Promise<string[]> {
+
+
+  const getCompanyById = (id: number) => companies.find(c => c.id === id);
+
+  const domains = await this.kidonClient('domain');
+  const companies = await this.kidonClient('companies');
+  const parser = new XMLParser();
+
+  let validDomains = domains.filter(d => !!d.bingAdsId);
+  if(domainId){
+    validDomains = validDomains.filter(d => d.id == domainId);
+  }
+  await Promise.all(validDomains.map(async (domain) => {
+    const company = companies.find(c => c.id === domain.companyId);
+    if (!company) return;
+  
+    try {
+      company.accessToken = await KF.getBingAccessTokenFromRefreshToken(company);
+    } catch {
+      return;
+    }
+ 
+  }));
+
+  const results: string[] = [];
+
+  await processInBatches(
+    validDomains.map(domain => async () => {
+      const company = getCompanyById(domain.companyId);
+      const customAccountId = domain.bingAdsId;
+      const customerId = company.bingAccountId;
+      const developerToken = company.bingDeveloperToken;
+  
+      const xmlCampaigns = generateBingGetCampaignsByAccountIdXml(company.accessToken, customAccountId, customerId, developerToken);
+      const resCampaigns = await bingCall(xmlCampaigns, 'GetCampaignsByAccountId');
+      const campaignsParsed = parser.parse(resCampaigns.data);
+      const campaignIds = ensureArray(campaignsParsed?.['s:Envelope']?.['s:Body']?.GetCampaignsByAccountIdResponse?.Campaigns?.Campaign).map(c => c.Id);
+  
+      await Promise.all(campaignIds.map(async campaignId => {
+        const xmlAdGroups = generateGetAdGroupsByCampaignIdXml(company.accessToken, customAccountId, customerId, developerToken, campaignId);
+        const resAdGroups = await bingCall(xmlAdGroups, 'GetAdGroupsByCampaignId');
+        const adGroupsParsed = parser.parse(resAdGroups.data);
+        const adGroupIds = ensureArray(adGroupsParsed?.['s:Envelope']?.['s:Body']?.GetAdGroupsByCampaignIdResponse?.AdGroups?.AdGroup).map(c => c.Id);
+  
+        await Promise.all(adGroupIds.map(async adGroupId => {
+          const xmlAds = generateGetAdsByAdGroupIdsXml(company.accessToken, customAccountId, customerId, developerToken, adGroupId);
+          const resAds = await bingCall(xmlAds, 'GetAdsByAdGroupId');
+          const adsParsed = parser.parse(resAds.data);
+          const ads = ensureArray(adsParsed?.['s:Envelope']?.['s:Body']?.GetAdsByAdGroupIdResponse?.Ads?.Ad);
+          const urls = ads.flatMap(ad => ensureArray(ad?.FinalUrls?.['a:string']));
+          results.push(...urls);
+        }));
+      }));
+    }),
+    10
+  );
+
+  return Array.from(new Set(results));
+}
+
+
 
 
   async updateConversionNamesKidonTable(conversionActions: BingConversionAction[],  resourceNames: string[], domainId: number) {
