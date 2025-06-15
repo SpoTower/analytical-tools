@@ -22,7 +22,7 @@ export class BingController {
     }      
    }
 
-   //obtaining bing urls from bibng soap ads api. campaigns->ad groups->ads -> urls
+   //obtaining bing urls from bing soap ads api. campaigns->ad groups->ads -> urls and saving to bing_landing_pages table
    @Get('/saveBingUrls')
    async saveBingUrls(@Query('domainId') domainId?: number) {
     try{
@@ -34,6 +34,16 @@ export class BingController {
     }
    }
   
+   @Get('/getBingUrls')
+   async getBingUrls(@Query('domainId') domainId?: number) {
+    try{
+    const urls = await this.bingService.getBingUrls(+domainId );
+    return urls;
+    }catch(e){
+      logToCloudWatch(e.message, 'ERROR', 'bing');
+      return { status: 'error', count: '', message: e.message };
+    }
+   }
 
   @Get()
   findAll() {
