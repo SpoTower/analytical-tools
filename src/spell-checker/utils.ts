@@ -654,14 +654,16 @@ export function isLocal(){
 export async function generateBrowser() {
     const commonOptions = {
       headless: true,
-      protocolTimeout: 60000,
+      ignoreHTTPSErrors: true, 
+      protocolTimeout: 600000,
       args: [
         '--no-sandbox',
         '--disable-setuid-sandbox',
         '--disable-dev-shm-usage',
         '--disable-gpu',
         '--no-zygote',
-        '--single-process'
+        '--single-process',
+        '--ignore-certificate-errors' 
       ]
     };
   
