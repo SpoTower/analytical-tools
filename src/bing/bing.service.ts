@@ -33,6 +33,10 @@ export class BingService {
         const customerId = company.bingAccountId
         const developerToken = company.bingDeveloperToken
 
+        if(!customAccountId || !customerId || !developerToken){
+          throw new Error('Bing account/customer IDs or developer token is missing');
+        }
+
         for (const action of conversionActions) {
           logToCloudWatch(`Creating conversion goal for ${action["Conversion Name Action"]} in for loop`, 'INFO', 'bing');
 
