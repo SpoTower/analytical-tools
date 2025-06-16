@@ -283,7 +283,7 @@ export   function filterOutIrrelevantErrors(gptErrorDetectionResults: gptProposa
 
 export function extractMisspelledWords(text: string, excludedWords: string[]): string[] {
     const lowerExcludedWords = new Set(excludedWords.map(word => word.toLowerCase()));
-    let innerHtmlSeparatedWords = text.replace(/[^a-zA-Z'-]+/g, ' ').toLowerCase().split(/\s+/).filter(Boolean);
+     let innerHtmlSeparatedWords = text.toLowerCase().split(/\s+/).filter(Boolean);
     let misspelledWords = innerHtmlSeparatedWords.filter(word => spellchecker.isMisspelled(word));
     let finalMisspelledWordsDbfiltered = misspelledWords.filter(word => !lowerExcludedWords.has(word.toLowerCase()));
     return [...new Set(finalMisspelledWordsDbfiltered)]; // Remove duplicates

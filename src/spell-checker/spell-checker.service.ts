@@ -121,13 +121,15 @@ export class SpellCheckerService {
  
   async webSitesChecks(hostname: string, isTest:boolean, url:string) {
     logToCloudWatch('entering webSitesChecks');
-  
+  let domains = await this.kidonClient('domain').select('*');
+  let partners = await this.kidonClient('partner').select('*');
+  domains = domains.map((d:any)=>d.domain_name);
     try {
         // Get ignore list from database
-      const [ignoreList] = await Promise.all([fetchIgnoreWords(this.kidonClient, '59') ]);
+      const [  ignoreListContent] = await Promise.all([  fetchIgnoreWords(this.kidonClient, '56') ]);
       const state = this.globalState.getAllState(); if (!state) return 'No state found';
       let domainsToProcess = state.domains.filter((d: Domain) => d.googleAdsId);
-      domainsToProcess = domainsToProcess.filter((d: Domain) =>  ![20,176,128,153,34,17,31,40,4,25,21,115,61,43,68,66,59,122,163,147,183,207,197].includes(d.id)  );
+       domainsToProcess = domainsToProcess.filter((d: Domain) =>  ![20,176,128,153,34,17,31,40,4,25,21,115,61,43,68,66,59,122,163,147,183,207,197].includes(d.id)  );
       const allTokens = await Promise.all(state.companies.map(async (c) => ({ company: c.name, token: await KF.getGoogleAuthToken(c) })));
   
    
@@ -197,8 +199,8 @@ export class SpellCheckerService {
          
 
             // ✅ Step 3.1:  check content errors, outdated years in path and in title
-          const pageWithLocalErrors = extractErrorsWithLocalLibrary([pageData], ignoreList)[0];
-          const pageWithAllErrors = await extractErrorsWithGpt(this.gptService, [pageWithLocalErrors], ignoreList);
+          const pageWithLocalErrors = extractErrorsWithLocalLibrary([pageData], ignoreListContent)[0];
+          const pageWithAllErrors = await extractErrorsWithGpt(this.gptService, [pageWithLocalErrors], ignoreListContent);
 
           if (pageWithAllErrors[0].detectedErrors.length > 0 || pageWithAllErrors[0].outdatedYears.length > 0) {
             webSitesAccumulativeErrors.push({ 
@@ -287,10 +289,7 @@ export class SpellCheckerService {
     const state = this.globalState.getAllState();
     const ignoredWords = await fetchIgnoreWords(this.kidonClient, '56');
 
-    if (!state || !ignoredWords.length) {
-      logToCloudWatch('No state/No ignore words found');
-      return;
-    }
+ 
 
      if(!state || !ignoredWords){ logToCloudWatch('No state/ No ignore words found'); }
          // ✅ Step 1: filter non english paths out and assign relevant paths to domains
