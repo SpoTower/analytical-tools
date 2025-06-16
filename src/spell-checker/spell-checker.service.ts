@@ -100,7 +100,7 @@ export class SpellCheckerService {
         const location = ad.descriptions.includes(item) ? 'descriptions' : 'headline';
         const baseError = { resource: ad.resourceName, domain: ad.domain, googleAdsId: ad.googleAdsId, wholeSentence: item.text, location };
 
-        const misspelledWords = extractMisspelledWords(item.text, googleAdsIgnoreList);
+        const misspelledWords = extractMisspelledWords(item.text, googleAdsIgnoreList, state);
         if (misspelledWords.length > 0) errors.spelling.push({ ...baseError, errors: misspelledWords });
 
         const nonCapitalWords = extractNonCapitalLetterWords(item.text, googleAdsNonCapitalLettersIgnoreList).filter(c => !c.includes('CUSTOM'));
@@ -122,8 +122,7 @@ export class SpellCheckerService {
   async webSitesChecks(hostname: string, isTest:boolean, url:string) {
     logToCloudWatch('entering webSitesChecks');
   let domains = await this.kidonClient('domain').select('*');
-  let partners = await this.kidonClient('partner').select('*');
-  domains = domains.map((d:any)=>d.domain_name);
+   domains = domains.map((d:any)=>d.domain_name);
     try {
         // Get ignore list from database
       const [  ignoreListContent] = await Promise.all([  fetchIgnoreWords(this.kidonClient, '56') ]);
@@ -199,7 +198,7 @@ export class SpellCheckerService {
          
 
             // ✅ Step 3.1:  check content errors, outdated years in path and in title
-          const pageWithLocalErrors = extractErrorsWithLocalLibrary([pageData], ignoreListContent)[0];
+          const pageWithLocalErrors = extractErrorsWithLocalLibrary([pageData], ignoreListContent, this.globalState)[0];
           const pageWithAllErrors = await extractErrorsWithGpt(this.gptService, [pageWithLocalErrors], ignoreListContent);
 
           if (pageWithAllErrors[0].detectedErrors.length > 0 || pageWithAllErrors[0].outdatedYears.length > 0) {
