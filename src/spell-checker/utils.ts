@@ -700,12 +700,19 @@ if(paramsMatch){
                 .map(script => script.src)
         );
 
+        if(invocaScripts.length == 0){
+          console.log(`fail ${landingpage}`)
+        }else{
+          console.log(`success ${landingpage}`)
+        }
         return invocaScripts;
     } catch (error) {
         logToCloudWatch(`❌ Error in checkInvocaInDesktop ${landingpage}: ${error.message}`, "ERROR", 'invoca lineup validation');
-        return []; // Ensure safe return
+        
     } finally {
+        await page.close();
         await browser.close(); // Always close browser
+        
     }
 }
 
@@ -724,12 +731,11 @@ export async function checkInvocaInMobile(landingpage) {
             .filter(script => script.src.toLowerCase().includes('invoca'))
             .map(script => script.src)
     );
-    await browser.close();
-    return invocaScripts;
+     return invocaScripts;
 } catch (error) {
     logToCloudWatch(`❌ Error in checkInvocaInMobile ${landingpage}: ${error.message}  `, "ERROR", 'invoca lineup validation');
-    return [];
-} finally {
+ } finally {
+    await page.close();
     await browser.close();
 }
 }

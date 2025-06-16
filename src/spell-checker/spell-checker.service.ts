@@ -42,7 +42,7 @@ import {ignoredLanguages} from './ignoreWords';
 import { KIDON_CONNECTION } from 'src/knex/knex.module';
 import { Knex } from 'knex';
 import { createErrorsTable } from './utils';
-import { slackChannels} from './consts';
+import { slackChannels, urlsWithParams} from './consts';
 import { getSecretFromSecretManager } from 'src/utils/secrets';
 import {googleAdsGrammarErrors,googleAdsLandingPageQuery} from './gaqlQuerys';
 import { fetchIgnoreWords } from './utils';
@@ -460,16 +460,49 @@ export class SpellCheckerService {
              
     let invoclessPages = [];
     let invoclessPagesMobile = [];
+    let invocfullPages = [];
+    let invocfullPagesMobile = [];
+ 
     try {
       const landingpagesToCheck = url ? [url] : uniqueLandingpages; // if url is provided, we only check that url
+
       for (const landingpage of landingpagesToCheck) {
+        //step 1: preventing running over domain that already been detected with invoca in them
+         const baseUrl = landingpage.match(/^https?:\/\/[^\/?#]+/i)?.[0]
+         const matchesParamUrl = urlsWithParams.some(p => landingpage.includes(p));
+         const alreadyChecked = invocfullPagesMobile.some((i)=>i.includes(baseUrl)) || invocfullPages.some((i)=>i.includes(baseUrl));
+
+        if (matchesParamUrl && alreadyChecked){
+          continue;
+        } 
+
+
+        //step 2: checking if the page has invoca tag
           logToCloudWatch(`Processing landingpage (m+d): ${landingpage}`, "INFO", 'invoca lineup validation');
           const [isInvoca, isInvocaMobile] = await Promise.all([checkInvocaInDesktop(landingpage),checkInvocaInMobile(landingpage)]);
-          if (isInvoca && isInvoca.length === 0) invoclessPages.push(landingpage);
+
+          //step 3: if the page has invoca tag, add it to the invocfullPages array
+          if (isInvoca && isInvoca.length === 0) {invoclessPages.push(landingpage); }
           if ((isInvocaMobile && isInvocaMobile.length === 0)  )invoclessPagesMobile.push(landingpage);
+
+          if (isInvoca && isInvoca.length > 0) {invocfullPages.push(landingpage); }
+          if ((isInvocaMobile && isInvocaMobile.length > 0)  )invocfullPagesMobile.push(landingpage);
     }
       
-       logToCloudWatch(`invoclesspages: ${invoclessPages}`, "INFO", 'invoca lineup validation');
+
+
+      // Step 4: Remove URLs from invoclessPages if their base URLs exist in invocfullPages
+      invoclessPages = invoclessPages.filter(url => {
+        const baseUrl = url.match(/^https?:\/\/[^\/?#]+/i)?.[0];
+        return !invocfullPages.some(fullUrl => fullUrl.includes(baseUrl));
+      });
+
+      invoclessPagesMobile = invoclessPagesMobile.filter(url => {
+        const baseUrl = url.match(/^https?:\/\/[^\/?#]+/i)?.[0];
+        return !invocfullPagesMobile.some(fullUrl => fullUrl.includes(baseUrl));
+      });
+
+    logToCloudWatch(`invoclesspages: ${invoclessPages}`, "INFO", 'invoca lineup validation');
       
        if(invoclessPages.length > 0 && !isTest){
         await KF.sendSlackAlert(`*🚨Invoca Tag Desktop Validation (Partners websites) (no invoca tag in page scripts):*\n${invoclessPages.join('\n')}`, slackChannels.CONTENT, state.slackToken);
@@ -486,8 +519,7 @@ export class SpellCheckerService {
        return 'invoca tag validation (Partners websites) finished'; 
       } catch (error) {
         logToCloudWatch(`❌ Error in invocaPartnersTagValidation: ${error.message} |||||| ${JSON.stringify(error)}`, "ERROR", 'invoca partners tag validation');
-        return `Error in invocaPartnersTagValidation: ${error.message}`;
-      }
+       }
    }
  
   create(createSpellCheckerDto: CreateSpellCheckerDto) {
