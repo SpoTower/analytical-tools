@@ -37,10 +37,10 @@ export class GlobalStateService implements OnModuleInit {
         this.kidonClient('domain').select('*'),
         this.kidonClient('companies').select('*'),
         this.kidonClient('paths').select('*'),
-        this.kidonClient('partner').select('*'),
+         
         
        KF.getSecretFromSecretManager('kidonSecrets'),
-
+       this.kidonClient('partner').select('*'),
     
 
     ]);

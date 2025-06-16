@@ -285,7 +285,7 @@ export   function filterOutIrrelevantErrors(gptErrorDetectionResults: gptProposa
 
 
 export function extractMisspelledWords(text: string, excludedWords: string[], state: any): string[] {
-  const partners = state.partners;
+  const partners = state.state.partners;
   const partnerNames = partners.map((p: any) => p.name);
     const ignoreList = new Set(excludedWords.map(word => word.toLowerCase()));// ignore words from db
    // Process each word: split by spaces, then split merged words
@@ -296,7 +296,7 @@ export function extractMisspelledWords(text: string, excludedWords: string[], st
 
     let misspelledWords = words.filter(word => spellchecker.isMisspelled(word)); // spell checker library
       misspelledWords = misspelledWords.filter(word => !ignoreList.has(word.toLowerCase())); // apply ignore list from db
-      misspelledWords = misspelledWords.filter(word => !partnerNames.includes(word)); // apply ignore partner names
+      misspelledWords = misspelledWords.filter(word => !partnerNames.some(partner => word.toLocaleLowerCase().includes(partner.toLocaleLowerCase()))); // apply ignore partner names
     return [...new Set(misspelledWords)]; // Remove duplicates
 }
 
