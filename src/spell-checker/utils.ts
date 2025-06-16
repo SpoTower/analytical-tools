@@ -217,7 +217,7 @@ export async function   processInBatches(tasks: (() => Promise<any>)[], batchSiz
 
         // Process inner HTML for each domain before moving to the next one. attach detected errors field to each object that represent path in this array
      
-          domainPagesInnerHtml =   extractErrorsWithLocalLibrary(domainPagesInnerHtml, ignoreList);
+          domainPagesInnerHtml =   extractErrorsWithLocalLibrary(domainPagesInnerHtml, ignoreList, undefined);
         domainPagesInnerHtml = await extractErrorsWithGpt(gptService, domainPagesInnerHtml, ignoreList);
         domainPagesInnerHtml = domainPagesInnerHtml.map((w)=>({...w, detectedErrors: w.detectedErrors.length > 0 ? w.detectedErrors : []}));
         // Filter out pages with no detected errors
@@ -279,14 +279,25 @@ export   function filterOutIrrelevantErrors(gptErrorDetectionResults: gptProposa
     return [];
 
 }
+    const splitByCapitalLetters = (word: string): string[] => {
+      return word.split(/(?=[A-Z][a-z])/); // Split before capital letters followed by lowercase
+  };
 
 
-export function extractMisspelledWords(text: string, excludedWords: string[]): string[] {
-    const lowerExcludedWords = new Set(excludedWords.map(word => word.toLowerCase()));
-     let innerHtmlSeparatedWords = text.toLowerCase().split(/\s+/).filter(Boolean);
-    let misspelledWords = innerHtmlSeparatedWords.filter(word => spellchecker.isMisspelled(word));
-    let finalMisspelledWordsDbfiltered = misspelledWords.filter(word => !lowerExcludedWords.has(word.toLowerCase()));
-    return [...new Set(finalMisspelledWordsDbfiltered)]; // Remove duplicates
+export function extractMisspelledWords(text: string, excludedWords: string[], state: any): string[] {
+  const partners = state.partners;
+  const partnerNames = partners.map((p: any) => p.name);
+    const ignoreList = new Set(excludedWords.map(word => word.toLowerCase()));// ignore words from db
+   // Process each word: split by spaces, then split merged words
+  let words = text
+      .split(/\s+/) // Split by spaces
+      .flatMap(splitByCapitalLetters) // Further split words with multiple capital letters
+      .filter(word => /^[A-Za-z]+$/.test(word)); // Keep only valid words
+
+    let misspelledWords = words.filter(word => spellchecker.isMisspelled(word)); // spell checker library
+      misspelledWords = misspelledWords.filter(word => !ignoreList.has(word.toLowerCase())); // apply ignore list from db
+      misspelledWords = misspelledWords.filter(word => !partnerNames.includes(word)); // apply ignore partner names
+    return [...new Set(misspelledWords)]; // Remove duplicates
 }
 
  

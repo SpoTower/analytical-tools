@@ -33,10 +33,11 @@ export class GlobalStateService implements OnModuleInit {
 
   async loadInitialData() {
     try {
-      const [domains, companies,paths, secrets] = await Promise.all([
+      const [domains, companies,paths, secrets, partners] = await Promise.all([
         this.kidonClient('domain').select('*'),
         this.kidonClient('companies').select('*'),
         this.kidonClient('paths').select('*'),
+        this.kidonClient('partner').select('*'),
         
        KF.getSecretFromSecretManager('kidonSecrets'),
 
@@ -52,7 +53,7 @@ export class GlobalStateService implements OnModuleInit {
         this.setState('gptKey', KF.jsonToObject(secrets).GPT_API_KEY);
         this.setState('emailClientPassword', KF.jsonToObject(secrets).EMAIL_PASSWORD);
         this.setState('slackToken', KF.jsonToObject(secrets).SLACK_TOKEN);
-
+        this.setState('partners', partners);
          
 
     //     this.setState('allTokens', allTokens.data);
