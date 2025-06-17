@@ -252,8 +252,7 @@ export class SpellCheckerService {
   
     } catch (e) {
       logToCloudWatch(`Error during lineupValidation: ${JSON.stringify(e)}`, 'ERROR');
-      return `Error during lineupValidation ${JSON.stringify(e)}`;
-    }
+     }
   }
   
 
