@@ -76,6 +76,15 @@ export interface BqTrafficCampaign {
     domain: Domain;
     results: ResultItem[];
   }
+
+  export interface bingUrlsAndDomain {
+    id: number;
+    url: string;
+    domainId: number;
+    createdAt: Date; // or Date, if parsed
+    campaignName: string;
+    slackChannelId: string;
+  }
   
   export interface Domain {
     id: number;

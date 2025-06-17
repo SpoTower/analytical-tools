@@ -34,10 +34,11 @@ export class SpellCheckerController {
 async webSitesChecks(
   @Query('hostname', ) hostname: string,
   @Query('isTest', new DefaultValuePipe(false), ParseBoolPipe) isTest?: boolean,
-  @Query('url', new DefaultValuePipe(null)) url?: string
+  @Query('url', new DefaultValuePipe(null)) url?: string,
+  @Query('utmSource', new DefaultValuePipe(null)) utmSource?: 'bing' | 'google'
   ) {
     try {
-      return await this.spellCheckerService.webSitesChecks(hostname, isTest, url );
+      return await this.spellCheckerService.webSitesChecks(hostname, isTest, url,utmSource );
     } catch (error) {
       if (error instanceof BadRequestException || error instanceof InternalServerErrorException) {
         throw error;

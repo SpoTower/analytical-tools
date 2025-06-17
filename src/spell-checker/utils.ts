@@ -937,12 +937,13 @@ export { WebsiteError };
 export async function sendCategorizedErrorsToSlack(
   categorizedErrors: CategorizedErrors, 
   isTest: boolean, 
-  state: any
+  state: any,
+  utmSource: string
 ): Promise<void> {
   const messages: string[] = [];
 // Content Errors
 if (Object.keys(categorizedErrors.contentErrors).length > 0) {
-  messages.push('*📝📝 ❗ CONTENT ERRORS ❗📝📝* \n');
+  messages.push(`*📝📝 ❗ ${utmSource.toUpperCase()} CONTENT ERRORS ❗📝📝* \n`);
 
   for (const [domain, domainErrors] of Object.entries(categorizedErrors.contentErrors)) {
     if (!domainErrors?.length) continue; // 🔒 skip if empty or invalid
@@ -957,7 +958,7 @@ if (Object.keys(categorizedErrors.contentErrors).length > 0) {
 }
   // Outdated Years Errors
   if (Object.keys(categorizedErrors.outdatedYearsErrors).length > 0) {
-    messages.push('\n*📅 Outdated Years:*');
+    messages.push(`\n*📅 ${utmSource.toUpperCase()} Outdated Years:*`);
   
     for (const [domain, domainErrors] of Object.entries(categorizedErrors.outdatedYearsErrors)) {
       if (!domainErrors?.length) continue;
@@ -975,7 +976,7 @@ if (Object.keys(categorizedErrors.contentErrors).length > 0) {
 
   // Lineup Errors
   if (Object.keys(categorizedErrors.lineupErrors).length > 0) {
-    messages.push('\n*⚠️ Missing Lineup Content:*');
+    messages.push(`\n*⚠️ ${utmSource.toUpperCase()} Missing Lineup Content:*`);
     for (const [domain, domainErrors] of Object.entries(categorizedErrors.lineupErrors)) {
       messages.push(`\n*Domain: ${domain}*`);
       for (const error of domainErrors) {
@@ -987,7 +988,7 @@ if (Object.keys(categorizedErrors.contentErrors).length > 0) {
 
   // Timeout Errors
   if (Object.keys(categorizedErrors.timeoutErrors).length > 0) {
-    messages.push('\n*⏰ Page Load Timeouts:*');
+    messages.push(`\n*⏰ ${utmSource.toUpperCase()} Page Load Timeouts:*`);
     for (const [domain, domainErrors] of Object.entries(categorizedErrors.timeoutErrors)) {
       messages.push(`\n*Domain: ${domain}*`);
       for (const error of domainErrors) {
@@ -999,7 +1000,7 @@ if (Object.keys(categorizedErrors.contentErrors).length > 0) {
 
   // HTTP Errors
   if (Object.keys(categorizedErrors.httpErrors).length > 0) {
-    messages.push('\n*🔴 HTTP Errors:*');
+    messages.push(`\n*🔴 ${utmSource.toUpperCase()} HTTP Errors:*`);
     for (const [domain, domainErrors] of Object.entries(categorizedErrors.httpErrors)) {
       messages.push(`\n*Domain: ${domain}*`);
       for (const error of domainErrors) {
@@ -1015,7 +1016,7 @@ if (Object.keys(categorizedErrors.contentErrors).length > 0) {
       messages.unshift(`<@${slackChannels.TAL}> ⚠️ You are being tagged for lineup errors.\n`);
     }
     const finalMessage = messages.join('\n');
-    logToCloudWatch(`Website Validation Errors:\n${finalMessage}`, 'ERROR');
+    logToCloudWatch(` ${utmSource.toUpperCase()} Website Validation Errors:\n${finalMessage}`, 'ERROR');
     await KF.sendSlackAlert(finalMessage, isTest ? slackChannels.PERSONAL : slackChannels.CONTENT, state.slackToken);
   } else {
     logToCloudWatch(`:herb: No website errors found`);
