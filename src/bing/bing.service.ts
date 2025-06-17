@@ -34,7 +34,7 @@ export class BingService {
         const developerToken = company.bingDeveloperToken
 
         if(!customAccountId || !customerId || !developerToken){
-          throw new Error('Bing account/customer IDs or developer token is missing');
+          throw new Error(`Bing account/customer IDs or developer token is missing for company: ${company?.name}`);
         }
 
         for (const action of conversionActions) {
