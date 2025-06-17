@@ -700,8 +700,8 @@ if(paramsMatch){
   
 
 
-  export async function checkInvocaInDesktop(landingpage) {
-    const browser = await generateBrowser();
+  export async function checkInvocaInDesktop(landingpage, existingBrowser = null) {
+    const browser = existingBrowser || await generateBrowser();
     const page = await browser.newPage();
 
     try {
@@ -724,14 +724,15 @@ if(paramsMatch){
         
     } finally {
         await page.close();
-        await browser.close(); // Always close browser
-        
+        if (!existingBrowser) {
+            await browser.close(); // Only close browser if we created it
+        }
     }
 }
 
 
-export async function checkInvocaInMobile(landingpage) {
-    const browser = await generateBrowser();
+export async function checkInvocaInMobile(landingpage, existingBrowser = null) {
+    const browser = existingBrowser || await generateBrowser();
     const page = await browser.newPage();
     await page.setUserAgent(
         'Mozilla/5.0 (iPhone; CPU iPhone OS 13_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/13.1.1 Mobile/15E148 Safari/604.1'
@@ -749,7 +750,9 @@ export async function checkInvocaInMobile(landingpage) {
     logToCloudWatch(`❌ Error in checkInvocaInMobile ${landingpage}: ${error.message}  `, "ERROR", 'invoca lineup validation');
  } finally {
     await page.close();
-    await browser.close();
+    if (!existingBrowser) {
+        await browser.close(); // Only close browser if we created it
+    }
 }
 }
 

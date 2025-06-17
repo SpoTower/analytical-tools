@@ -52,6 +52,7 @@ import puppeteer from 'puppeteer';
 import { extractBaseUrl } from './utils';
 import { campaignsNetworks, traffic } from './queries/traffic';
 import { BingService } from 'src/bing/bing.service';
+import { lineupPartnersValidation } from './partnersChecks/lineupValidation';
  @Injectable()
 export class SpellCheckerService {
 
@@ -153,8 +154,7 @@ export class SpellCheckerService {
         );
 
       urlAndSlackChannel   = extractGoogleSearchUrls(rawGoogleSearchResults);
-        logToCloudWatch(`Found ${urlAndSlackChannel.length} lineups`, 'INFO');
-    }else if(utmSource === 'bing'){
+     }else if(utmSource === 'bing'){
       rawBingSearchResults = await this.bingService.getBingUrls();
       urlAndSlackChannel = rawBingSearchResults.map((r) => ({
         url: r.url,
@@ -162,6 +162,7 @@ export class SpellCheckerService {
         campaignName: r.campaignName // Default campaign name
       }));
 
+      logToCloudWatch(`Found ${urlAndSlackChannel.length} urls`, 'INFO');
 
               if (hostname) urlAndSlackChannel = urlAndSlackChannel.filter((u) => u.url.includes(hostname));
         if (url) {
@@ -177,27 +178,43 @@ export class SpellCheckerService {
  
       // ✅ Step 2: harvest content from urls
       const webSitesAccumulativeErrors = []; // the main object containing all the founded errors
-      for (const urlAndSlack of urlAndSlackChannel ) {
+      
+      // Browser management for reuse
+      let currentBrowser = null;
+      let pagesProcessed = 0;
+      const PAGES_PER_BROWSER = 50;
+
+      for (const urlAndSlack of urlAndSlackChannel) {
         let axiosRes, pupeteerRes, durationMs, pageContent, pageTitle;
         try {
           logToCloudWatch(`checking ${urlAndSlack.url}  `, 'INFO');
           const startTime = Date.now();
           axiosRes = await axios.get(urlAndSlack.url, { timeout: 10000 });
           durationMs = Date.now() - startTime;
-          const browser = await generateBrowser()
-          const page = await browser.newPage();
+
+          // Create new browser if needed
+          if (!currentBrowser || pagesProcessed >= PAGES_PER_BROWSER) {
+            if (currentBrowser) {
+              await currentBrowser.close();
+            }
+            currentBrowser = await generateBrowser();
+            pagesProcessed = 0;
+          }
+
+          const page = await currentBrowser.newPage();
           await page.goto(urlAndSlack.url, { waitUntil: 'networkidle2', timeout: 60000 });
           await new Promise(resolve => setTimeout(resolve, 2000));
           await page.waitForSelector(
             '[class*="partnersArea_main-partner-list"], [class*="ConditionalPartnersList"], [class*="homePage_partners-list-section"], [class*="articlesSection_container"], [class*="partnerNode"], [id*="test-id-partners-list"]',
             { timeout: 5000 }
           ).catch(() => {});
-          
+
           // Get page content for error checking
           pageContent = await page.evaluate(() => document.body.innerText); // clean html for grammatical errors detection
           pageTitle = await page.title();     // title for outdated years check
           pupeteerRes = await page.content(); // raw html for lineup (based on css classes) detection
-          await browser.close();
+          await page.close();
+          pagesProcessed++;
 
           // Check for errors in the page content
           const pageData = {
@@ -209,38 +226,40 @@ export class SpellCheckerService {
             outdatedYears: []
           };
 
- 
-            
-         
-
-            // ✅ Step 3.1:  check content errors, outdated years in path and in title
+          // ✅ Step 3.1:  check content errors, outdated years in path and in title
           const pageWithLocalErrors = extractErrorsWithLocalLibrary([pageData], ignoreListContent, this.globalState)[0];
           const pageWithAllErrors = await extractErrorsWithGpt(this.gptService, [pageWithLocalErrors], ignoreListContent);
 
           if (pageWithAllErrors[0].detectedErrors.length > 0 || pageWithAllErrors[0].outdatedYears.length > 0) {
-            webSitesAccumulativeErrors.push({ 
-              url: urlAndSlack.url, 
-              slackChannelId: urlAndSlack.slackChannelId, 
-              campaignName: urlAndSlack.campaignName, 
-              status: axiosRes.status, 
+            webSitesAccumulativeErrors.push({
+              url: urlAndSlack.url,
+              slackChannelId: urlAndSlack.slackChannelId,
+              campaignName: urlAndSlack.campaignName,
+              status: axiosRes.status,
               reason: 'content errors found',
               localErrors: pageWithAllErrors[0].detectedErrors,
               outdatedYears: pageWithAllErrors[0].outdatedYears
             });
           }
-    // ✅ Step 3.2:  check invoca errors
+          // ✅ Step 3.2:  check invoca errors
         } catch (err) {
-          logToCloudWatch(`Error in lineupValidation: ${JSON.stringify(err)}`, 'ERROR');
-          if (err.name === 'AxiosError'  && err.status != undefined) {
-            webSitesAccumulativeErrors.push({ url: urlAndSlack.url, slackChannelId: urlAndSlack.slackChannelId, campaignName: urlAndSlack.campaignName, status: err.status, reason: `${JSON.stringify(err)}` });          } 
+          logToCloudWatch(`Error in lineupValidation: ${err}`, 'ERROR');
+          if (err.name === 'AxiosError' && err.status != undefined) {
+            webSitesAccumulativeErrors.push({ url: urlAndSlack.url, slackChannelId: urlAndSlack.slackChannelId, campaignName: urlAndSlack.campaignName, status: err.status, reason: `${JSON.stringify(err)}` });
+          }
         }
         if (durationMs && durationMs > 10000) {
           webSitesAccumulativeErrors.push({ url: urlAndSlack.url, slackChannelId: urlAndSlack.slackChannelId, campaignName: urlAndSlack.campaignName, status: axiosRes.status, reason: 'timeout' });
         } else if (pupeteerRes && !checkIfLineupExists(pupeteerRes)) {
           webSitesAccumulativeErrors.push({ url: urlAndSlack.url, slackChannelId: urlAndSlack.slackChannelId, campaignName: urlAndSlack.campaignName, status: '-', reason: 'no lineup found' });
-        }else if(!pupeteerRes){
+        } else if (!pupeteerRes) {
           webSitesAccumulativeErrors.push({ url: urlAndSlack.url, slackChannelId: urlAndSlack.slackChannelId, campaignName: urlAndSlack.campaignName, status: '-', reason: 'no raw content found for lineup detection' });
         }
+      }
+
+      // Close final browser
+      if (currentBrowser) {
+        await currentBrowser.close();
       }
   
       
@@ -478,21 +497,34 @@ export class SpellCheckerService {
  
     try {
       const landingpagesToCheck = url ? [url] : uniqueLandingpages; // if url is provided, we only check that url
+      
+      // Browser management for reuse
+      let currentBrowser = null;
+      let pagesProcessed = 0;
+      const PAGES_PER_BROWSER = 50;
 
       for (const landingpage of landingpagesToCheck) {
         //step 1: preventing running over domain that already been detected with invoca in them
          const baseUrl = landingpage.match(/^https?:\/\/[^\/?#]+/i)?.[0]
-         const matchesParamUrl = urlsWithParams.some(p => landingpage.includes(p));
-         const alreadyChecked = invocfullPagesMobile.some((i)=>i.includes(baseUrl)) || invocfullPages.some((i)=>i.includes(baseUrl));
+       const matchesParamUrl = urlsWithParams.some(p => landingpage.includes(p));
+       const alreadyChecked = invocfullPagesMobile.some((i)=>i.includes(baseUrl)) || invocfullPages.some((i)=>i.includes(baseUrl));
 
-        if (matchesParamUrl && alreadyChecked){
-          continue;
-        } 
+       if (matchesParamUrl && alreadyChecked){
+         continue;
+       } 
 
+        // Create new browser if needed
+        if (!currentBrowser || pagesProcessed >= PAGES_PER_BROWSER) {
+          if (currentBrowser) {
+            await currentBrowser.close();
+          }
+          currentBrowser = await generateBrowser();
+          pagesProcessed = 0;
+        }
 
         //step 2: checking if the page has invoca tag
           logToCloudWatch(`Processing landingpage (m+d): ${landingpage}`, "INFO", 'invoca lineup validation');
-          const [isInvoca, isInvocaMobile] = await Promise.all([checkInvocaInDesktop(landingpage),checkInvocaInMobile(landingpage)]);
+          const [isInvoca, isInvocaMobile] = await Promise.all([checkInvocaInDesktop(landingpage, currentBrowser),checkInvocaInMobile(landingpage, currentBrowser)]);
 
           //step 3: if the page has invoca tag, add it to the invocfullPages array
           if (isInvoca && isInvoca.length === 0) {invoclessPages.push(landingpage); }
@@ -500,20 +532,24 @@ export class SpellCheckerService {
 
           if (isInvoca && isInvoca.length > 0) {invocfullPages.push(landingpage); }
           if ((isInvocaMobile && isInvocaMobile.length > 0)  )invocfullPagesMobile.push(landingpage);
+          
+          pagesProcessed++;
     }
-      
-
-
+    
       // Step 4: Remove URLs from invoclessPages if their base URLs exist in invocfullPages
       invoclessPages = invoclessPages.filter(url => {
-        const baseUrl = url.match(/^https?:\/\/[^\/?#]+/i)?.[0];
-        return !invocfullPages.some(fullUrl => fullUrl.includes(baseUrl));
-      });
+      const baseUrl = url.match(/^https?:\/\/[^\/?#]+/i)?.[0];
+      return !invocfullPages.some(fullUrl => fullUrl.includes(baseUrl));
+    });
 
-      invoclessPagesMobile = invoclessPagesMobile.filter(url => {
-        const baseUrl = url.match(/^https?:\/\/[^\/?#]+/i)?.[0];
-        return !invocfullPagesMobile.some(fullUrl => fullUrl.includes(baseUrl));
-      });
+    invoclessPagesMobile = invoclessPagesMobile.filter(url => {
+      const baseUrl = url.match(/^https?:\/\/[^\/?#]+/i)?.[0];
+      return !invocfullPagesMobile.some(fullUrl => fullUrl.includes(baseUrl));
+    });
+    // Close final browser
+    if (currentBrowser) {
+      await currentBrowser.close();
+    }
 
     logToCloudWatch(`invoclesspages: ${invoclessPages}`, "INFO", 'invoca lineup validation');
       
@@ -530,6 +566,15 @@ export class SpellCheckerService {
         logToCloudWatch(`❌ Error in invocaPartnersTagValidation: ${error.message} |||||| ${JSON.stringify(error)}`, "ERROR", 'invoca partners tag validation');
        }
    }
+
+
+
+   async lineupPartnersValidationWrapper(hostname: string, url:string, isTest:boolean) {
+      return lineupPartnersValidation( this.kidonClient );
+   }
+
+
+
  
   create(createSpellCheckerDto: CreateSpellCheckerDto) {
     return 'This action adds a new spellChecker';
