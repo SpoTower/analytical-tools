@@ -93,6 +93,8 @@ Be precise and return nothing if no real spelling/grammar mistakes exist.
  export const slackChannels = {
   CONTENT: 'C08EPQYR6AC',
   PERSONAL: 'C08GHM3NY8K',
+  TAL: 'U04TJD81RGA',
+  DIMITRIY: 'U06S69E21DZ'
  }
  
   export const lineupClassNames = ['partnersArea_main-partner-list', 'ConditionalPartnersList', 'test-id-partners-list','homePage_partners-list-section' ];

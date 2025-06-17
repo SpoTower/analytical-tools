@@ -1011,6 +1011,9 @@ if (Object.keys(categorizedErrors.contentErrors).length > 0) {
   }
 
   if (messages.length > 0) {
+    if (Object.keys(categorizedErrors.lineupErrors).length > 0) {
+      messages.unshift(`<@${slackChannels.TAL}> ⚠️ You are being tagged for lineup errors.\n`);
+    }
     const finalMessage = messages.join('\n');
     logToCloudWatch(`Website Validation Errors:\n${finalMessage}`, 'ERROR');
     await KF.sendSlackAlert(finalMessage, isTest ? slackChannels.PERSONAL : slackChannels.CONTENT, state.slackToken);
