@@ -78,7 +78,7 @@ export class BingService {
 
 async saveBingUrls(domainId?: number): Promise<string> {
 
-
+logToCloudWatch('Entering saveBingUrls endpoint. '    );
   const getCompanyById = (id: number) => companies.find(c => c.id === id);
 
   const domains = await this.kidonClient('domain');
@@ -150,7 +150,7 @@ async saveBingUrls(domainId?: number): Promise<string> {
   if(newResults.length > 0){
     await this.kidonClient('bing_landing_pages').insert(newResults);
   }
-
+  logToCloudWatch(`Bing urls saved for ${newResults.length} domains`, 'INFO', 'bing');
   return  `Bing urls saved for ${newResults.length} domains`;
 }
 

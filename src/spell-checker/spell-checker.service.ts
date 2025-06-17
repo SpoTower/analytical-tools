@@ -134,7 +134,7 @@ export class SpellCheckerService {
       const [  ignoreListContent] = await Promise.all([  fetchIgnoreWords(this.kidonClient, '56') ]);
       const state = this.globalState.getAllState(); if (!state) return 'No state found';
       let domainsToProcess = state.domains.filter((d: Domain) => d.googleAdsId);
-       domainsToProcess = domainsToProcess.filter((d: Domain) =>  ![20,176,128,153,34,17,31,40,4,25,21,115,61,43,68,66,59,122,163,147,183,207,197].includes(d.id)  );
+       domainsToProcess = domainsToProcess.filter((d: Domain) =>  ![20,176,128,153,34,17,31,40,4,25,21,115,61,43,68,66,59,122,163,147,183,207,197,215].includes(d.id)  );
       const allTokens = await Promise.all(state.companies.map(async (c) => ({ company: c.name, token: await KF.getGoogleAuthToken(c) })));
   
    if(utmSource === 'google'){
@@ -161,13 +161,16 @@ export class SpellCheckerService {
         slackChannelId:  r.slackChannelId, // Default slack channel ID
         campaignName: r.campaignName // Default campaign name
       }));
+
+
+              if (hostname) urlAndSlackChannel = urlAndSlackChannel.filter((u) => u.url.includes(hostname));
+        if (url) {
+          const filtered = urlAndSlackChannel.filter((u) => u.url.includes(url));
+          urlAndSlackChannel = filtered.length > 0 ? filtered: [{ ...urlAndSlackChannel[0], url }];
+        }   
     }
     
-    if (hostname) urlAndSlackChannel = urlAndSlackChannel.filter((u) => u.url.includes(hostname));
-      if (url) {
-        const filtered = urlAndSlackChannel.filter((u) => u.url.includes(url));
-        urlAndSlackChannel = filtered.length > 0 ? filtered: [{ ...urlAndSlackChannel[0], url }];
-      }  
+
 
       
       
@@ -227,7 +230,7 @@ export class SpellCheckerService {
           }
     // ✅ Step 3.2:  check invoca errors
         } catch (err) {
-          logToCloudWatch(`Error in lineupValidation: ${err}`, 'ERROR');
+          logToCloudWatch(`Error in lineupValidation: ${JSON.stringify(err)}`, 'ERROR');
           if (err.name === 'AxiosError'  && err.status != undefined) {
             webSitesAccumulativeErrors.push({ url: urlAndSlack.url, slackChannelId: urlAndSlack.slackChannelId, campaignName: urlAndSlack.campaignName, status: err.status, reason: `${JSON.stringify(err)}` });          } 
         }
@@ -248,9 +251,8 @@ export class SpellCheckerService {
       await sendCategorizedErrorsToSlack(categorizedErrors, isTest, state,utmSource);
   
     } catch (e) {
-      logToCloudWatch(`Error during lineupValidation: ${e}`, 'ERROR');
-      return `Error during lineupValidation ${JSON.stringify(e)}`;
-    }
+      logToCloudWatch(`Error during lineupValidation: ${JSON.stringify(e)}`, 'ERROR');
+     }
   }
   
 
