@@ -32,7 +32,7 @@ import { GlobalStateService } from 'src/globalState/global-state.service';
 import { GptService } from 'src/gpt/gpt.service';
 const logger = new Logger('analytical-tools.spellchecker');
 import {logToCloudWatch} from 'src/logger'; 
-import {adsPreparedForErrorDetection, BqTrafficCampaign,googleAdsAndDomain,CampaignAndUrlInfo, CategorizedErrors} from './interfaces';
+import {adsPreparedForErrorDetection, BqTrafficCampaign,googleAdsAndDomain,CampaignAndUrlInfo, CategorizedErrors, bingUrlsAndDomain} from './interfaces';
 import { Domain,Paths } from 'src/kidonInterfaces/shared';
 import {processInBatches,extractMisspelledWords,extractOutdatedYears} from './utils';
 import {googleAds } from './interfaces';
@@ -51,13 +51,15 @@ import { AnyObject } from './consts';
 import puppeteer from 'puppeteer';
 import { extractBaseUrl } from './utils';
 import { campaignsNetworks, traffic } from './queries/traffic';
+import { BingService } from 'src/bing/bing.service';
  @Injectable()
 export class SpellCheckerService {
 
   constructor(
     @Inject(KIDON_CONNECTION) private readonly kidonClient: Knex,
     private readonly globalState: GlobalStateService,
-    private readonly gptService: GptService
+    private readonly gptService: GptService,
+    private readonly bingService: BingService
   ) {}
  
  
@@ -119,10 +121,14 @@ export class SpellCheckerService {
 
  
  
-  async webSitesChecks(hostname: string, isTest:boolean, url:string) {
+  async webSitesChecks(hostname: string, isTest:boolean, url:string, utmSource?: 'bing' | 'google') {
     logToCloudWatch('entering webSitesChecks');
   let domains = await this.kidonClient('domain').select('*');
    domains = domains.map((d:any)=>d.domain_name);
+   let rawGoogleSearchResults : googleAdsAndDomain[] = [];
+   let rawBingSearchResults : bingUrlsAndDomain[] = [];
+   let bingUrls : string[] = [];
+   let urlAndSlackChannel : CampaignAndUrlInfo[]  = [];
     try {
         // Get ignore list from database
       const [  ignoreListContent] = await Promise.all([  fetchIgnoreWords(this.kidonClient, '56') ]);
@@ -131,32 +137,39 @@ export class SpellCheckerService {
        domainsToProcess = domainsToProcess.filter((d: Domain) =>  ![20,176,128,153,34,17,31,40,4,25,21,115,61,43,68,66,59,122,163,147,183,207,197].includes(d.id)  );
       const allTokens = await Promise.all(state.companies.map(async (c) => ({ company: c.name, token: await KF.getGoogleAuthToken(c) })));
   
-   
-      // ✅ Step 1: fetch urls
-      // You're extracting unique final landing page URLs from Google Ads that are active and have received impressions.
-       const rawGoogleSearchResults : googleAdsAndDomain[] =  await processInBatches(
-        domainsToProcess.map((domain: Domain) => async () => {
-            try {
-                return await fetchGoogleSearchUrls(domain, state.companies, allTokens, googleAdsLandingPageQuery);
-            } catch (error) {
-                logToCloudWatch(`❌ Error fetching Google Ads for domain ${domain.id}: ${error.message}`, "ERROR");
-                return { domain, results: [] };
-            }
-        }),
-        30
-    );
+   if(utmSource === 'google'){
+          // ✅ Step 1: fetch urls
+          // You're extracting unique final landing page URLs from Google Ads that are active and have received impressions.
+          rawGoogleSearchResults = await processInBatches(
+            domainsToProcess.map((domain: Domain) => async () => {
+                try {
+                    return await fetchGoogleSearchUrls(domain, state.companies, allTokens, googleAdsLandingPageQuery);
+                } catch (error) {
+                    logToCloudWatch(`❌ Error fetching Google Ads for domain ${domain.id}: ${error.message}`, "ERROR");
+                    return { domain, results: [] };
+                }
+            }),
+            30
+        );
 
-
-
-      let urlAndSlackChannel : CampaignAndUrlInfo[]  = extractGoogleSearchUrls(rawGoogleSearchResults);
-      logToCloudWatch(`Found ${urlAndSlackChannel.length} lineups`, 'INFO');
-      if (hostname) urlAndSlackChannel = urlAndSlackChannel.filter((u) => u.url.includes(hostname));
+      urlAndSlackChannel   = extractGoogleSearchUrls(rawGoogleSearchResults);
+        logToCloudWatch(`Found ${urlAndSlackChannel.length} lineups`, 'INFO');
+    }else if(utmSource === 'bing'){
+      rawBingSearchResults = await this.bingService.getBingUrls();
+      urlAndSlackChannel = rawBingSearchResults.map((r) => ({
+        url: r.url,
+        slackChannelId:  r.slackChannelId, // Default slack channel ID
+        campaignName: r.campaignName // Default campaign name
+      }));
+    }
+    
+    if (hostname) urlAndSlackChannel = urlAndSlackChannel.filter((u) => u.url.includes(hostname));
       if (url) {
         const filtered = urlAndSlackChannel.filter((u) => u.url.includes(url));
-        urlAndSlackChannel = filtered.length > 0
-          ? filtered
-          : [{ ...urlAndSlackChannel[0], url }];
-      }        
+        urlAndSlackChannel = filtered.length > 0 ? filtered: [{ ...urlAndSlackChannel[0], url }];
+      }  
+
+      
       
  
       // ✅ Step 2: harvest content from urls
@@ -232,7 +245,7 @@ export class SpellCheckerService {
    
       // ✅ Step 4.1: Categorize and send errors to slack
       const categorizedErrors = categorizeErrors(webSitesAccumulativeErrors);
-      await sendCategorizedErrorsToSlack(categorizedErrors, isTest, state);
+      await sendCategorizedErrorsToSlack(categorizedErrors, isTest, state,utmSource);
   
     } catch (e) {
       logToCloudWatch(`Error during lineupValidation: ${e}`, 'ERROR');

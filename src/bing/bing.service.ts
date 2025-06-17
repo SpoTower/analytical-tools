@@ -128,7 +128,12 @@ async saveBingUrls(domainId?: number): Promise<string> {
           const resAds = await bingCall(xmlAds, 'GetAdsByAdGroupId');
           const adsParsed = parser.parse(resAds.data);
           const ads = ensureArray(adsParsed?.['s:Envelope']?.['s:Body']?.GetAdsByAdGroupIdResponse?.Ads?.Ad);
-          const urls = ads.flatMap(ad => ensureArray(ad?.FinalUrls?.['a:string']).map(url => ({ url, domainId: domain.id })));
+          const urls = ads.flatMap(ad => ensureArray(ad?.FinalUrls?.['a:string']).map(url => ({ 
+            url, 
+            domainId: domain.id,
+            campaignName: campaignsParsed?.['s:Envelope']?.['s:Body']?.GetCampaignsByAccountIdResponse?.Campaigns?.Campaign?.find(c => c.Id === campaignId)?.Name || 'Unknown Campaign',
+            slackChannelId: domain.slackChannelId || ''
+          })));
           localResults.push(...urls);
         }));
       }));
