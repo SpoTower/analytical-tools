@@ -93,6 +93,8 @@ Be precise and return nothing if no real spelling/grammar mistakes exist.
  export const slackChannels = {
   CONTENT: 'C08EPQYR6AC',
   PERSONAL: 'C08GHM3NY8K',
+  TAL: 'U04TJD81RGA',
+  DIMITRIY: 'U06S69E21DZ'
  }
  
   export const lineupClassNames = ['partnersArea_main-partner-list', 'ConditionalPartnersList', 'test-id-partners-list','homePage_partners-list-section' ];
@@ -160,3 +162,16 @@ export const desktopOnlyTraffick = /^(?=.*(\+?D|\(D\)))(?!.*(\+?M|\(M\))).*$/;
  //M, (M), +M
  
  export const hasMobileOrDesktop = /(\+?D|\(D\)|\+?M|\(M\))/;
+
+
+// these are domains that when fetched from invoca transaction report the urls that contains them must be used fully and not just the base of them
+// because without the full parameters the invoca tag will not appear in the partner website
+ export const urlsWithParams=[
+  'safeshipquotes.com',
+  'naviautotransport.com',
+  'chwprice.com',
+  'try.anthemtaxes.net',
+  'www.movingapt.com',
+  'apply.amerisave.com',
+  'quote.selecthomewarranty.com'
+]

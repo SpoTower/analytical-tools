@@ -10,6 +10,7 @@ import { KnexModule } from './knex/knex.module';
 import { AbTestManagementModule } from './ab-test-management/ab-test-management.module';
 import { GoogleModule } from './google/google.module';
 import { BingModule } from './bing/bing.module';
+import { FrontEndModule } from './front-end/front-end.module';
 
 @Module({
   imports: [
@@ -22,6 +23,7 @@ import { BingModule } from './bing/bing.module';
   AbTestManagementModule,
   GoogleModule,
   BingModule,
+  FrontEndModule,
     ],
   controllers: [AppController],
   providers: [

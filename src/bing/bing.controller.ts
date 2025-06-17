@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Body, Patch, Param, Delete, MethodNotAllowedException } from '@nestjs/common';
+import { Controller, Get, Post, Body, Patch, Param, Delete, MethodNotAllowedException, Query } from '@nestjs/common';
 import { BingService } from './bing.service';
 import { CreateBingDto } from './dto/create-bing.dto';
 import { UpdateBingDto } from './dto/update-bing.dto';
@@ -21,7 +21,29 @@ export class BingController {
       return { status: 'error', count: '', message: e.message };
     }      
    }
+
+   //obtaining bing urls from bing soap ads api. campaigns->ad groups->ads -> urls and saving to bing_landing_pages table
+   @Get('/saveBingUrls')
+   async saveBingUrls(@Query('domainId') domainId?: number) {
+    try{
+    const urls = await this.bingService.saveBingUrls(+domainId );
+    return urls;
+    }catch(e){
+      logToCloudWatch(e.message, 'ERROR', 'bing');
+      return { status: 'error', count: '', message: e.message };
+    }
+   }
   
+   @Get('/getBingUrls')
+   async getBingUrls(@Query('domainId') domainId?: number) {
+    try{
+    const urls = await this.bingService.getBingUrls(+domainId );
+    return urls;
+    }catch(e){
+      logToCloudWatch(e.message, 'ERROR', 'bing');
+      return { status: 'error', count: '', message: e.message };
+    }
+   }
 
   @Get()
   findAll() {

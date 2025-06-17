@@ -1,13 +1,13 @@
 import axios from 'axios';
-import { AnyObject, hasMobileOrDesktop, mobileOnlyTraffick, desktopOnlyTraffick } from './consts';
+import { AnyObject, hasMobileOrDesktop, mobileOnlyTraffick, desktopOnlyTraffick, urlsWithParams } from './consts';
 import { logToCloudWatch } from 'src/logger';
 import { BadRequestException, InternalServerErrorException } from '@nestjs/common';
 import { GptService } from 'src/gpt/gpt.service';
- import {BqTrafficCampaign, SqlCampaignTraffic, websiteText} from './interfaces';
+import {BqTrafficCampaign, CategorizedErrors, googleAdsAndDomain, SqlCampaignTraffic, WebsiteError, websiteText} from './interfaces';
 import { Domain } from 'src/kidonInterfaces/shared';
 import { Company } from 'src/kidonInterfaces/shared';
 import { gptProposal } from './interfaces';
- import JSON5 from 'json5';
+import JSON5 from 'json5';
 import { getDateRange } from 'src/utils';
 import spellchecker from 'spellchecker';
 import fs from 'fs';
@@ -16,7 +16,7 @@ const cheerio = require('cheerio');
 const { Readability } = require('@mozilla/readability');
 const { JSDOM } = require('jsdom');
 import * as KF from '@spotower/my-utils';
-import {slackChannels}  from './consts';
+import {slackChannels} from './consts';
 import { log } from 'console';
 import { XMLParser } from 'fast-xml-parser';
 import { googleAdsLandingPageQuery } from './gaqlQuerys';
@@ -78,7 +78,7 @@ export async function fetchGoogleAds(domain: Domain, companies: Company[], token
 
 
 
-    export async function fetchLineups(domain: Domain, companies: Company[], tokens:any, query:string): Promise<any> {
+    export async function fetchGoogleSearchUrls(domain: Domain, companies: Company[], tokens:any, query:string): Promise<any> {
         const landingPageResult = await axios.post(
             `https://googleads.googleapis.com/v19/customers/${domain.googleAdsId}/googleAds:searchStream`,
             {
@@ -99,7 +99,7 @@ export async function fetchGoogleAds(domain: Domain, companies: Company[], token
         };
     }
 
-    export function processLineupResults(rawResults: {domain: Domain, results: any[]}[]): {url: string, slackChannelId: string, campaignName: string}[] {
+    export function extractGoogleSearchUrls(rawResults: googleAdsAndDomain[]): {url: string, slackChannelId: string, campaignName: string}[] {
         const urlSet = new Set<string>();
         const processedResults: {url: string, slackChannelId: string, campaignName: string}[] = [];
         
@@ -217,7 +217,7 @@ export async function   processInBatches(tasks: (() => Promise<any>)[], batchSiz
 
         // Process inner HTML for each domain before moving to the next one. attach detected errors field to each object that represent path in this array
      
-          domainPagesInnerHtml =   extractErrorsWithLocalLibrary(domainPagesInnerHtml, ignoreList);
+          domainPagesInnerHtml =   extractErrorsWithLocalLibrary(domainPagesInnerHtml, ignoreList, undefined);
         domainPagesInnerHtml = await extractErrorsWithGpt(gptService, domainPagesInnerHtml, ignoreList);
         domainPagesInnerHtml = domainPagesInnerHtml.map((w)=>({...w, detectedErrors: w.detectedErrors.length > 0 ? w.detectedErrors : []}));
         // Filter out pages with no detected errors
@@ -279,39 +279,25 @@ export   function filterOutIrrelevantErrors(gptErrorDetectionResults: gptProposa
     return [];
 
 }
-
-
-export function extractMisspelledWords(text: string, excludedWords: string[]): string[] {
-    const lowerExcludedWords = new Set(excludedWords.map(word => word.toLowerCase()));
- 
-    // Remove HTML tags
-    text = text.replace(/<[^>]+>/g, ' ');
-
-    // Function to split words with multiple capital letters (e.g., "TotalAV" → ["Total", "AV"])
     const splitByCapitalLetters = (word: string): string[] => {
-        return word.split(/(?=[A-Z][a-z])/); // Split before capital letters followed by lowercase
-    };
-
-    // Process each word: split by spaces, then split merged words
-    let innerHtmlSeparatedWords = text
-        .split(/\s+/) // Split by spaces
-        .flatMap(splitByCapitalLetters) // Further split words with multiple capital letters
-        .filter(word => /^[A-Za-z]+$/.test(word)); // Keep only valid words
-
-    // Filter out ignored words
+      return word.split(/(?=[A-Z][a-z])/); // Split before capital letters followed by lowercase
+  };
 
 
+export function extractMisspelledWords(text: string, excludedWords: string[], state: any): string[] {
+  const partners = state.state.partners;
+  const partnerNames = partners.map((p: any) => p.name);
+    const ignoreList = new Set(excludedWords.map(word => word.toLowerCase()));// ignore words from db
+   // Process each word: split by spaces, then split merged words
+  let words = text
+      .split(/\s+/) // Split by spaces
+      .flatMap(splitByCapitalLetters) // Further split words with multiple capital letters
+      .filter(word => /^[A-Za-z]+$/.test(word)); // Keep only valid words
 
-
-    // apply spechecer to inner html words
-    let misspelledWords = innerHtmlSeparatedWords.filter(word => spellchecker.isMisspelled(word));
- 
-//apply ignore list to alleged errors after spellchecker
-
-let finalMisspelledWordsDbfiltered = misspelledWords.filter(word => !lowerExcludedWords.has(word.toLowerCase()));
- 
-
-    return [...new Set(finalMisspelledWordsDbfiltered)]; // Remove duplicates
+    let misspelledWords = words.filter(word => spellchecker.isMisspelled(word)); // spell checker library
+      misspelledWords = misspelledWords.filter(word => !ignoreList.has(word.toLowerCase())); // apply ignore list from db
+      misspelledWords = misspelledWords.filter(word => !partnerNames.some(partner => word.toLocaleLowerCase().includes(partner.toLocaleLowerCase()))); // apply ignore partner names
+    return [...new Set(misspelledWords)]; // Remove duplicates
 }
 
  
@@ -336,12 +322,17 @@ export function extractNonCapitalLetterWords(text: string, excludedWords: string
 
 
 export function extractOutdatedYears(text: string): string[] {
-    const currentYear = new Date().getFullYear();
-    return [...text.matchAll(/\b(19|20)\d{2}\b/g)]
-        .map(match => match[0])
-        .filter(year => parseInt(year) !== currentYear);
-}
+  const currentYear = new Date().getFullYear();
 
+  const validYears = [...text.matchAll(/\b20\d{2}\b/g)]
+    .map(match => match[0])
+    .filter(year => parseInt(year) !== currentYear);
+
+  const malformedYears = [...text.matchAll(/\b20\d{3,}\b/g)]
+    .map(match => match[0]);
+
+  return [...new Set([...validYears, ...malformedYears])];
+}
  
 export function saveResults(results: any[]) {
     const filePath = path.join(__dirname, '../..', 'webSiteErrors.json');
@@ -594,7 +585,7 @@ export   function checkIfLineupExists(html: string): boolean {
    const rawLineupResults = await processInBatches(
        domainsToProcess.map((domain: Domain) => async () => {
            try {
-               return await fetchLineups(domain, state.companies, allTokens, googleAdsLandingPageQuery);
+               return await fetchGoogleSearchUrls(domain, state.companies, allTokens, googleAdsLandingPageQuery);
            } catch (error) {
                logToCloudWatch(`❌ Error fetching Google Ads for domain ${domain.id}: ${error.message}`, "ERROR");
                return { domain, results: [] };
@@ -602,7 +593,7 @@ export   function checkIfLineupExists(html: string): boolean {
        }),
        30
    );
-   let urlAndSlackChannel = processLineupResults(rawLineupResults);
+   let urlAndSlackChannel = extractGoogleSearchUrls(rawLineupResults);
    const baseUrlSet = new Set<string>();
    for (const obj of urlAndSlackChannel) {
       const match = obj.url.match(/^(https:\/\/[^\/]+\.com\/)/);
@@ -674,14 +665,16 @@ export function isLocal(){
 export async function generateBrowser() {
     const commonOptions = {
       headless: true,
-      protocolTimeout: 60000,
+      ignoreHTTPSErrors: true, 
+      protocolTimeout: 600000,
       args: [
         '--no-sandbox',
         '--disable-setuid-sandbox',
         '--disable-dev-shm-usage',
         '--disable-gpu',
         '--no-zygote',
-        '--single-process'
+        '--single-process',
+        '--ignore-certificate-errors' 
       ]
     };
   
@@ -693,15 +686,22 @@ export async function generateBrowser() {
         });
   }
   
+  // overall the function should be used to extract the base url from the url to further deduplicate the urls, but 
 export const extractBaseUrl = (url: string) => {
-    const match = url.match(/^(https?:\/\/[^?]+)/i);
-    return match ? match[1] : null;
-  };
+ const paramsMatch = urlsWithParams.find(u=>url.includes(u))
+if(paramsMatch){
+    return url;
+}else{
+  const urlStructureMatch = url.match(/^(https?:\/\/[^?]+)/i);
+  return urlStructureMatch ? urlStructureMatch[1] : null; 
+}
+ 
+   };
   
 
 
-  export async function checkInvocaInDesktop(landingpage) {
-    const browser = await generateBrowser();
+  export async function checkInvocaInDesktop(landingpage, existingBrowser = null) {
+    const browser = existingBrowser || await generateBrowser();
     const page = await browser.newPage();
 
     try {
@@ -713,18 +713,26 @@ export const extractBaseUrl = (url: string) => {
                 .map(script => script.src)
         );
 
+        if(invocaScripts.length == 0){
+          console.log(`fail ${landingpage}`)
+        }else{
+          console.log(`success ${landingpage}`)
+        }
         return invocaScripts;
     } catch (error) {
         logToCloudWatch(`❌ Error in checkInvocaInDesktop ${landingpage}: ${error.message}`, "ERROR", 'invoca lineup validation');
-        return []; // Ensure safe return
+        
     } finally {
-        await browser.close(); // Always close browser
+        await page.close();
+        if (!existingBrowser) {
+            await browser.close(); // Only close browser if we created it
+        }
     }
 }
 
 
-export async function checkInvocaInMobile(landingpage) {
-    const browser = await generateBrowser();
+export async function checkInvocaInMobile(landingpage, existingBrowser = null) {
+    const browser = existingBrowser || await generateBrowser();
     const page = await browser.newPage();
     await page.setUserAgent(
         'Mozilla/5.0 (iPhone; CPU iPhone OS 13_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/13.1.1 Mobile/15E148 Safari/604.1'
@@ -737,13 +745,14 @@ export async function checkInvocaInMobile(landingpage) {
             .filter(script => script.src.toLowerCase().includes('invoca'))
             .map(script => script.src)
     );
-    await browser.close();
-    return invocaScripts;
+     return invocaScripts;
 } catch (error) {
     logToCloudWatch(`❌ Error in checkInvocaInMobile ${landingpage}: ${error.message}  `, "ERROR", 'invoca lineup validation');
-    return [];
-} finally {
-    await browser.close();
+ } finally {
+    await page.close();
+    if (!existingBrowser) {
+        await browser.close(); // Only close browser if we created it
+    }
 }
 }
 
@@ -882,4 +891,139 @@ export async function isInvocaPresent(page: any): Promise<boolean> {
       return hasInvocaScriptSrc || hasInvocaInlineScript || hasInvocaInHTML || hasInvocaGlobal;
     });
   }
+  
+ 
+
+export function categorizeErrors(errors: WebsiteError[]): CategorizedErrors {
+  const categorized: CategorizedErrors = {
+    contentErrors: {},
+    outdatedYearsErrors: {},
+    lineupErrors: {},
+    timeoutErrors: {},
+    httpErrors: {}
+  };
+
+  for (const error of errors) {
+    const domain = error.url.match(/https?:\/\/([^\/]+)/)?.[1] || 'unknown';
+    
+    if (error.localErrors?.length > 0) {
+      if (!categorized.contentErrors[domain]) categorized.contentErrors[domain] = [];
+      categorized.contentErrors[domain].push(error);
+    }
+    
+    if (error.outdatedYears?.length > 0) {
+      if (!categorized.outdatedYearsErrors[domain]) categorized.outdatedYearsErrors[domain] = [];
+      categorized.outdatedYearsErrors[domain].push(error);
+    }
+    
+    if (error.reason === 'no lineup found') {
+      if (!categorized.lineupErrors[domain]) categorized.lineupErrors[domain] = [];
+      categorized.lineupErrors[domain].push(error);
+    }
+    
+    if (error.reason === 'timeout') {
+      if (!categorized.timeoutErrors[domain]) categorized.timeoutErrors[domain] = [];
+      categorized.timeoutErrors[domain].push(error);
+    }
+    
+    if (error.reason.includes('AxiosError')) {
+      if (!categorized.httpErrors[domain]) categorized.httpErrors[domain] = [];
+      categorized.httpErrors[domain].push(error);
+    }
+  }
+
+  return categorized;
+}
+
+export { WebsiteError };
+  
+export async function sendCategorizedErrorsToSlack(
+  categorizedErrors: CategorizedErrors, 
+  isTest: boolean, 
+  state: any,
+  utmSource: string
+): Promise<void> {
+  const messages: string[] = [];
+// Content Errors
+if (Object.keys(categorizedErrors.contentErrors).length > 0) {
+  messages.push(`*📝📝 ❗ ${utmSource.toUpperCase()} CONTENT ERRORS ❗📝📝* \n`);
+
+  for (const [domain, domainErrors] of Object.entries(categorizedErrors.contentErrors)) {
+    if (!domainErrors?.length) continue; // 🔒 skip if empty or invalid
+
+    messages.push(`\n*Domain: ${domain}*`);
+    messages.push('```');
+    for (const error of domainErrors) {
+      messages.push(`URL: ${error.url}, ERRORS: ${(error.localErrors || []).join(', ')}`);
+    }
+    messages.push('```'); // ✅ always close
+  }
+}
+  // Outdated Years Errors
+  if (Object.keys(categorizedErrors.outdatedYearsErrors).length > 0) {
+    messages.push(`\n*📅 ${utmSource.toUpperCase()} Outdated Years:*`);
+  
+    for (const [domain, domainErrors] of Object.entries(categorizedErrors.outdatedYearsErrors)) {
+      if (!domainErrors?.length) continue;
+  
+      messages.push(`\n*Domain: ${domain}*`);
+      messages.push('```');
+      for (const error of domainErrors) {
+        messages.push(`URL: ${error.url}, CAMPAIGN: ${error.campaignName}, YEARS: ${error.outdatedYears?.join(', ') || ''}`);
+      }
+      messages.push('```');
+    }
+  
+    messages.push('\n\n\n');
+  }
+
+  // Lineup Errors
+  if (Object.keys(categorizedErrors.lineupErrors).length > 0) {
+    messages.push(`\n*⚠️ ${utmSource.toUpperCase()} Missing Lineup Content:*`);
+    for (const [domain, domainErrors] of Object.entries(categorizedErrors.lineupErrors)) {
+      messages.push(`\n*Domain: ${domain}*`);
+      for (const error of domainErrors) {
+        messages.push(`• URL: ${error.url}`);
+        messages.push(`  Campaign: ${error.campaignName}`);
+      }
+    }
+  }
+
+  // Timeout Errors
+  if (Object.keys(categorizedErrors.timeoutErrors).length > 0) {
+    messages.push(`\n*⏰ ${utmSource.toUpperCase()} Page Load Timeouts:*`);
+    for (const [domain, domainErrors] of Object.entries(categorizedErrors.timeoutErrors)) {
+      messages.push(`\n*Domain: ${domain}*`);
+      for (const error of domainErrors) {
+        messages.push(`• URL: ${error.url}`);
+        messages.push(`  Campaign: ${error.campaignName}`);
+      }
+    }
+  }
+
+  // HTTP Errors
+  if (Object.keys(categorizedErrors.httpErrors).length > 0) {
+    messages.push(`\n*🔴 ${utmSource.toUpperCase()} HTTP Errors:*`);
+    for (const [domain, domainErrors] of Object.entries(categorizedErrors.httpErrors)) {
+      messages.push(`\n*Domain: ${domain}*`);
+      for (const error of domainErrors) {
+        messages.push(`• URL: ${error.url}`);
+        messages.push(`  Campaign: ${error.campaignName}`);
+        messages.push(`  Status: ${error.status}`);
+      }
+    }
+  }
+
+  if (messages.length > 0) {
+    if (Object.keys(categorizedErrors.lineupErrors).length > 0) {
+      messages.unshift(`<@${slackChannels.TAL}> ⚠️ You are being tagged for lineup errors.\n`);
+    }
+    const finalMessage = messages.join('\n');
+    logToCloudWatch(` ${utmSource.toUpperCase()} Website Validation Errors:\n${finalMessage}`, 'ERROR');
+    await KF.sendSlackAlert(finalMessage, isTest ? slackChannels.PERSONAL : slackChannels.CONTENT, state.slackToken);
+  } else {
+    logToCloudWatch(`:herb: No website errors found`);
+    await KF.sendSlackAlert(`no website errors found`, isTest ? slackChannels.PERSONAL : slackChannels.CONTENT, state.slackToken);
+  }
+}
   

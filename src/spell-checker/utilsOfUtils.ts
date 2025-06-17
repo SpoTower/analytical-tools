@@ -3,9 +3,9 @@ import { pageContentMetaData } from './interfaces';
 import { GptService } from 'src/gpt/gpt.service';
 import { locatingWebSitesErrors } from './consts';
 
-export function extractErrorsWithLocalLibrary(domainPagesInnerHtml: pageContentMetaData[], ignoreList) {
+export function extractErrorsWithLocalLibrary(domainPagesInnerHtml: pageContentMetaData[], ignoreList:string[], state: any) {
     domainPagesInnerHtml.forEach(webSiteText => {
-        webSiteText.detectedErrors = extractMisspelledWords(webSiteText.innerHtml, ignoreList);
+        webSiteText.detectedErrors = extractMisspelledWords(webSiteText.innerHtml, ignoreList, state);
 
         // Check for outdated years in both title and fullPath
         const titleYears = extractOutdatedYears(webSiteText.titleElement || '');
@@ -16,7 +16,7 @@ export function extractErrorsWithLocalLibrary(domainPagesInnerHtml: pageContentM
 }
 
 export async function extractErrorsWithGpt(gptService: GptService, domainPagesInnerHtml: pageContentMetaData[], ignoreList: string[]): Promise<pageContentMetaData[]> {
-    const gptPrompt = locatingWebSitesErrors();
+    const gptPrompt = locatingWebSitesErrors();// gpt prompt for grammatical errors detection
     
     for (const page of domainPagesInnerHtml) {
       
