@@ -62,7 +62,14 @@ async invocaPartnersTagValidation(
 }
 
 
-
+@Get('/lineupPartnersValidation')
+async lineupPartnersValidation(
+  @Query('hostname') hostname: string, 
+  @Query('url') url:string, 
+  @Query('isTest') isTest:boolean,
+) {
+  return this.spellCheckerService.lineupPartnersValidationWrapper(hostname, url, isTest);
+}
 
 
 
