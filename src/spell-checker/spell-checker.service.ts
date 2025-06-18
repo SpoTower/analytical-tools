@@ -538,7 +538,8 @@ export class SpellCheckerService {
           
           pagesProcessed++;
     }
-    
+    logToCloudWatch(`invoclessPages before filtering: ${JSON.stringify(invoclessPages)}`, "INFO", 'invoca lineup validation');
+    logToCloudWatch(`invoclessPagesMobile before filtering: ${JSON.stringify(invoclessPagesMobile)}`, "INFO", 'invoca lineup validation');
       // Step 4: Remove URLs from invoclessPages if their base URLs exist in invocfullPages
       invoclessPages = invoclessPages.filter(url => {
       const baseUrl = url.match(/^https?:\/\/[^\/?#]+/i)?.[0];
@@ -549,6 +550,8 @@ export class SpellCheckerService {
       const baseUrl = url.match(/^https?:\/\/[^\/?#]+/i)?.[0];
       return !invocfullPagesMobile.some(fullUrl => fullUrl.includes(baseUrl));
     });
+    logToCloudWatch(`invoclessPages after filtering: ${JSON.stringify(invoclessPages)}`, "INFO", 'invoca lineup validation');
+    logToCloudWatch(`invoclessPagesMobile after filtering: ${JSON.stringify(invoclessPagesMobile)}`, "INFO", 'invoca lineup validation');
     // Close final browser
     if (currentBrowser) {
       await currentBrowser.close();
@@ -562,6 +565,9 @@ export class SpellCheckerService {
 
        if(invoclessPagesMobile.length > 0 ){
         await KF.sendSlackAlert(`*🚨Invoca Tag Mobile  Validation (Partners websites) (no invoca tag in page scripts):*\n${invoclessPagesMobile.join('\n')}`, isTest ? slackChannels.PERSONAL : slackChannels.CONTENT, state.slackToken);
+       }
+       if(invocfullPages.length > 0 && invocfullPagesMobile.length > 0){
+        await KF.sendSlackAlert(`*✅Invoca Tag Validation (Partners websites) (invoca tag in page scripts):*\n${invocfullPages.join('\n')}`, isTest ? slackChannels.PERSONAL : slackChannels.CONTENT, state.slackToken);
        }
 
        return 'invoca tag validation (Partners websites) finished'; 
