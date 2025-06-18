@@ -712,13 +712,16 @@ if(paramsMatch){
                 .filter(script => script.src.toLowerCase().includes('invoca'))
                 .map(script => script.src)
         );
+ 
 
-        if(invocaScripts.length == 0){
-          console.log(`fail ${landingpage}`)
-        }else{
-          console.log(`success ${landingpage}`)
-        }
-        return invocaScripts;
+        const invocaMatches = await page.evaluate(() => {
+          return [...document.documentElement.innerHTML.matchAll(/invoca[^"'<>\s]*/gi)]
+            .map(m => m[0]);
+        });
+        const invocaFound = invocaScripts.length > 0 || invocaMatches.length > 0;
+
+
+        return invocaFound
     } catch (error) {
         logToCloudWatch(`❌ Error in checkInvocaInDesktop ${landingpage}: ${error.message}`, "ERROR", 'invoca lineup validation');
         
@@ -745,7 +748,14 @@ export async function checkInvocaInMobile(landingpage, existingBrowser = null) {
             .filter(script => script.src.toLowerCase().includes('invoca'))
             .map(script => script.src)
     );
-     return invocaScripts;
+    const invocaMatches = await page.evaluate(() => {
+      return [...document.documentElement.innerHTML.matchAll(/invoca[^"'<>\s]*/gi)]
+        .map(m => m[0]);
+    });
+    const invocaFound = invocaScripts.length > 0 || invocaMatches.length > 0;
+
+
+    return invocaFound
 } catch (error) {
     logToCloudWatch(`❌ Error in checkInvocaInMobile ${landingpage}: ${error.message}  `, "ERROR", 'invoca lineup validation');
  } finally {
@@ -1026,4 +1036,9 @@ if (Object.keys(categorizedErrors.contentErrors).length > 0) {
     await KF.sendSlackAlert(`no website errors found`, isTest ? slackChannels.PERSONAL : slackChannels.CONTENT, state.slackToken);
   }
 }
-  
+
+export function urlManupulation(urls: string[])  {
+  urls =  urls.filter((u)=>!u.includes('amerisave')).filter((u)=>!u.includes('sgtautotransport')) // no need change amerisave, sgt replaced by the following link
+  urls.push('https://sgtautotransport.com/quote?transportFor=newCar&utm_source=10-best-car-shipping')
+  return urls
+}
