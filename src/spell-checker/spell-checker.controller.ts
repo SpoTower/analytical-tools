@@ -76,14 +76,17 @@ async lineupPartnersValidation(
 
   
   //fetching google ads via google api with axios. tests: misspelled words, outdated years, non capital letters
-  @Get('/findGoogleAdsGrammaticalErrors')
+  @Get('/detectAdsGrammaticalErrors')
   async GoogleAdsGrammaticalErrors(
-    @Query('batchSize', new DefaultValuePipe(10), ParseIntPipe) batchSize: number,
+    @Query('batchSize', new DefaultValuePipe(20), ParseIntPipe) batchSize: number,
+    @Query('utmSource', new DefaultValuePipe(null)) utmSource?: 'bing' | 'google',
+    @Query('isTest', new DefaultValuePipe(false), ParseBoolPipe) isTest?: boolean,
+
     @Query('domainId' ) domainId?: number,
      @Query('sliceSize' ) sliceSize?: number
     ) {
     try {
-       return await this.spellCheckerService.findAndFixGoogleAdsGrammaticalErrors(batchSize,  +domainId, +sliceSize   );
+       return await this.spellCheckerService.detectAdsGrammaticalErrors(batchSize, utmSource, isTest, +domainId, +sliceSize   );
     } catch (error) {
       if (error instanceof BadRequestException || error instanceof InternalServerErrorException) {
         throw error;

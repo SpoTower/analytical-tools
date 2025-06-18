@@ -26,8 +26,11 @@ import {
   categorizeErrors,
   sendCategorizedErrorsToSlack,
   WebsiteError,
-  urlManupulation
+  urlManupulation,
+  getGoogleDomainsAndTokens,
+   
 } from './utils';
+import { getBingValidDomainsWithTokens } from 'src/bing/utils';
 import { extractErrorsWithLocalLibrary, extractErrorsWithGpt } from './utilsOfUtils';
 import { GlobalStateService } from 'src/globalState/global-state.service';
 import { GptService } from 'src/gpt/gpt.service';
@@ -54,6 +57,8 @@ import { extractBaseUrl } from './utils';
 import { campaignsNetworks, traffic } from './queries/traffic';
 import { BingService } from 'src/bing/bing.service';
 import { lineupPartnersValidation } from './partnersChecks/lineupValidation';
+import { getAllBingAdUrlsAndText } from 'src/bing/utils';
+import { XMLParser } from 'fast-xml-parser';
  @Injectable()
 export class SpellCheckerService {
 
@@ -65,21 +70,23 @@ export class SpellCheckerService {
   ) {}
  
  
-  async findAndFixGoogleAdsGrammaticalErrors(batchSize: number, domainId?: number, sliceSize?: number    ) {
+  async detectAdsGrammaticalErrors(batchSize: number, utmSource?: 'bing' | 'google', isTest?: boolean, domainId?: number, sliceSize?: number    ) {
+
+
+
     logToCloudWatch('entering findAndFixGoogleAdsGrammaticalErrors');
-    const [googleAdsIgnoreList, googleAdsNonCapitalLettersIgnoreList] = await Promise.all([fetchIgnoreWords(this.kidonClient, '59'),fetchIgnoreWords(this.kidonClient, '60')]);
-    const state = this.globalState.getAllState();
-    if (!state) return 'No state found';
+     const state22 = this.globalState.getAllState();
+    if (!state22) return 'No state found';
     // Filter and slice domains
-    let domainsToProcess = state.domains.filter((domain: Domain) => domain.googleAdsId).filter((domain: Domain) => !domainId || domain.id === domainId).slice(0, sliceSize || Infinity);
+    let domainsToProcess22 = state22.domains.filter((domain: Domain) => domain.googleAdsId).filter((domain: Domain) => !domainId || domain.id === domainId).slice(0, sliceSize || Infinity);
     // Get Google tokens for all companies
-    const allTokens = await Promise.all(state.companies.map(async (c) => ({ company: c.name, token: await KF.getGoogleAuthToken(c) })));
+    const allTokens = await Promise.all(state22.companies.map(async (c) => ({ company: c.name, token: await KF.getGoogleAuthToken(c) })));
 
     // Fetch Google Ads in batches
     const fetchedAdsResults: googleAds[] = await processInBatches(
-      domainsToProcess.map((domain: Domain) => async () => {
+      domainsToProcess22.map((domain: Domain) => async () => {
         try {
-          return { domain, ads: await fetchGoogleAds(domain, state.companies, allTokens, googleAdsGrammarErrors) };
+          return { domain, ads: await fetchGoogleAds(domain, state22.companies, allTokens, googleAdsGrammarErrors) };
         } catch (error) {
           logToCloudWatch(`❌ Error fetching Google Ads for domain ${domain.id}: ${error.message}`, "ERROR");
           return { domain, ads: [] };
@@ -88,15 +95,67 @@ export class SpellCheckerService {
       batchSize
     );
 
-    // Filter and prepare ads
-    const textfullAds = filterOutTextlessAds(fetchedAdsResults.filter(f => f.ads.length > 0));
-    if (!textfullAds?.length) {
-      await KF.sendSlackAlert('Google Ads Errors: No textfull ads found', 'C08EPQYR6AC', state.slackToken);
-      return 'No textfull ads found';
-    }
 
-    const preparedAds = prepareAdsForErrorChecking(textfullAds);
+
+
+
+
+
+
+    logToCloudWatch('entering detectAdsGrammaticalErrors');
+    const [googleAdsIgnoreList, googleAdsNonCapitalLettersIgnoreList] = await Promise.all([fetchIgnoreWords(this.kidonClient, '59'),fetchIgnoreWords(this.kidonClient, '60')]);
+    const state = this.globalState.getAllState();
+    const parser = new XMLParser();
+
+    const companies = await this.kidonClient('companies').select('*');
+    const domains = await this.kidonClient('domain').select('*');
+    const partners = await this.kidonClient('partner').select('*');
+
+
+   
+    let adResults = [];
+    // Filter and slice domains
+    let domainsToProcess =  domains.filter((domain: Domain) => domain.googleAdsId).filter((domain: Domain) => !domainId || domain.id === domainId).slice(0, sliceSize || Infinity);
+    // Get Google tokens for all companies
+    const allTokensGoogle = await Promise.all( companies.map(async (c) => ({ company: c.name, token: await KF.getGoogleAuthToken(c) })));
+     let preparedAds = [];
+   // const { domainsToProcess, allTokensGoogle } = await getGoogleDomainsAndTokens(companies,domains);
     const errors = { spelling: [] as any[], capitalization: [] as any[], outdatedYears: [] as any[] };
+
+    if(utmSource === 'google'){
+          adResults  = await processInBatches(
+            domainsToProcess.map((domain: Domain) => async () => {
+              try {
+                return { domain, ads: await fetchGoogleAds(domain,  companies, allTokensGoogle, googleAdsGrammarErrors) };
+              } catch (error) {
+                logToCloudWatch(`❌ Error fetching Google Ads for domain ${domain.id}: ${error.message}`, "ERROR");
+                return { domain, ads: [] };
+              }
+            }),
+            batchSize
+          );  
+
+          // Filter and prepare ads
+          const textfullAds = filterOutTextlessAds(adResults.filter(f => f.ads.length > 0));
+          if (!textfullAds?.length) {
+            await KF.sendSlackAlert('Google Ads Errors: No textfull ads found', 'C08EPQYR6AC', state.slackToken);
+            return 'No textfull ads found';
+          }
+
+            preparedAds = prepareAdsForErrorChecking(textfullAds);
+    }else if(utmSource === 'bing'){
+      const isheadlinesAndDescriptions = true;
+      const { validDomains, companies } = await getBingValidDomainsWithTokens(this.kidonClient, domainId);
+      let results = await getAllBingAdUrlsAndText(validDomains, companies, parser, isheadlinesAndDescriptions)
+      console.log(results);
+      }
+      
+
+
+
+
+
+
 
     // Check for errors
     for (const ad of preparedAds as adsPreparedForErrorDetection[]) {
@@ -104,7 +163,7 @@ export class SpellCheckerService {
         const location = ad.descriptions.includes(item) ? 'descriptions' : 'headline';
         const baseError = { resource: ad.resourceName, domain: ad.domain, googleAdsId: ad.googleAdsId, wholeSentence: item.text, location };
 
-        const misspelledWords = extractMisspelledWords(item.text, googleAdsIgnoreList, state);
+        const misspelledWords = extractMisspelledWords(item.text, googleAdsIgnoreList, partners);
         if (misspelledWords.length > 0) errors.spelling.push({ ...baseError, errors: misspelledWords });
 
         const nonCapitalWords = extractNonCapitalLetterWords(item.text, googleAdsNonCapitalLettersIgnoreList).filter(c => !c.includes('CUSTOM'));
@@ -115,7 +174,7 @@ export class SpellCheckerService {
       });
     }
 
-    await sendGoogleAdsErrorReports(errors, state);
+    await sendGoogleAdsErrorReports(errors, state,isTest);
 
     return 'ads were processed by local spellchecker and sent to kidon to be sended by slack to content errors channel';
   }
@@ -164,7 +223,7 @@ export class SpellCheckerService {
       }));
 
       logToCloudWatch(`Found ${urlAndSlackChannel.length} urls`, 'INFO');
-
+ 
               if (hostname) urlAndSlackChannel = urlAndSlackChannel.filter((u) => u.url.includes(hostname));
         if (url) {
           const filtered = urlAndSlackChannel.filter((u) => u.url.includes(url));
@@ -483,7 +542,7 @@ export class SpellCheckerService {
         await establishInvocaConnection();
         const transactions = await  fetchAllTransactions();
        let landingpages = url ? [url] : transactions.filter((tr)=>tr.landing_page).map((trl)=>trl.landing_page)  
-       logToCloudWatch(`landingpages fetched from invoca report length ${landingpages.length}: ${landingpages}`, "INFO", 'invoca partners tag validation');
+       logToCloudWatch(`landingpages fetched from invoca report length ${landingpages.length}:\n${landingpages.join('\n')}`, "INFO", 'invoca partners tag validation');
        let uniqueLandingpages :string[] = Array.from(new Set(landingpages.map(extractBaseUrl).filter(Boolean)));
        uniqueLandingpages = urlManupulation(uniqueLandingpages);
          let domains = await this.kidonClient.raw('select * from domain') ;
@@ -491,7 +550,7 @@ export class SpellCheckerService {
 
         // ✅ Step 1: filter out domains that are in the domains table (checking partner websites and not our websites)
         uniqueLandingpages = uniqueLandingpages.filter(lp =>!domains.some(d => lp.includes(d)));
-        logToCloudWatch(`uniqueLandingpages after filtering out our domains (retaining only partners websites): ${uniqueLandingpages.length}: ${uniqueLandingpages}`, "INFO", 'invoca partners tag validation');
+        logToCloudWatch(`uniqueLandingpages after filtering out our domains (retaining only partners websites): ${uniqueLandingpages.length}:\n${uniqueLandingpages.join('\n')}`, "INFO", 'invoca partners tag validation');
              
     let invoclessPages = [];
     let invoclessPagesMobile = [];

@@ -49,3 +49,12 @@ export interface BingConversionAction {
     Path1: string;
     Path2: string;
   }
+
+  export interface BingAdResult {
+    url: string;
+    domainId: number;
+    campaignName: string;
+    slackChannelId: string;
+    headlines?: string[];  // Optional property for headlines
+    descriptions?: string[];  // Optional property for descriptions
+  }

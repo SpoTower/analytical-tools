@@ -24,7 +24,7 @@ import dayjs from 'dayjs';
 import { invocaColumns } from './consts';
 import puppeteer from 'puppeteer';
 import { extractErrorsWithGpt, extractErrorsWithLocalLibrary } from './utilsOfUtils';
-
+ 
 export async function fetchGoogleAds(domain: Domain, companies: Company[], tokens:any, query:string ) {
     logToCloudWatch(`Entering fetchGoogleAds, fetching google ads for domain ${domain.id}`);
     console.log(companies.find((c)=>c.id == domain.companyId ).name);
@@ -427,27 +427,27 @@ export async function fetchIgnoreWords(kidonClient: any, configId: string): Prom
         .filter(Boolean);
 }
  
-export async function sendGoogleAdsErrorReports(errors: { spelling: any[], capitalization: any[], outdatedYears: any[] }, state: any) {
+export async function sendGoogleAdsErrorReports(errors: { spelling: any[], capitalization: any[], outdatedYears: any[] }, state: any, isTest: boolean) {
     await KF.sendSlackAlert('*🚨 Google Ads Content Errors:*', slackChannels.CONTENT, state.slackToken);
     
     if (errors.spelling.length > 0) {
-        await KF.sendSlackAlert(formatGoogleAdsErrors(errors.spelling, 'spelling'), slackChannels.CONTENT, state.slackToken);
+        await KF.sendSlackAlert(formatGoogleAdsErrors(errors.spelling, 'spelling'), isTest ? slackChannels.PERSONAL : slackChannels.CONTENT, state.slackToken);
     } else {
-        await KF.sendSlackAlert('🌿 No Spelling Errors Found', slackChannels.CONTENT, state.slackToken);
+        await KF.sendSlackAlert('🌿 No Spelling Errors Found', isTest ? slackChannels.PERSONAL : slackChannels.CONTENT, state.slackToken);
     }
 
     if (errors.capitalization.length > 0) {
-        await KF.sendSlackAlert('*🚨Google Ads non-Capital words Errors:*', slackChannels.CONTENT, state.slackToken);
-        await KF.sendSlackAlert(formatGoogleAdsErrors(errors.capitalization, 'capitalization'), slackChannels.CONTENT, state.slackToken);
+        await KF.sendSlackAlert('*🚨Google Ads non-Capital words Errors:*', isTest ? slackChannels.PERSONAL : slackChannels.CONTENT, state.slackToken);
+        await KF.sendSlackAlert(formatGoogleAdsErrors(errors.capitalization, 'capitalization'), isTest ? slackChannels.PERSONAL : slackChannels.CONTENT, state.slackToken);
     } else {
-        await KF.sendSlackAlert('*🌿 No Capitalization Errors Found*', slackChannels.CONTENT, state.slackToken);
+        await KF.sendSlackAlert('*🌿 No Capitalization Errors Found*', isTest ? slackChannels.PERSONAL : slackChannels.CONTENT, state.slackToken);
     }
 
     if (errors.outdatedYears.length > 0) {
-        await KF.sendSlackAlert('*🚨Google Ads Outdated Years Errors:*', slackChannels.CONTENT, state.slackToken);
-        await KF.sendSlackAlert(formatGoogleAdsErrors(errors.outdatedYears, 'outdatedYears'), slackChannels.CONTENT, state.slackToken);
+        await KF.sendSlackAlert('*🚨Google Ads Outdated Years Errors:*', isTest ? slackChannels.PERSONAL : slackChannels.CONTENT, state.slackToken);
+        await KF.sendSlackAlert(formatGoogleAdsErrors(errors.outdatedYears, 'outdatedYears'), isTest ? slackChannels.PERSONAL : slackChannels.CONTENT, state.slackToken);
     } else {
-        await KF.sendSlackAlert('*🌿 No Outdated Years Errors Found*', slackChannels.CONTENT, state.slackToken);
+        await KF.sendSlackAlert('*🌿 No Outdated Years Errors Found*', isTest ? slackChannels.PERSONAL : slackChannels.CONTENT, state.slackToken);
     }
 }
 
@@ -1041,4 +1041,27 @@ export function urlManupulation(urls: string[])  {
   urls =  urls.filter((u)=>!u.includes('amerisave')).filter((u)=>!u.includes('sgtautotransport')) // no need change amerisave, sgt replaced by the following link
   urls.push('https://sgtautotransport.com/quote?transportFor=newCar&utm_source=10-best-car-shipping')
   return urls
+}
+
+export async function getGoogleDomainsAndTokens(
+   companies: Company[],
+  domains: Domain[],
+   domainId?: number,
+  sliceSize?: number
+) {
+ 
+
+  const domainsToProcess = domains
+    .filter((domain: Domain) => domain.googleAdsId)
+    .filter((domain: Domain) => !domainId || domain.id === domainId)
+    .slice(0, sliceSize || Infinity);
+
+  const allTokensGoogle = await Promise.all(
+    companies.map(async (c) => ({
+      company: c.name,
+      token: await KF.getGoogleAuthToken(c),
+    }))
+  );
+
+  return { domainsToProcess, allTokensGoogle };
 }
