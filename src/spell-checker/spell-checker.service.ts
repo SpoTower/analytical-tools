@@ -567,7 +567,7 @@ export class SpellCheckerService {
         await KF.sendSlackAlert(`*🚨Invoca Tag Mobile  Validation (Partners websites) (no invoca tag in page scripts):*\n${invoclessPagesMobile.join('\n')}`, isTest ? slackChannels.PERSONAL : slackChannels.CONTENT, state.slackToken);
        }
        if(invocfullPages.length > 0 && invocfullPagesMobile.length > 0){
-        await KF.sendSlackAlert(`*✅Invoca Tag Validation (Partners websites) (invoca tag in page scripts):*\n${invocfullPages.join('\n')}`, isTest ? slackChannels.PERSONAL : slackChannels.CONTENT, state.slackToken);
+        await KF.sendSlackAlert(`*✅Invoca Tag Validation (Partners websites) (invoca tag in page scripts):*\n All pages include invoca tag`, isTest ? slackChannels.PERSONAL : slackChannels.CONTENT, state.slackToken);
        }
 
        return 'invoca tag validation (Partners websites) finished'; 
