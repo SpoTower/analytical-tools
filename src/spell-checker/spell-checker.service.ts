@@ -25,7 +25,8 @@ import {
   sendTrafficValidationAlerts,
   categorizeErrors,
   sendCategorizedErrorsToSlack,
-  WebsiteError
+  WebsiteError,
+  urlManupulation
 } from './utils';
 import { extractErrorsWithLocalLibrary, extractErrorsWithGpt } from './utilsOfUtils';
 import { GlobalStateService } from 'src/globalState/global-state.service';
@@ -472,18 +473,20 @@ export class SpellCheckerService {
       return `Error in mobileAndDesktopTrafficCongruenceValidation: ${error.message}`;
     }
   }
-
+//uniqueLandingpages.filter((u)=>!u.includes('amerisave')),uniqueLandingpages.filter((u)=>u.includes('sgtautotransport'))
 
 // url used if we want to check a specific url (1)
   async invocaPartnersTagValidation(hostname: string, url:string, isTest:boolean) {
+ 
         logToCloudWatch(`entering invoca lineup validation`, "INFO", 'invoca lineup validation');
         const state =   this.globalState.getAllState(); 
         await establishInvocaConnection();
         const transactions = await  fetchAllTransactions();
-       const landingpages = transactions.filter((tr)=>tr.landing_page).map((trl)=>trl.landing_page)  
+       let landingpages = url ? [url] : transactions.filter((tr)=>tr.landing_page).map((trl)=>trl.landing_page)  
        logToCloudWatch(`landingpages fetched from invoca report length ${landingpages.length}: ${landingpages}`, "INFO", 'invoca partners tag validation');
        let uniqueLandingpages :string[] = Array.from(new Set(landingpages.map(extractBaseUrl).filter(Boolean)));
-        let domains = await this.kidonClient.raw('select * from domain') ;
+       uniqueLandingpages = urlManupulation(uniqueLandingpages);
+         let domains = await this.kidonClient.raw('select * from domain') ;
         domains = domains[0].map((d:Domain)=>d.hostname)
 
         // ✅ Step 1: filter out domains that are in the domains table (checking partner websites and not our websites)
@@ -496,7 +499,7 @@ export class SpellCheckerService {
     let invocfullPagesMobile = [];
  
     try {
-      const landingpagesToCheck = url ? [url] : uniqueLandingpages; // if url is provided, we only check that url
+      const landingpagesToCheck =  uniqueLandingpages; // if url is provided, we only check that url
       
       // Browser management for reuse
       let currentBrowser = null;
@@ -527,11 +530,11 @@ export class SpellCheckerService {
           const [isInvoca, isInvocaMobile] = await Promise.all([checkInvocaInDesktop(landingpage, currentBrowser),checkInvocaInMobile(landingpage, currentBrowser)]);
 
           //step 3: if the page has invoca tag, add it to the invocfullPages array
-          if (isInvoca && isInvoca.length === 0) {invoclessPages.push(landingpage); }
-          if ((isInvocaMobile && isInvocaMobile.length === 0)  )invoclessPagesMobile.push(landingpage);
+          if (isInvoca == false) {invoclessPages.push(landingpage); }
+          if ((isInvocaMobile == false)  )invoclessPagesMobile.push(landingpage);
 
-          if (isInvoca && isInvoca.length > 0) {invocfullPages.push(landingpage); }
-          if ((isInvocaMobile && isInvocaMobile.length > 0)  )invocfullPagesMobile.push(landingpage);
+          if (isInvoca  == true) {invocfullPages.push(landingpage); }
+          if ((isInvocaMobile == true)  )invocfullPagesMobile.push(landingpage);
           
           pagesProcessed++;
     }
