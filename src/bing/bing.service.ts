@@ -11,7 +11,7 @@ import { Knex } from 'knex';
 import { BingAd, BingConversionAction } from './interfaces';
 import { logToCloudWatch } from 'src/logger';
 import { bingCall, ensureArray, getAllBingAdUrlsAndText, getBingValidDomainsWithTokens } from './utils';
-import { processInBatches } from 'src/spell-checker/utils';
+import { extractUniqueBaseUrls, processInBatches } from 'src/spell-checker/utils';
  
  @Injectable()
 export class BingService {
@@ -96,9 +96,14 @@ logToCloudWatch('Entering saveBingUrls endpoint. '    );
 }
 
 
- async getBingUrls(domainId?: number)  {
+ async getBingUrls(domainId?: number, originOnly?: boolean)  {
   const results = domainId ? await this.kidonClient('bing_landing_pages').where('domain_id', domainId) : await this.kidonClient('bing_landing_pages')
-  return results;
+  const urls = results.map((r)=>r.url)
+  if(!originOnly){
+    return urls;
+   }
+   const uniqueBaseUrls = extractUniqueBaseUrls(urls);
+  return uniqueBaseUrls;
 }
 
   async updateConversionNamesKidonTable(conversionActions: BingConversionAction[],  resourceNames: string[], domainId: number) {

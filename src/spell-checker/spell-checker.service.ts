@@ -24,6 +24,8 @@ import {
   sendCategorizedErrorsToSlack,
    urlManupulation,
   getGoogleDomainsAndTokens,
+  deduplicateBingAds,
+  extractUniqueBaseUrls,
       
 } from './utils';
 import { getBingValidDomainsWithTokens } from 'src/bing/utils';
@@ -81,7 +83,7 @@ export class SpellCheckerService {
    
     let adResults = [];
      let preparedAds = [];
-     const errors = { spelling: [] as any[], capitalization: [] as any[], outdatedYears: [] as any[] };
+     let errors = { spelling: [] as any[], capitalization: [] as any[], outdatedYears: [] as any[] };
 
 
 
@@ -116,9 +118,9 @@ export class SpellCheckerService {
       let uniqueResultsFromBing = Array.from(new Map(results.map(item => [`${item.url}|${item.domainId}`, item])).values()); 
       preparedAds = uniqueResultsFromBing.filter((u)=> (u.headlines.length >0 && u.descriptions.length>0))
     }
-      
- 
- 
+     logToCloudWatch(`${utmSource} ads: ${preparedAds.length}`, 'INFO');
+
+    
     // Check for errors
     for (const ad of preparedAds as  any[]) {
       [...ad.descriptions, ...ad.headlines].forEach((item) => {
@@ -142,6 +144,12 @@ export class SpellCheckerService {
         if (outdatedYears.length > 0) errors.outdatedYears.push({ ...baseError, errors: outdatedYears });
       });
     }
+logToCloudWatch(`${utmSource} ads: ${preparedAds.length}. misspelledWords: ${errors.spelling.length}. capitalization: ${errors.capitalization.length}. outdatedYears: ${errors.outdatedYears.length}`, 'INFO');
+
+    if(utmSource === 'bing'){
+       deduplicateBingAds(errors);
+    }
+ 
 
     await sendAdsErrorReports(errors, state,isTest, utmSource);
 
@@ -305,7 +313,7 @@ export class SpellCheckerService {
   
 
 
-  async activeUrls(domainId: number, onlyOriginalUrl: boolean) {
+  async activeUrls(domainId: number, onlyOriginUrl: boolean) {
     const state = this.globalState.getAllState(); if (!state) return 'No state found';
 
     let domainsToProcess = state.domains.filter((d: Domain) => d.googleAdsId);
@@ -331,18 +339,12 @@ export class SpellCheckerService {
     );
     let urlAndSlackChannel = extractGoogleSearchUrls(rawLineupResults);
 
-    if(!onlyOriginalUrl){
+    if(!onlyOriginUrl){
        return urlAndSlackChannel.map((u) => u.url);
     }
 
-    const baseUrlSet = new Set<string>();
-    for (const obj of urlAndSlackChannel) {
-       const match = obj.url.match(/^(https:\/\/[^\/]+\.com\/)/);
-      if (match) {
-        baseUrlSet.add(match[1]);
-      }
-    }
-    return Array.from(baseUrlSet) ;
+    const uniqueBaseUrls = extractUniqueBaseUrls(urlAndSlackChannel.map((u) => u.url));
+    return uniqueBaseUrls;
    }
   
   

@@ -161,3 +161,8 @@ export interface BqTrafficCampaign {
     timeoutErrors: { [domain: string]: WebsiteError[] };
     httpErrors: { [domain: string]: WebsiteError[] };
   }
+
+  export interface bingError {
+    bingAdsId: string;
+    errors: string[];
+  }

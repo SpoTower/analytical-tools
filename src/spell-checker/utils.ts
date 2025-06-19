@@ -379,20 +379,20 @@ function formatTable(data: any[], columns: TableColumn[]): string {
 
 // Google Ads specific table columns
 const googleAdsColumns: TableColumn[] = [
-    { name: 'resource', width: 38, getValue: (row) => row.resource },
+    { name: 'resource', width: 38, getValue: (row) => row.resource || '' },
     { name: 'errors', width: 8, getValue: (row) => row.errors.join(',') },
-    { name: 'domain', width: 30, getValue: (row) => row.domain },
-    { name: 'googleAdsId', width: 12, getValue: (row) => row.googleAdsId.toString() },
-    { name: 'wholeSentence', width: 50, getValue: (row) => row.wholeSentence },
-    { name: 'location', width: 10, getValue: (row) => row.location }
+    { name: 'domain', width: 30, getValue: (row) => row.domain || ''},
+    { name: 'googleAdsId', width: 12, getValue: (row) => row.googleAdsId.toString() || ''},
+    { name: 'wholeSentence', width: 50, getValue: (row) => row.wholeSentence || ''},
+    { name: 'location', width: 10, getValue: (row) => row.location || ''}
 ];
 
 const bingAdsColumns: TableColumn[] = [
-  { name: 'campaignName', width: 30, getValue: (row) => row.campaignName },
-  { name: 'domain', width: 30, getValue: (row) => row.domain },
-  { name: 'bingAdsId', width: 12, getValue: (row) => row.bingAdsId?.toString() },
-  { name: 'wholeSentence', width: 50, getValue: (row) => row.wholeSentence },
-  { name: 'location', width: 10, getValue: (row) => row.location },
+  { name: 'campaignName', width: 30, getValue: (row) => row.campaignName || ''},
+  { name: 'domain', width: 30, getValue: (row) => row.domain || ''},
+  { name: 'bingAdsId', width: 12, getValue: (row) => row.bingAdsId?.toString() || ''},
+  { name: 'wholeSentence', width: 50, getValue: (row) => row.wholeSentence || ''},
+  { name: 'location', width: 10, getValue: (row) => row.location || ''},
   { name: 'errors', width: 20, getValue: (row) => row.errors.join(',') }
 ];
 
@@ -1076,4 +1076,37 @@ export async function getGoogleDomainsAndTokens(
   );
 
   return { domainsToProcess, allTokensGoogle };
+}
+
+export function deduplicateBingAds(errors: AnyObject ) {
+  Object.keys(errors).forEach((category) => {
+    const mergedMap = new Map<string, any>();
+  
+    for (const err of errors[category]) {
+      const id = err.bingAdsId;
+  
+      if (!mergedMap.has(id)) {
+        mergedMap.set(id, { ...err }); // clone first
+      } else {
+        const existing = mergedMap.get(id);
+        existing.errors = Array.from(new Set([...existing.errors,...err.errors]));   
+      }
+    }
+  
+    errors[category] = Array.from(mergedMap.values());
+  });
+
+}
+
+export function extractUniqueBaseUrls(urlAndSlackChannel: string[]): string[] {
+  const baseUrlSet = new Set<string>();
+
+  for (const obj of urlAndSlackChannel) {
+    const match = obj.match(/^(https:\/\/[^\/]+\.com\/)/);
+    if (match) {
+      baseUrlSet.add(match[1]);
+    }
+  }
+
+  return Array.from(baseUrlSet);
 }
