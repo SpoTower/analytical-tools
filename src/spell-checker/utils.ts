@@ -358,6 +358,7 @@ interface TableColumn {
 }
 
 function formatTable(data: any[], columns: TableColumn[]): string {
+  try {
     if (!data?.length) return '```\nNo data to display\n```';
 
     // Generate header
@@ -371,6 +372,9 @@ function formatTable(data: any[], columns: TableColumn[]): string {
 
     // Combine all parts
     return `\`\`\`\n${header}\n${separator}\n${rows.join('\n')}\n\`\`\``;
+  } catch (error) {
+     return '```\nNo data to display\n```';
+  }
 }
 
 // Google Ads specific table columns
@@ -381,6 +385,15 @@ const googleAdsColumns: TableColumn[] = [
     { name: 'googleAdsId', width: 12, getValue: (row) => row.googleAdsId.toString() },
     { name: 'wholeSentence', width: 50, getValue: (row) => row.wholeSentence },
     { name: 'location', width: 10, getValue: (row) => row.location }
+];
+
+const bingAdsColumns: TableColumn[] = [
+  { name: 'campaignName', width: 30, getValue: (row) => row.campaignName },
+  { name: 'domain', width: 30, getValue: (row) => row.domain },
+  { name: 'bingAdsId', width: 12, getValue: (row) => row.bingAdsId?.toString() },
+  { name: 'wholeSentence', width: 50, getValue: (row) => row.wholeSentence },
+  { name: 'location', width: 10, getValue: (row) => row.location },
+  { name: 'errors', width: 20, getValue: (row) => row.errors.join(',') }
 ];
 
 // Website errors specific table columns
@@ -409,8 +422,8 @@ export function createErrorsTable(fileContent: string): string[] {
 }
 
 // Update the Google Ads error reporting to use the new table formatter
-export function formatGoogleAdsErrors(errors: any[], type: 'spelling' | 'capitalization' | 'outdatedYears'): string {
-    return formatTable(errors, googleAdsColumns);
+export function formatAdsErrors(errors: any[], utmSource: string, type: 'spelling' | 'capitalization' | 'outdatedYears'): string {
+    return formatTable(errors,utmSource === 'google' ? googleAdsColumns : bingAdsColumns);
 }
 
 // Database utility functions
@@ -428,24 +441,24 @@ export async function fetchIgnoreWords(kidonClient: any, configId: string): Prom
 }
  
 export async function sendAdsErrorReports(errors: { spelling: any[], capitalization: any[], outdatedYears: any[] }, state: any, isTest: boolean, utmSource: string) {
-    await KF.sendSlackAlert(`*🚨 ${utmSource} Ads Content Errors:*`, slackChannels.CONTENT, state.slackToken);
+    await KF.sendSlackAlert(`*:memo::memo: :exclamation: ${utmSource} Ads Content and Outdated Years Errors: :exclamation::memo::memo: *`, isTest ? slackChannels.PERSONAL : slackChannels.CONTENT, state.slackToken);
     
     if (errors.spelling.length > 0) {
-        await KF.sendSlackAlert(formatGoogleAdsErrors(errors.spelling, 'spelling'), isTest ? slackChannels.PERSONAL : slackChannels.CONTENT, state.slackToken);
+        await KF.sendSlackAlert(formatAdsErrors(errors.spelling, utmSource, 'spelling'), isTest ? slackChannels.PERSONAL : slackChannels.CONTENT, state.slackToken);
     } else {
         await KF.sendSlackAlert(`*🌿 ${utmSource} Ads: No Spelling Errors Found*`, isTest ? slackChannels.PERSONAL : slackChannels.CONTENT, state.slackToken);
     }
 
     if (errors.capitalization.length > 0) {
         await KF.sendSlackAlert(`*🚨 ${utmSource} Ads non-Capital words Errors:*`, isTest ? slackChannels.PERSONAL : slackChannels.CONTENT, state.slackToken);
-        await KF.sendSlackAlert(formatGoogleAdsErrors(errors.capitalization, 'capitalization'), isTest ? slackChannels.PERSONAL : slackChannels.CONTENT, state.slackToken);
+        await KF.sendSlackAlert(formatAdsErrors(errors.capitalization, utmSource, 'capitalization'), isTest ? slackChannels.PERSONAL : slackChannels.CONTENT, state.slackToken);
     } else {
         await KF.sendSlackAlert(`*🌿 ${utmSource} Ads: No Capitalization Errors Found*`, isTest ? slackChannels.PERSONAL : slackChannels.CONTENT, state.slackToken);
     }
 
     if (errors.outdatedYears.length > 0) {
         await KF.sendSlackAlert(`*🚨 ${utmSource} Ads Outdated Years Errors:*`, isTest ? slackChannels.PERSONAL : slackChannels.CONTENT, state.slackToken);
-        await KF.sendSlackAlert(formatGoogleAdsErrors(errors.outdatedYears, 'outdatedYears'), isTest ? slackChannels.PERSONAL : slackChannels.CONTENT, state.slackToken);
+        await KF.sendSlackAlert(formatAdsErrors(errors.outdatedYears, utmSource, 'outdatedYears'), isTest ? slackChannels.PERSONAL : slackChannels.CONTENT, state.slackToken);
     } else {
         await KF.sendSlackAlert(`*🌿 ${utmSource} Ads: No Outdated Years Errors Found*`, isTest ? slackChannels.PERSONAL : slackChannels.CONTENT, state.slackToken);
     }

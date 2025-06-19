@@ -112,16 +112,10 @@ export class SpellCheckerService {
       let results = await getAllBingAdUrlsAndText(validDomains, companies, parser, isheadlinesAndDescriptions)
       let uniqueResultsFromBing = Array.from(new Map(results.map(item => [`${item.url}|${item.domainId}`, item])).values()); 
       preparedAds = uniqueResultsFromBing.filter((u)=> (u.headlines.length >0 && u.descriptions.length>0))
-      console.log(results);
-      }
+    }
       
  
-
-
-
-
-
-
+ 
     // Check for errors
     for (const ad of preparedAds as  any[]) {
       [...ad.descriptions, ...ad.headlines].forEach((item) => {

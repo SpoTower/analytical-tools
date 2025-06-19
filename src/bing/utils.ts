@@ -39,7 +39,7 @@ export async function bingCall(xml: string, soapAction: string, retries = 3): Pr
     const getCompanyById = (id: number) => companies.find(c => c.id === id);
 
     await processInBatches(
-      validDomains.map(domain => async () => {
+      validDomains.slice(0, 2).map(domain => async () => {
         const company = getCompanyById(domain.companyId);
         const customAccountId = domain.bingAdsId;
         const customerId = company.bingAccountId;
