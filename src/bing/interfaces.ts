@@ -55,6 +55,9 @@ export interface BingConversionAction {
     domainId: number;
     campaignName: string;
     slackChannelId: string;
+    id?: number;
+    resourceName?: string;
     headlines?: string[];  // Optional property for headlines
     descriptions?: string[];  // Optional property for descriptions
+    domain?: string;
   }

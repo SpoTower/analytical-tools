@@ -30,7 +30,7 @@ export interface googleAds {
    }
   
   
-   export interface adsPreparedForErrorDetection {
+   export interface googleAdsPreparedForErrorDetection {
     changeDateTime: string; // Timestamp as a string
     changedFields: string[]; // List of changed fields
     descriptions: { text: string }[]; // Array of objects containing text
@@ -40,6 +40,15 @@ export interface googleAds {
     id: number; // Unique ad ID
     resourceChangeOperation: 'CREATE' | 'UPDATE' | 'REMOVE'; // Operation type
     resourceName: string; // Full resource name
+}
+
+export interface bingAdsPreparedForErrorDetection {
+  url: string;
+  domainId: number;
+  campaignName: string;
+  slackChannelId: string;
+  descriptions: string[];
+  headlines: string[];
 }
 
 export interface BqTrafficCampaign {

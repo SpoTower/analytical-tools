@@ -23,14 +23,14 @@ export class FrontEndController {
     // used by front end team to get active urls from google ads
     @Get('/googleActiveUrls')
     async activeUrls(
-      @Query('hostname') hostname: string,
+      @Query('domainId') domainId?: number,
       @Query('originOnly', new DefaultValuePipe(false), ParseBoolPipe) originOnly?: boolean
     ) {
       try {
-        const urls = await this.spellCheckerService.activeUrls(hostname, originOnly);
+        const urls = await this.spellCheckerService.activeUrls(domainId, originOnly);
         return urls;
       } catch (error) {
-        logToCloudWatch(`❌ Error fetching Google Ads for domain ${hostname}: ${error.message}`, "ERROR");
+        logToCloudWatch(`❌ Error fetching Google Ads for domain ${domainId}: ${error.message}`, "ERROR");
         return [];
       }
     }

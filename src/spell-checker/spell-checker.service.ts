@@ -5,18 +5,15 @@ import {
   fetchGoogleAds,
   fetchGoogleSearchUrls,
   filterOutTextlessAds,
-  prepareAdsForErrorChecking,
+  prepareGoogleAdsForErrorChecking,
   fetchWebsitesInnerHtmlAndFindErrors, 
   extractNonCapitalLetterWords,
-  formatGoogleAdsErrors,
-  sendGoogleAdsErrorReports,
+   sendAdsErrorReports,
   checkIfLineupExists,
   extractGoogleSearchUrls,
-  getActiveBingUrls,
-  fetchAllTransactions,
+   fetchAllTransactions,
   establishInvocaConnection,
-  isLocal,
-  generateBrowser,
+   generateBrowser,
   checkInvocaInMobile,
   checkInvocaInDesktop,
   getTrafficIncongruence,
@@ -25,18 +22,17 @@ import {
   sendTrafficValidationAlerts,
   categorizeErrors,
   sendCategorizedErrorsToSlack,
-  WebsiteError,
-  urlManupulation,
+   urlManupulation,
   getGoogleDomainsAndTokens,
-   
+      
 } from './utils';
 import { getBingValidDomainsWithTokens } from 'src/bing/utils';
 import { extractErrorsWithLocalLibrary, extractErrorsWithGpt } from './utilsOfUtils';
 import { GlobalStateService } from 'src/globalState/global-state.service';
 import { GptService } from 'src/gpt/gpt.service';
 const logger = new Logger('analytical-tools.spellchecker');
-import {logToCloudWatch} from 'src/logger'; 
-import {adsPreparedForErrorDetection, BqTrafficCampaign,googleAdsAndDomain,CampaignAndUrlInfo, CategorizedErrors, bingUrlsAndDomain} from './interfaces';
+import {logToCloudWatch} from 'src/logger';   
+import {googleAdsPreparedForErrorDetection, BqTrafficCampaign,googleAdsAndDomain,CampaignAndUrlInfo, CategorizedErrors, bingUrlsAndDomain} from './interfaces';
 import { Domain,Paths } from 'src/kidonInterfaces/shared';
 import {processInBatches,extractMisspelledWords,extractOutdatedYears} from './utils';
 import {googleAds } from './interfaces';
@@ -71,39 +67,9 @@ export class SpellCheckerService {
  
  
   async detectAdsGrammaticalErrors(batchSize: number, utmSource?: 'bing' | 'google', isTest?: boolean, domainId?: number, sliceSize?: number    ) {
-
-
-
-    logToCloudWatch('entering findAndFixGoogleAdsGrammaticalErrors');
-     const state22 = this.globalState.getAllState();
-    if (!state22) return 'No state found';
-    // Filter and slice domains
-    let domainsToProcess22 = state22.domains.filter((domain: Domain) => domain.googleAdsId).filter((domain: Domain) => !domainId || domain.id === domainId).slice(0, sliceSize || Infinity);
-    // Get Google tokens for all companies
-    const allTokens = await Promise.all(state22.companies.map(async (c) => ({ company: c.name, token: await KF.getGoogleAuthToken(c) })));
-
-    // Fetch Google Ads in batches
-    const fetchedAdsResults: googleAds[] = await processInBatches(
-      domainsToProcess22.map((domain: Domain) => async () => {
-        try {
-          return { domain, ads: await fetchGoogleAds(domain, state22.companies, allTokens, googleAdsGrammarErrors) };
-        } catch (error) {
-          logToCloudWatch(`❌ Error fetching Google Ads for domain ${domain.id}: ${error.message}`, "ERROR");
-          return { domain, ads: [] };
-        }
-      }),
-      batchSize
-    );
-
-
-
-
-
-
-
-
+ 
     logToCloudWatch('entering detectAdsGrammaticalErrors');
-    const [googleAdsIgnoreList, googleAdsNonCapitalLettersIgnoreList] = await Promise.all([fetchIgnoreWords(this.kidonClient, '59'),fetchIgnoreWords(this.kidonClient, '60')]);
+    const [AdsIgnoreList, AdsNonCapitalLettersIgnoreList] = await Promise.all([fetchIgnoreWords(this.kidonClient, '59'),fetchIgnoreWords(this.kidonClient, '60')]);
     const state = this.globalState.getAllState();
     const parser = new XMLParser();
 
@@ -114,16 +80,13 @@ export class SpellCheckerService {
 
    
     let adResults = [];
-    // Filter and slice domains
-    let domainsToProcess =  domains.filter((domain: Domain) => domain.googleAdsId).filter((domain: Domain) => !domainId || domain.id === domainId).slice(0, sliceSize || Infinity);
-    // Get Google tokens for all companies
-    const allTokensGoogle = await Promise.all( companies.map(async (c) => ({ company: c.name, token: await KF.getGoogleAuthToken(c) })));
      let preparedAds = [];
-   // const { domainsToProcess, allTokensGoogle } = await getGoogleDomainsAndTokens(companies,domains);
-    const errors = { spelling: [] as any[], capitalization: [] as any[], outdatedYears: [] as any[] };
+     const errors = { spelling: [] as any[], capitalization: [] as any[], outdatedYears: [] as any[] };
 
     if(utmSource === 'google'){
-          adResults  = await processInBatches(
+      const { domainsToProcess, allTokensGoogle } = await getGoogleDomainsAndTokens(domains, companies, domainId, sliceSize);
+
+          adResults  = await processInBatches( //!! important, pay atention that we fetch only changes in last day, so absolute most of domains dont have nothing
             domainsToProcess.map((domain: Domain) => async () => {
               try {
                 return { domain, ads: await fetchGoogleAds(domain,  companies, allTokensGoogle, googleAdsGrammarErrors) };
@@ -136,21 +99,23 @@ export class SpellCheckerService {
           );  
 
           // Filter and prepare ads
-          const textfullAds = filterOutTextlessAds(adResults.filter(f => f.ads.length > 0));
+          const textfullAds =  filterOutTextlessAds(adResults.filter(f => f.ads.length > 0));
           if (!textfullAds?.length) {
-            await KF.sendSlackAlert('Google Ads Errors: No textfull ads found', 'C08EPQYR6AC', state.slackToken);
+            await KF.sendSlackAlert(':warning: Google Ads Error detector: No textfull ads found',  isTest ? slackChannels.PERSONAL : slackChannels.CONTENT, state.slackToken);
             return 'No textfull ads found';
           }
+          preparedAds = prepareGoogleAdsForErrorChecking  (textfullAds);
 
-            preparedAds = prepareAdsForErrorChecking(textfullAds);
     }else if(utmSource === 'bing'){
       const isheadlinesAndDescriptions = true;
       const { validDomains, companies } = await getBingValidDomainsWithTokens(this.kidonClient, domainId);
       let results = await getAllBingAdUrlsAndText(validDomains, companies, parser, isheadlinesAndDescriptions)
+      let uniqueResultsFromBing = Array.from(new Map(results.map(item => [`${item.url}|${item.domainId}`, item])).values()); 
+      preparedAds = uniqueResultsFromBing.filter((u)=> (u.headlines.length >0 && u.descriptions.length>0))
       console.log(results);
       }
       
-
+ 
 
 
 
@@ -158,23 +123,30 @@ export class SpellCheckerService {
 
 
     // Check for errors
-    for (const ad of preparedAds as adsPreparedForErrorDetection[]) {
+    for (const ad of preparedAds as  any[]) {
       [...ad.descriptions, ...ad.headlines].forEach((item) => {
         const location = ad.descriptions.includes(item) ? 'descriptions' : 'headline';
-        const baseError = { resource: ad.resourceName, domain: ad.domain, googleAdsId: ad.googleAdsId, wholeSentence: item.text, location };
+        let baseError 
 
-        const misspelledWords = extractMisspelledWords(item.text, googleAdsIgnoreList, partners);
+        if(utmSource === 'google'){
+          baseError =  { resource: ad.resourceName, domain: ad.domain, googleAdsId: ad.googleAdsId, wholeSentence: item.text, location };
+        }else if(utmSource === 'bing'){
+          baseError = { campaignName: ad.campaignName, domain: ad.domain, bingAdsId: ad.id, wholeSentence: item.Asset.Text, location };
+        }
+        
+
+        const misspelledWords = extractMisspelledWords(item.text || item.Asset.Text, AdsIgnoreList, partners); // text - google, asset.text = bing
         if (misspelledWords.length > 0) errors.spelling.push({ ...baseError, errors: misspelledWords });
 
-        const nonCapitalWords = extractNonCapitalLetterWords(item.text, googleAdsNonCapitalLettersIgnoreList).filter(c => !c.includes('CUSTOM'));
+        const nonCapitalWords = extractNonCapitalLetterWords(item.text || item.Asset.Text, AdsNonCapitalLettersIgnoreList).filter(c => !c.includes('CUSTOM'));
         if (nonCapitalWords.length > 0) errors.capitalization.push({ ...baseError, errors: nonCapitalWords });
 
-        const outdatedYears = extractOutdatedYears(item.text);
+        const outdatedYears = extractOutdatedYears(item.text || item.Asset.Text);
         if (outdatedYears.length > 0) errors.outdatedYears.push({ ...baseError, errors: outdatedYears });
       });
     }
 
-    await sendGoogleAdsErrorReports(errors, state,isTest);
+    await sendAdsErrorReports(errors, state,isTest, utmSource);
 
     return 'ads were processed by local spellchecker and sent to kidon to be sended by slack to content errors channel';
   }
@@ -336,15 +308,15 @@ export class SpellCheckerService {
   
 
 
-  async activeUrls(hostname: string, onlyOriginalUrl: boolean) {
+  async activeUrls(domainId: number, onlyOriginalUrl: boolean) {
     const state = this.globalState.getAllState(); if (!state) return 'No state found';
 
-
-   // const activeBingUrls = await getActiveBingUrls(state);
-  //  logToCloudWatch(`Active Bing URLs: ${JSON.stringify(activeBingUrls)}`, 'INFO');
-
-
     let domainsToProcess = state.domains.filter((d: Domain) => d.googleAdsId);
+
+    if(domainId){
+      domainsToProcess = domainsToProcess.filter((d: Domain) => d.id == domainId);
+    }
+
      const allTokens = await Promise.all(state.companies.map(async (c) => ({ company: c.name, token: await KF.getGoogleAuthToken(c) })));
 
  

@@ -4,7 +4,7 @@ import { logToCloudWatch } from 'src/logger';
 import { BadRequestException, InternalServerErrorException } from '@nestjs/common';
 import { GptService } from 'src/gpt/gpt.service';
 import {BqTrafficCampaign, CategorizedErrors, googleAdsAndDomain, SqlCampaignTraffic, WebsiteError, websiteText} from './interfaces';
-import { Domain } from 'src/kidonInterfaces/shared';
+import { Domain, Partner } from 'src/kidonInterfaces/shared';
 import { Company } from 'src/kidonInterfaces/shared';
 import { gptProposal } from './interfaces';
 import JSON5 from 'json5';
@@ -24,7 +24,7 @@ import dayjs from 'dayjs';
 import { invocaColumns } from './consts';
 import puppeteer from 'puppeteer';
 import { extractErrorsWithGpt, extractErrorsWithLocalLibrary } from './utilsOfUtils';
- 
+
 export async function fetchGoogleAds(domain: Domain, companies: Company[], tokens:any, query:string ) {
     logToCloudWatch(`Entering fetchGoogleAds, fetching google ads for domain ${domain.id}`);
     console.log(companies.find((c)=>c.id == domain.companyId ).name);
@@ -135,7 +135,7 @@ export function extractInfoFromGoogleAdsError(error: any) {
     return `${error.message}, ${error.response.data[0].error.message}, ${error.response.data[0].error.details[0].errors[0].message}  `;
 }
 
-export function prepareAdsForErrorChecking(textfullAds: Record<string, any>[]) {
+export function prepareGoogleAdsForErrorChecking(textfullAds: Record<string, any>[]) {
     logToCloudWatch(`Entering prepareAdsForGpt, found ${textfullAds?.length} ads`);
 
     const ads = textfullAds.flatMap((t) => {
@@ -284,8 +284,8 @@ export   function filterOutIrrelevantErrors(gptErrorDetectionResults: gptProposa
   };
 
 
-export function extractMisspelledWords(text: string, excludedWords: string[], state: any): string[] {
-  const partners = state.state.partners;
+export function extractMisspelledWords(text: string, excludedWords: string[], partners: Partner[]): string[] {
+ 
   const partnerNames = partners.map((p: any) => p.name);
     const ignoreList = new Set(excludedWords.map(word => word.toLowerCase()));// ignore words from db
    // Process each word: split by spaces, then split merged words
@@ -427,27 +427,27 @@ export async function fetchIgnoreWords(kidonClient: any, configId: string): Prom
         .filter(Boolean);
 }
  
-export async function sendGoogleAdsErrorReports(errors: { spelling: any[], capitalization: any[], outdatedYears: any[] }, state: any, isTest: boolean) {
-    await KF.sendSlackAlert('*🚨 Google Ads Content Errors:*', slackChannels.CONTENT, state.slackToken);
+export async function sendAdsErrorReports(errors: { spelling: any[], capitalization: any[], outdatedYears: any[] }, state: any, isTest: boolean, utmSource: string) {
+    await KF.sendSlackAlert(`*🚨 ${utmSource} Ads Content Errors:*`, slackChannels.CONTENT, state.slackToken);
     
     if (errors.spelling.length > 0) {
         await KF.sendSlackAlert(formatGoogleAdsErrors(errors.spelling, 'spelling'), isTest ? slackChannels.PERSONAL : slackChannels.CONTENT, state.slackToken);
     } else {
-        await KF.sendSlackAlert('🌿 No Spelling Errors Found', isTest ? slackChannels.PERSONAL : slackChannels.CONTENT, state.slackToken);
+        await KF.sendSlackAlert(`*🌿 ${utmSource} Ads: No Spelling Errors Found*`, isTest ? slackChannels.PERSONAL : slackChannels.CONTENT, state.slackToken);
     }
 
     if (errors.capitalization.length > 0) {
-        await KF.sendSlackAlert('*🚨Google Ads non-Capital words Errors:*', isTest ? slackChannels.PERSONAL : slackChannels.CONTENT, state.slackToken);
+        await KF.sendSlackAlert(`*🚨 ${utmSource} Ads non-Capital words Errors:*`, isTest ? slackChannels.PERSONAL : slackChannels.CONTENT, state.slackToken);
         await KF.sendSlackAlert(formatGoogleAdsErrors(errors.capitalization, 'capitalization'), isTest ? slackChannels.PERSONAL : slackChannels.CONTENT, state.slackToken);
     } else {
-        await KF.sendSlackAlert('*🌿 No Capitalization Errors Found*', isTest ? slackChannels.PERSONAL : slackChannels.CONTENT, state.slackToken);
+        await KF.sendSlackAlert(`*🌿 ${utmSource} Ads: No Capitalization Errors Found*`, isTest ? slackChannels.PERSONAL : slackChannels.CONTENT, state.slackToken);
     }
 
     if (errors.outdatedYears.length > 0) {
-        await KF.sendSlackAlert('*🚨Google Ads Outdated Years Errors:*', isTest ? slackChannels.PERSONAL : slackChannels.CONTENT, state.slackToken);
+        await KF.sendSlackAlert(`*🚨 ${utmSource} Ads Outdated Years Errors:*`, isTest ? slackChannels.PERSONAL : slackChannels.CONTENT, state.slackToken);
         await KF.sendSlackAlert(formatGoogleAdsErrors(errors.outdatedYears, 'outdatedYears'), isTest ? slackChannels.PERSONAL : slackChannels.CONTENT, state.slackToken);
     } else {
-        await KF.sendSlackAlert('*🌿 No Outdated Years Errors Found*', isTest ? slackChannels.PERSONAL : slackChannels.CONTENT, state.slackToken);
+        await KF.sendSlackAlert(`*🌿 ${utmSource} Ads: No Outdated Years Errors Found*`, isTest ? slackChannels.PERSONAL : slackChannels.CONTENT, state.slackToken);
     }
 }
 
@@ -1044,13 +1044,12 @@ export function urlManupulation(urls: string[])  {
 }
 
 export async function getGoogleDomainsAndTokens(
-   companies: Company[],
   domains: Domain[],
-   domainId?: number,
+  companies: Company[],
+  domainId?: number,
   sliceSize?: number
 ) {
  
-
   const domainsToProcess = domains
     .filter((domain: Domain) => domain.googleAdsId)
     .filter((domain: Domain) => !domainId || domain.id === domainId)
