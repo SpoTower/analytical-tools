@@ -357,23 +357,25 @@ interface TableColumn {
     getValue: (row: any) => string;
 }
 
-function formatTable(data: any[], columns: TableColumn[]): string {
+function formatTable(data: any[], columns: TableColumn[]): string[] {
   try {
-    if (!data?.length) return '```\nNo data to display\n```';
-
-    // Generate header
+ 
     const header = columns.map(col => col.name.padEnd(col.width)).join(' | ');
     const separator = columns.map(col => '-'.repeat(col.width)).join(' | ');
-
-    // Generate rows
-    const rows = data.map(row => 
+  
+    const chunkSize = 10;
+    const chunks: string[] = [];
+  
+    for (let i = 0; i < data.length; i += chunkSize) {
+      const chunkRows = data.slice(i, i + chunkSize).map(row =>
         columns.map(col => col.getValue(row).padEnd(col.width)).join(' | ')
-    );
-
-    // Combine all parts
-    return `\`\`\`\n${header}\n${separator}\n${rows.join('\n')}\n\`\`\``;
+      );
+      chunks.push(`\`\`\`\n${header}\n${separator}\n${chunkRows.join('\n')}\n\`\`\``);
+    }
+  //@ts-ignore
+    return chunks;
   } catch (error) {
-     return '```\nNo data to display\n```';
+     return ['```\nNo data to display\n```'];
   }
 }
 
@@ -388,7 +390,7 @@ const googleAdsColumns: TableColumn[] = [
 ];
 
 const bingAdsColumns: TableColumn[] = [
-  { name: 'campaignName', width: 30, getValue: (row) => row.campaignName || ''},
+  { name: 'campaignName', width: 30,   getValue: (row) => (row.campaignName || '').slice(0, 27).padEnd(30) },
   { name: 'domain', width: 30, getValue: (row) => row.domain || ''},
   { name: 'bingAdsId', width: 12, getValue: (row) => row.bingAdsId?.toString() || ''},
   { name: 'wholeSentence', width: 50, getValue: (row) => row.wholeSentence || ''},
@@ -416,14 +418,15 @@ export function createErrorsTable(fileContent: string): string[] {
         domainTables.get(domainId).push(error);
     });
 
-    return [...domainTables.values()].map(errors => 
+    return [...domainTables.values()].flatMap(errors => 
         formatTable(errors, websiteErrorsColumns)
     );
 }
 
 // Update the Google Ads error reporting to use the new table formatter
-export function formatAdsErrors(errors: any[], utmSource: string, type: 'spelling' | 'capitalization' | 'outdatedYears'): string {
-    return formatTable(errors,utmSource === 'google' ? googleAdsColumns : bingAdsColumns);
+export function formatAdsErrors(errors: any[], utmSource: string, type: 'spelling' | 'capitalization' | 'outdatedYears'): string[] {
+    let table = formatTable(errors,utmSource === 'google' ? googleAdsColumns : bingAdsColumns);
+    return table ;
 }
 
 // Database utility functions
@@ -444,21 +447,30 @@ export async function sendAdsErrorReports(errors: { spelling: any[], capitalizat
     await KF.sendSlackAlert(`*:memo::memo: :exclamation: ${utmSource} Ads Content and Outdated Years Errors: :exclamation::memo::memo: *`, isTest ? slackChannels.PERSONAL : slackChannels.CONTENT, state.slackToken);
     
     if (errors.spelling.length > 0) {
-        await KF.sendSlackAlert(formatAdsErrors(errors.spelling, utmSource, 'spelling'), isTest ? slackChannels.PERSONAL : slackChannels.CONTENT, state.slackToken);
+     const table =  formatAdsErrors(errors.spelling, utmSource, 'spelling')
+     for(const t of table){
+        await KF.sendSlackAlert(t, isTest ? slackChannels.PERSONAL : slackChannels.CONTENT, state.slackToken);
+     }
     } else {
         await KF.sendSlackAlert(`*🌿 ${utmSource} Ads: No Spelling Errors Found*`, isTest ? slackChannels.PERSONAL : slackChannels.CONTENT, state.slackToken);
     }
 
     if (errors.capitalization.length > 0) {
         await KF.sendSlackAlert(`*🚨 ${utmSource} Ads non-Capital words Errors:*`, isTest ? slackChannels.PERSONAL : slackChannels.CONTENT, state.slackToken);
-        await KF.sendSlackAlert(formatAdsErrors(errors.capitalization, utmSource, 'capitalization'), isTest ? slackChannels.PERSONAL : slackChannels.CONTENT, state.slackToken);
+        const table =  formatAdsErrors(errors.capitalization, utmSource, 'capitalization')
+        for(const t of table){
+            await KF.sendSlackAlert(t, isTest ? slackChannels.PERSONAL : slackChannels.CONTENT, state.slackToken);
+         }
     } else {
         await KF.sendSlackAlert(`*🌿 ${utmSource} Ads: No Capitalization Errors Found*`, isTest ? slackChannels.PERSONAL : slackChannels.CONTENT, state.slackToken);
     }
 
     if (errors.outdatedYears.length > 0) {
         await KF.sendSlackAlert(`*🚨 ${utmSource} Ads Outdated Years Errors:*`, isTest ? slackChannels.PERSONAL : slackChannels.CONTENT, state.slackToken);
-        await KF.sendSlackAlert(formatAdsErrors(errors.outdatedYears, utmSource, 'outdatedYears'), isTest ? slackChannels.PERSONAL : slackChannels.CONTENT, state.slackToken);
+        const table =  formatAdsErrors(errors.outdatedYears, utmSource, 'outdatedYears')
+        for(const t of table){
+            await KF.sendSlackAlert(t, isTest ? slackChannels.PERSONAL : slackChannels.CONTENT, state.slackToken);
+         }
     } else {
         await KF.sendSlackAlert(`*🌿 ${utmSource} Ads: No Outdated Years Errors Found*`, isTest ? slackChannels.PERSONAL : slackChannels.CONTENT, state.slackToken);
     }

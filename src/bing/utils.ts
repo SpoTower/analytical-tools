@@ -64,6 +64,12 @@ export async function bingCall(xml: string, soapAction: string, retries = 3): Pr
             const adsParsed = parser.parse(resAds.data);
             const ads = ensureArray(adsParsed?.['s:Envelope']?.['s:Body']?.GetAdsByAdGroupIdResponse?.Ads?.Ad);
   
+            for(const ad of ads){
+              if([85006542229815,84662923911378].includes(ad.Id)){
+                console.log(ad);
+              }
+            }
+
             const urls = ads.flatMap(ad =>
               ensureArray(ad?.FinalUrls?.['a:string']).map(url => {
                 const base: BingAdResult = {
@@ -78,7 +84,7 @@ export async function bingCall(xml: string, soapAction: string, retries = 3): Pr
                    base.headlines = ensureArray(ad?.Headlines?.AssetLink || []);
                    base.descriptions = ensureArray(ad?.Descriptions?.AssetLink || []);
                    base.id = ad.Id;
-                   base.domain = ad.Domain;
+                   base.domain = ad?.Domain || ad?.BusinessName || '';
                 }
             
                 return base;
