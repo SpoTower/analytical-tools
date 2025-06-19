@@ -57,7 +57,8 @@ import { BingService } from 'src/bing/bing.service';
 import { lineupPartnersValidation } from './partnersChecks/lineupValidation';
 import { getAllBingAdUrlsAndText } from 'src/bing/utils';
 import { XMLParser } from 'fast-xml-parser';
- @Injectable()
+
+@Injectable()
 export class SpellCheckerService {
 
   constructor(

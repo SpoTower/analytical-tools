@@ -39,7 +39,7 @@ export async function bingCall(xml: string, soapAction: string, retries = 3): Pr
     const getCompanyById = (id: number) => companies.find(c => c.id === id);
 
     await processInBatches(
-      validDomains.slice(0, 5).map(domain => async () => {
+      validDomains.map(domain => async () => {
         const company = getCompanyById(domain.companyId);
         const customAccountId = domain.bingAdsId;
         const customerId = company.bingAccountId;
@@ -64,6 +64,7 @@ export async function bingCall(xml: string, soapAction: string, retries = 3): Pr
             const adsParsed = parser.parse(resAds.data);
             const ads = ensureArray(adsParsed?.['s:Envelope']?.['s:Body']?.GetAdsByAdGroupIdResponse?.Ads?.Ad);
   
+ 
             const urls = ads.flatMap(ad =>
               ensureArray(ad?.FinalUrls?.['a:string']).map(url => {
                 const base: BingAdResult = {
@@ -78,7 +79,7 @@ export async function bingCall(xml: string, soapAction: string, retries = 3): Pr
                    base.headlines = ensureArray(ad?.Headlines?.AssetLink || []);
                    base.descriptions = ensureArray(ad?.Descriptions?.AssetLink || []);
                    base.id = ad.Id;
-                   base.domain = ad.Domain;
+                   base.domain = ad?.Domain || ad?.BusinessName || '';
                 }
             
                 return base;
