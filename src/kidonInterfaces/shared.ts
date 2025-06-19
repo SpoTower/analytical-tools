@@ -35,7 +35,7 @@ export interface Domain {
     companyId?: number; // Instead of `@ManyToOne`
 }
 
-export interface Company {k
+export interface Company {
     id: number;
     name: string;
     googleDeveloperToken?: string;
@@ -50,6 +50,7 @@ export interface Company {k
     bingClientSecret?: string; // From Azure Portal -> Certificates & secrets
     createdAt: Date;
     updatedAt: Date;
+    accessToken?: string;
   }
   export interface Industry {
     id: number;
@@ -64,3 +65,4 @@ export interface Company {k
     id:number;
     path:string;
   }
+ 

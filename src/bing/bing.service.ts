@@ -10,7 +10,7 @@ import {   KIDON_CONNECTION } from 'src/knex/knex.module';
 import { Knex } from 'knex';
 import { BingAd, BingConversionAction } from './interfaces';
 import { logToCloudWatch } from 'src/logger';
-import { bingCall, ensureArray } from './utils';
+import { bingCall, ensureArray, getAllBingAdUrlsAndText, getBingValidDomainsWithTokens } from './utils';
 import { processInBatches } from 'src/spell-checker/utils';
  
  @Injectable()
@@ -76,73 +76,14 @@ export class BingService {
 
 
 
-async saveBingUrls(domainId?: number): Promise<string> {
+async saveBingUrls(domainId?: number, isHeadlines?: boolean): Promise<string> {
 
 logToCloudWatch('Entering saveBingUrls endpoint. '    );
-  const getCompanyById = (id: number) => companies.find(c => c.id === id);
+   const parser = new XMLParser();
 
-  const domains = await this.kidonClient('domain');
-  const companies = await this.kidonClient('companies');
-  const parser = new XMLParser();
-
-  let validDomains = domains.filter(d => !!d.bingAdsId);
-  if(domainId){
-    validDomains = validDomains.filter(d => d.id == domainId);
-  }
-  await Promise.all(validDomains.map(async (domain) => {
-    const company = companies.find(c => c.id === domain.companyId);
-    if (!company) return;
-  
-    try {
-      company.accessToken = await KF.getBingAccessTokenFromRefreshToken(company);
-    } catch {
-      return;
-    }
+  const { validDomains, companies } = await getBingValidDomainsWithTokens(this.kidonClient, domainId);
+ let results = await getAllBingAdUrlsAndText(validDomains, companies, parser,isHeadlines)
  
-  }));
-
-  const results: any[] = [];
-
-  await processInBatches(
-    validDomains.map(domain => async () => {
-      const company = getCompanyById(domain.companyId);
-      const customAccountId = domain.bingAdsId;
-      const customerId = company.bingAccountId;
-      const developerToken = company.bingDeveloperToken;
-  
-      const localResults: any[]    = [];
-  
-      const xmlCampaigns = generateBingGetCampaignsByAccountIdXml(company.accessToken, customAccountId, customerId, developerToken);
-      const resCampaigns = await bingCall(xmlCampaigns, 'GetCampaignsByAccountId');
-      const campaignsParsed = parser.parse(resCampaigns.data);
-      const campaignIds = ensureArray(campaignsParsed?.['s:Envelope']?.['s:Body']?.GetCampaignsByAccountIdResponse?.Campaigns?.Campaign).map(c => c.Id);
-  
-      await Promise.all(campaignIds.map(async campaignId => {
-        const xmlAdGroups = generateGetAdGroupsByCampaignIdXml(company.accessToken, customAccountId, customerId, developerToken, campaignId);
-        const resAdGroups = await bingCall(xmlAdGroups, 'GetAdGroupsByCampaignId');
-        const adGroupsParsed = parser.parse(resAdGroups.data);
-        const adGroupIds = ensureArray(adGroupsParsed?.['s:Envelope']?.['s:Body']?.GetAdGroupsByCampaignIdResponse?.AdGroups?.AdGroup).map(c => c.Id);
-  
-        await Promise.all(adGroupIds.map(async adGroupId => {
-          const xmlAds = generateGetAdsByAdGroupIdsXml(company.accessToken, customAccountId, customerId, developerToken, adGroupId);
-          const resAds = await bingCall(xmlAds, 'GetAdsByAdGroupId');
-          const adsParsed = parser.parse(resAds.data);
-          const ads = ensureArray(adsParsed?.['s:Envelope']?.['s:Body']?.GetAdsByAdGroupIdResponse?.Ads?.Ad);
-          const urls = ads.flatMap(ad => ensureArray(ad?.FinalUrls?.['a:string']).map(url => ({ 
-            url, 
-            domainId: domain.id,
-            campaignName: campaignsParsed?.['s:Envelope']?.['s:Body']?.GetCampaignsByAccountIdResponse?.Campaigns?.Campaign?.find(c => c.Id === campaignId)?.Name || 'Unknown Campaign',
-            slackChannelId: domain.slackChannelId || ''
-          })));
-          localResults.push(...urls);
-        }));
-      }));
-  
-      results.push(...localResults); // Single atomic write
-    }),
-    3   
-  );
-
   const uniqueResultsFromBing = Array.from(new Map(results.map(item => [`${item.url}|${item.domainId}`, item])).values()); 
   const existingBingUrlsFromDb = await this.kidonClient('bing_landing_pages') 
   const existingSet = new Set(existingBingUrlsFromDb.map(item => `${item.url}|${item.domainId}`) );

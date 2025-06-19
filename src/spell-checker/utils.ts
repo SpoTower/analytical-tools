@@ -4,7 +4,7 @@ import { logToCloudWatch } from 'src/logger';
 import { BadRequestException, InternalServerErrorException } from '@nestjs/common';
 import { GptService } from 'src/gpt/gpt.service';
 import {BqTrafficCampaign, CategorizedErrors, googleAdsAndDomain, SqlCampaignTraffic, WebsiteError, websiteText} from './interfaces';
-import { Domain } from 'src/kidonInterfaces/shared';
+import { Domain, Partner } from 'src/kidonInterfaces/shared';
 import { Company } from 'src/kidonInterfaces/shared';
 import { gptProposal } from './interfaces';
 import JSON5 from 'json5';
@@ -135,7 +135,7 @@ export function extractInfoFromGoogleAdsError(error: any) {
     return `${error.message}, ${error.response.data[0].error.message}, ${error.response.data[0].error.details[0].errors[0].message}  `;
 }
 
-export function prepareAdsForErrorChecking(textfullAds: Record<string, any>[]) {
+export function prepareGoogleAdsForErrorChecking(textfullAds: Record<string, any>[]) {
     logToCloudWatch(`Entering prepareAdsForGpt, found ${textfullAds?.length} ads`);
 
     const ads = textfullAds.flatMap((t) => {
@@ -284,8 +284,8 @@ export   function filterOutIrrelevantErrors(gptErrorDetectionResults: gptProposa
   };
 
 
-export function extractMisspelledWords(text: string, excludedWords: string[], state: any): string[] {
-  const partners = state.state.partners;
+export function extractMisspelledWords(text: string, excludedWords: string[], partners: Partner[]): string[] {
+ 
   const partnerNames = partners.map((p: any) => p.name);
     const ignoreList = new Set(excludedWords.map(word => word.toLowerCase()));// ignore words from db
    // Process each word: split by spaces, then split merged words
@@ -358,6 +358,7 @@ interface TableColumn {
 }
 
 function formatTable(data: any[], columns: TableColumn[]): string {
+  try {
     if (!data?.length) return '```\nNo data to display\n```';
 
     // Generate header
@@ -371,6 +372,9 @@ function formatTable(data: any[], columns: TableColumn[]): string {
 
     // Combine all parts
     return `\`\`\`\n${header}\n${separator}\n${rows.join('\n')}\n\`\`\``;
+  } catch (error) {
+     return '```\nNo data to display\n```';
+  }
 }
 
 // Google Ads specific table columns
@@ -381,6 +385,15 @@ const googleAdsColumns: TableColumn[] = [
     { name: 'googleAdsId', width: 12, getValue: (row) => row.googleAdsId.toString() },
     { name: 'wholeSentence', width: 50, getValue: (row) => row.wholeSentence },
     { name: 'location', width: 10, getValue: (row) => row.location }
+];
+
+const bingAdsColumns: TableColumn[] = [
+  { name: 'campaignName', width: 30, getValue: (row) => row.campaignName },
+  { name: 'domain', width: 30, getValue: (row) => row.domain },
+  { name: 'bingAdsId', width: 12, getValue: (row) => row.bingAdsId?.toString() },
+  { name: 'wholeSentence', width: 50, getValue: (row) => row.wholeSentence },
+  { name: 'location', width: 10, getValue: (row) => row.location },
+  { name: 'errors', width: 20, getValue: (row) => row.errors.join(',') }
 ];
 
 // Website errors specific table columns
@@ -409,8 +422,8 @@ export function createErrorsTable(fileContent: string): string[] {
 }
 
 // Update the Google Ads error reporting to use the new table formatter
-export function formatGoogleAdsErrors(errors: any[], type: 'spelling' | 'capitalization' | 'outdatedYears'): string {
-    return formatTable(errors, googleAdsColumns);
+export function formatAdsErrors(errors: any[], utmSource: string, type: 'spelling' | 'capitalization' | 'outdatedYears'): string {
+    return formatTable(errors,utmSource === 'google' ? googleAdsColumns : bingAdsColumns);
 }
 
 // Database utility functions
@@ -427,27 +440,27 @@ export async function fetchIgnoreWords(kidonClient: any, configId: string): Prom
         .filter(Boolean);
 }
  
-export async function sendGoogleAdsErrorReports(errors: { spelling: any[], capitalization: any[], outdatedYears: any[] }, state: any) {
-    await KF.sendSlackAlert('*🚨 Google Ads Content Errors:*', slackChannels.CONTENT, state.slackToken);
+export async function sendAdsErrorReports(errors: { spelling: any[], capitalization: any[], outdatedYears: any[] }, state: any, isTest: boolean, utmSource: string) {
+    await KF.sendSlackAlert(`*:memo::memo: :exclamation: ${utmSource} Ads Content and Outdated Years Errors: :exclamation::memo::memo: *`, isTest ? slackChannels.PERSONAL : slackChannels.CONTENT, state.slackToken);
     
     if (errors.spelling.length > 0) {
-        await KF.sendSlackAlert(formatGoogleAdsErrors(errors.spelling, 'spelling'), slackChannels.CONTENT, state.slackToken);
+        await KF.sendSlackAlert(formatAdsErrors(errors.spelling, utmSource, 'spelling'), isTest ? slackChannels.PERSONAL : slackChannels.CONTENT, state.slackToken);
     } else {
-        await KF.sendSlackAlert('🌿 No Spelling Errors Found', slackChannels.CONTENT, state.slackToken);
+        await KF.sendSlackAlert(`*🌿 ${utmSource} Ads: No Spelling Errors Found*`, isTest ? slackChannels.PERSONAL : slackChannels.CONTENT, state.slackToken);
     }
 
     if (errors.capitalization.length > 0) {
-        await KF.sendSlackAlert('*🚨Google Ads non-Capital words Errors:*', slackChannels.CONTENT, state.slackToken);
-        await KF.sendSlackAlert(formatGoogleAdsErrors(errors.capitalization, 'capitalization'), slackChannels.CONTENT, state.slackToken);
+        await KF.sendSlackAlert(`*🚨 ${utmSource} Ads non-Capital words Errors:*`, isTest ? slackChannels.PERSONAL : slackChannels.CONTENT, state.slackToken);
+        await KF.sendSlackAlert(formatAdsErrors(errors.capitalization, utmSource, 'capitalization'), isTest ? slackChannels.PERSONAL : slackChannels.CONTENT, state.slackToken);
     } else {
-        await KF.sendSlackAlert('*🌿 No Capitalization Errors Found*', slackChannels.CONTENT, state.slackToken);
+        await KF.sendSlackAlert(`*🌿 ${utmSource} Ads: No Capitalization Errors Found*`, isTest ? slackChannels.PERSONAL : slackChannels.CONTENT, state.slackToken);
     }
 
     if (errors.outdatedYears.length > 0) {
-        await KF.sendSlackAlert('*🚨Google Ads Outdated Years Errors:*', slackChannels.CONTENT, state.slackToken);
-        await KF.sendSlackAlert(formatGoogleAdsErrors(errors.outdatedYears, 'outdatedYears'), slackChannels.CONTENT, state.slackToken);
+        await KF.sendSlackAlert(`*🚨 ${utmSource} Ads Outdated Years Errors:*`, isTest ? slackChannels.PERSONAL : slackChannels.CONTENT, state.slackToken);
+        await KF.sendSlackAlert(formatAdsErrors(errors.outdatedYears, utmSource, 'outdatedYears'), isTest ? slackChannels.PERSONAL : slackChannels.CONTENT, state.slackToken);
     } else {
-        await KF.sendSlackAlert('*🌿 No Outdated Years Errors Found*', slackChannels.CONTENT, state.slackToken);
+        await KF.sendSlackAlert(`*🌿 ${utmSource} Ads: No Outdated Years Errors Found*`, isTest ? slackChannels.PERSONAL : slackChannels.CONTENT, state.slackToken);
     }
 }
 
@@ -1041,4 +1054,26 @@ export function urlManupulation(urls: string[])  {
   urls =  urls.filter((u)=>!u.includes('amerisave')).filter((u)=>!u.includes('sgtautotransport')) // no need change amerisave, sgt replaced by the following link
   urls.push('https://sgtautotransport.com/quote?transportFor=newCar&utm_source=10-best-car-shipping')
   return urls
+}
+
+export async function getGoogleDomainsAndTokens(
+  domains: Domain[],
+  companies: Company[],
+  domainId?: number,
+  sliceSize?: number
+) {
+ 
+  const domainsToProcess = domains
+    .filter((domain: Domain) => domain.googleAdsId)
+    .filter((domain: Domain) => !domainId || domain.id === domainId)
+    .slice(0, sliceSize || Infinity);
+
+  const allTokensGoogle = await Promise.all(
+    companies.map(async (c) => ({
+      company: c.name,
+      token: await KF.getGoogleAuthToken(c),
+    }))
+  );
+
+  return { domainsToProcess, allTokensGoogle };
 }
