@@ -96,8 +96,10 @@ logToCloudWatch('Entering saveBingUrls endpoint. '    );
 }
 
 
- async getBingUrls(domainId?: number, originOnly?: boolean)  {
-  const results = domainId ? await this.kidonClient('bing_landing_pages').where('domain_id', domainId) : await this.kidonClient('bing_landing_pages')
+ async getBingUrls(hostname?: string, originOnly?: boolean)  {
+  const domains = await this.kidonClient('domain') 
+  const domain = domains.find((d) => d.hostname == hostname);
+  const results = hostname ? await this.kidonClient('bing_landing_pages').where('domain_id', domain.id) : await this.kidonClient('bing_landing_pages')
   const urls = results.map((r)=>r.url)
   if(!originOnly){
     return urls;

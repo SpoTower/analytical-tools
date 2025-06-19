@@ -23,24 +23,24 @@ export class FrontEndController {
     // used by front end team to get active urls from google ads
     @Get('/googleActiveUrls')
     async activeUrls(
-      @Query('domainId') domainId?: number,
+      @Query('hostname') hostname?: string,
       @Query('originOnly', new DefaultValuePipe(false), ParseBoolPipe) originOnly?: boolean
     ) {
       try {
-        const urls = await this.spellCheckerService.activeUrls(domainId, originOnly);
+        const urls = await this.spellCheckerService.activeUrls(hostname, originOnly);
         return urls;
       } catch (error) {
-        logToCloudWatch(`❌ Error fetching Google Ads for domain ${domainId}: ${error.message}`, "ERROR");
+        logToCloudWatch(`❌ Error fetching Google Ads for domain ${hostname}: ${error.message}`, "ERROR");
         return [];
       }
     }
     @Get('/bingActiveUrls')
     async bingBasedActiveUrls(
-      @Query('domainId') domainId: number,
+      @Query('hostname') hostname: string,
       @Query('originOnly', new DefaultValuePipe(false), ParseBoolPipe) originOnly?: boolean
 
      ) {
-      const urls = await this.bingService.getBingUrls(domainId, originOnly);
+      const urls = await this.bingService.getBingUrls(hostname, originOnly);
       return urls;
     }
     

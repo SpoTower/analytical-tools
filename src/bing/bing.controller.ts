@@ -35,9 +35,9 @@ export class BingController {
    }
   
    @Get('/getBingUrls')
-   async getBingUrls(@Query('domainId') domainId?: number) {
+   async getBingUrls(@Query('hostname') hostname?: string) {
     try{
-    const urls = await this.bingService.getBingUrls(+domainId );
+    const urls = await this.bingService.getBingUrls(hostname );
     return urls;
     }catch(e){
       logToCloudWatch(e.message, 'ERROR', 'bing');

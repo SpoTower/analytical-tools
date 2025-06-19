@@ -314,13 +314,13 @@ logToCloudWatch(`${utmSource} ads: ${preparedAds.length}. misspelledWords: ${err
   
 
 
-  async activeUrls(domainId: number, onlyOriginUrl: boolean) {
+  async activeUrls(hostname: string, onlyOriginUrl: boolean) {
     const state = this.globalState.getAllState(); if (!state) return 'No state found';
 
     let domainsToProcess = state.domains.filter((d: Domain) => d.googleAdsId);
 
-    if(domainId){
-      domainsToProcess = domainsToProcess.filter((d: Domain) => d.id == domainId);
+    if(hostname){
+      domainsToProcess = domainsToProcess.filter((d: Domain) => d.hostname == hostname);
     }
 
      const allTokens = await Promise.all(state.companies.map(async (c) => ({ company: c.name, token: await KF.getGoogleAuthToken(c) })));

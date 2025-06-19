@@ -385,7 +385,7 @@ const googleAdsColumns: TableColumn[] = [
     { name: 'errors', width: 8, getValue: (row) => row.errors.join(',') },
     { name: 'domain', width: 30, getValue: (row) => row.domain || ''},
     { name: 'googleAdsId', width: 12, getValue: (row) => row.googleAdsId.toString() || ''},
-    { name: 'wholeSentence', width: 50, getValue: (row) => row.wholeSentence || ''},
+    { name: 'wholeSentence', width: 60, getValue: (row) => (row.wholeSentence || '').slice(0, 60)},
     { name: 'location', width: 10, getValue: (row) => row.location || ''}
 ];
 
@@ -393,7 +393,7 @@ const bingAdsColumns: TableColumn[] = [
   { name: 'campaignName', width: 30,   getValue: (row) => (row.campaignName || '').slice(0, 27).padEnd(30) },
   { name: 'domain', width: 30, getValue: (row) => row.domain || ''},
   { name: 'bingAdsId', width: 12, getValue: (row) => row.bingAdsId?.toString() || ''},
-  { name: 'wholeSentence', width: 50, getValue: (row) => row.wholeSentence || ''},
+  { name: 'wholeSentence', width: 60, getValue: (row) => (row.wholeSentence || '').slice(0, 60)},
   { name: 'location', width: 10, getValue: (row) => row.location || ''},
   { name: 'errors', width: 20, getValue: (row) => row.errors.join(',') }
 ];
