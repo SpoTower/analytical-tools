@@ -68,7 +68,7 @@ export class SpellCheckerService {
  
   async detectAdsGrammaticalErrors(batchSize: number, utmSource?: 'bing' | 'google', isTest?: boolean, domainId?: number, sliceSize?: number    ) {
  
-    logToCloudWatch('entering detectAdsGrammaticalErrors');
+    logToCloudWatch(`entering detectAdsGrammaticalErrors: ${utmSource}`, 'INFO');
     const [AdsIgnoreList, AdsNonCapitalLettersIgnoreList] = await Promise.all([fetchIgnoreWords(this.kidonClient, '59'),fetchIgnoreWords(this.kidonClient, '60')]);
     const state = this.globalState.getAllState();
     const parser = new XMLParser();
@@ -83,6 +83,9 @@ export class SpellCheckerService {
      let preparedAds = [];
      const errors = { spelling: [] as any[], capitalization: [] as any[], outdatedYears: [] as any[] };
 
+
+
+     
     if(utmSource === 'google'){
       const { domainsToProcess, allTokensGoogle } = await getGoogleDomainsAndTokens(domains, companies, domainId, sliceSize);
 
