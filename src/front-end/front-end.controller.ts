@@ -37,8 +37,10 @@ export class FrontEndController {
     @Get('/bingActiveUrls')
     async bingBasedActiveUrls(
       @Query('domainId') domainId: number,
+      @Query('originOnly', new DefaultValuePipe(false), ParseBoolPipe) originOnly?: boolean
+
      ) {
-      const urls = await this.bingService.getBingUrls(domainId);
+      const urls = await this.bingService.getBingUrls(domainId, originOnly);
       return urls;
     }
     
